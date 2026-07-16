@@ -28,11 +28,13 @@
       in {
         devShells.default = pkgs.mkShell {
           inherit buildInputs nativeBuildInputs;
-          shellHook = ''
-            export PKG_CONFIG_PATH="${pkgs.webkitgtk_4_1.dev}/lib/pkgconfig:${pkgs.libsoup_3.dev}/lib/pkgconfig:${pkgs.gtk3.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
-            export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH"
-            export WEBKIT_DISABLE_COMPOSITING_MODE=1
-          '';
+          # Set as derivation env vars (not shellHook) so they are ALWAYS present
+          # under `nix develop -c <cmd>`, which does not reliably run the shellHook.
+          # makeSearchPathOutput "dev" covers every buildInput's *.pc — incl. glib
+          # / gobject (glib-sys) which a webkit-only PKG_CONFIG_PATH would miss.
+          PKG_CONFIG_PATH = pkgs.lib.makeSearchPathOutput "dev" "lib/pkgconfig" buildInputs;
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
+          WEBKIT_DISABLE_COMPOSITING_MODE = "1";
         };
 
         # Lean runtime shell for `build.sh run` — only the libs the prebuilt
