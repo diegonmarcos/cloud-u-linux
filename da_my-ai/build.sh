@@ -17,14 +17,15 @@ mapfile -t ARTIFACTS < <(jq -r '.build.artifacts[]' build.json)
 say() { printf '\033[0;36m[my-ai]\033[0m %s\n' "$*"; }
 die() { printf '\033[0;31m[my-ai] %s\033[0m\n' "$*" >&2; exit 1; }
 
-# Run a command with the Rust/webkit toolchain. When cargo is on PATH (a nix
-# devshell already), run directly. Otherwise enter `nix develop` and INJECT the
-# pkg-config + lib paths into the command's env via `env VAR=…` — `nix develop -c`
-# does not reliably apply the shellHook / mkShell env vars, so glib-sys etc. can't
-# find their .pc files without this.
+# Run a command with the Rust/webkit toolchain. Detect the nix devshell via
+# IN_NIX_SHELL — NOT `command -v cargo`: CI runners (and dev machines) ship a
+# system cargo, so a cargo-presence check would bypass nix entirely and miss
+# glib/webkit/pkg-config. When not already in a devshell, enter `nix develop`
+# and INJECT the pkg-config + lib paths into the command's env via `env VAR=…`
+# (`nix develop -c` does not reliably apply the shellHook / mkShell env vars).
 _NSYS="$(uname -m)-linux"
 in_shell() {
-  if command -v cargo >/dev/null 2>&1; then
+  if [ -n "${IN_NIX_SHELL:-}" ]; then
     "$@"
   else
     local pcp lp
