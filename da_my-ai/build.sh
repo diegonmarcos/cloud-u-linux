@@ -43,24 +43,32 @@ in_shell() {
   fi
 }
 
-# Render icon.svg → src-tauri/icons PNGs (tauri build.rs validates these globs even
-# under `cargo check`). Fallback: a valid 1×1 PNG so validation still passes.
+# Ensure src-tauri/icons/*.png exist (tauri build.rs validates these globs even
+# under `cargo check`). Render from icon.svg only if `magick` is DIRECTLY on PATH
+# — never pull nix just to rasterize an icon (that made CI hang/fail in icon()).
+# Otherwise ship a valid placeholder PNG so validation passes; a real render can
+# happen on a dev machine that has imagemagick.
 icon() {
   mkdir -p src-tauri/icons
-  if [ -f icon.svg ] && in_shell magick -background none icon.svg -resize 256x256 src-tauri/icons/icon.png 2>/dev/null; then
-    in_shell magick -background none icon.svg -resize 128x128 src-tauri/icons/128x128.png 2>/dev/null || true
-    in_shell magick -background none icon.svg -resize 32x32   src-tauri/icons/32x32.png   2>/dev/null || true
-    return 0
+  if command -v magick >/dev/null 2>&1 && [ -f icon.svg ]; then
+    magick -background none icon.svg -resize 256x256 src-tauri/icons/icon.png    2>/dev/null || true
+    magick -background none icon.svg -resize 128x128 src-tauri/icons/128x128.png 2>/dev/null || true
+    magick -background none icon.svg -resize 32x32   src-tauri/icons/32x32.png   2>/dev/null || true
   fi
-  [ -f src-tauri/icons/icon.png ] && return 0
-  printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' | base64 -d > src-tauri/icons/icon.png
-  command cp -f src-tauri/icons/icon.png src-tauri/icons/128x128.png
-  command cp -f src-tauri/icons/icon.png src-tauri/icons/32x32.png
+  local png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+  local f
+  for f in icon.png 128x128.png 32x32.png; do
+    [ -s "src-tauri/icons/$f" ] || printf '%s' "$png" | base64 -d > "src-tauri/icons/$f"
+  done
 }
 
 cmd_check() {
-  icon
-  in_shell cargo check --workspace
+  say "icon…"; icon
+  say "cargo check --workspace…"
+  in_shell cargo check --workspace 2>&1 | tee /tmp/my-ai-check.log
+  local rc=${PIPESTATUS[0]}
+  [ "$rc" = 0 ] || { say "cargo check failed (rc=$rc) — tail:"; tail -100 /tmp/my-ai-check.log; exit "$rc"; }
+  say "check ok"
 }
 
 cmd_build() {
