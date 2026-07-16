@@ -1,26 +1,266 @@
-//! my-ai shared core: data-driven config + endpoints (migrated from claude-superset).
-//! Session-hub client and health collectors land in Phase 2/3.
+//! my-ai shared core — data-driven config, session discovery, and the
+//! cross-device session-hub client. Faithful port of the data + logic in
+//! claude-superset.json + claude-superset-restore.mjs.
+use anyhow::{Context, Result};
 use serde::Deserialize;
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Endpoints are compiled in from src/data/endpoints.json (data-driven, single source).
 pub const ENDPOINTS_JSON: &str = include_str!("../../src/data/endpoints.json");
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Ports {
+    pub app: u16,
+    pub ollama: u16,
+    pub headroom: u16,
+    pub proxy: u16,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct LocalCfg {
+    pub proxy: String,
+    pub api: String,
+    #[serde(default)]
+    pub ollama: String,
+    pub image: String,
+    pub container_name: String,
+    #[serde(default = "default_project")]
+    pub project: String,
+    pub volume: String,
+    pub ports: Ports,
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub max_concurrency: u32,
+    #[serde(default)]
+    pub call_timeout_ms: u64,
+    #[serde(default)]
+    pub savings_profile: String,
+    #[serde(default)]
+    pub min_tokens_to_compress: u32,
+}
+fn default_project() -> String {
+    "claude-superset-local".into()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Setup {
+    pub installer_url: String,
+    pub channel: String,
+    pub rescue_pkg: String,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Endpoints {
     pub proxy: String,
     pub api: String,
     pub ollama: String,
+    pub dashboard: String,
     pub anthropic: String,
-    #[serde(default)]
+    #[serde(default = "default_keep")]
     pub sync_keep: u32,
+    #[serde(default)]
+    pub mesh: BTreeMap<String, String>,
+    #[serde(default)]
+    pub public: BTreeMap<String, String>,
+    #[serde(default)]
+    pub mcps: BTreeMap<String, String>,
+    #[serde(default)]
+    pub image: String,
+    pub setup: Setup,
+    pub local: LocalCfg,
+}
+fn default_keep() -> u32 {
+    20
 }
 
-pub fn endpoints() -> anyhow::Result<Endpoints> {
-    Ok(serde_json::from_str(ENDPOINTS_JSON)?)
+pub fn endpoints() -> Result<Endpoints> {
+    serde_json::from_str(ENDPOINTS_JSON).context("parse endpoints.json")
 }
 
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
+}
+
+// ── paths / identity ─────────────────────────────────────────────────────────
+pub fn home() -> PathBuf {
+    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"))
+}
+pub fn projects_dir() -> PathBuf {
+    home().join(".claude").join("projects")
+}
+/// This device's id: CAS_DEVICE override, else hostname (matches restore.mjs).
+pub fn device() -> String {
+    std::env::var("CAS_DEVICE")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| gethostname::gethostname().to_string_lossy().into_owned())
+}
+/// Claude encodes a session's project dir as its cwd with every "/" → "-".
+pub fn encode_cwd(cwd: &str) -> String {
+    cwd.replace('/', "-")
+}
+
+// ── local session discovery ──────────────────────────────────────────────────
+#[derive(Debug, Clone)]
+pub struct SessionFile {
+    pub id: String,
+    pub file: PathBuf,
+    pub mtime: u64, // ms since epoch
+}
+
+fn mtime_ms(p: &Path) -> u64 {
+    fs::metadata(p)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// All local sessions, newest first (mirror of restore.mjs localSessions()).
+pub fn local_sessions() -> Vec<SessionFile> {
+    let mut out = Vec::new();
+    let base = projects_dir();
+    let dirs = match fs::read_dir(&base) {
+        Ok(d) => d,
+        Err(_) => return out,
+    };
+    for de in dirs.flatten() {
+        let dir = de.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let names = match fs::read_dir(&dir) {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        for f in names.flatten() {
+            let p = f.path();
+            if p.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                continue;
+            }
+            let id = p.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+            if id.is_empty() {
+                continue;
+            }
+            out.push(SessionFile { id, mtime: mtime_ms(&p), file: p });
+        }
+    }
+    out.sort_by(|a, b| b.mtime.cmp(&a.mtime));
+    out
+}
+
+pub enum Selector {
+    Count(u64),
+    Hours(u64),
+}
+pub fn by_selector(list: Vec<SessionFile>, sel: &Selector) -> Vec<SessionFile> {
+    match sel {
+        Selector::Count(n) => list.into_iter().take(*n as usize).collect(),
+        Selector::Hours(h) => {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            let cutoff = now.saturating_sub(h * 3_600_000);
+            list.into_iter().filter(|s| s.mtime >= cutoff).collect()
+        }
+    }
+}
+
+/// Pull (cwd, title) out of a session jsonl body — mirror of restore.mjs inspect().
+/// title = customTitle → slug → aiTitle → first user prompt → id[:8], cleaned to 40.
+pub fn inspect(text: &str, id: &str) -> (Option<String>, String) {
+    let mut cwd = None;
+    let mut custom = None;
+    let mut slug = None;
+    let mut ai = None;
+    let mut first = None;
+    for line in text.lines() {
+        if line.is_empty() {
+            continue;
+        }
+        let o: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if cwd.is_none() {
+            if let Some(c) = o.get("cwd").and_then(|v| v.as_str()) {
+                cwd = Some(c.to_string());
+            }
+        }
+        if let Some(c) = o.get("customTitle").and_then(|v| v.as_str()) {
+            custom = Some(c.to_string());
+        }
+        if let Some(a) = o.get("aiTitle").and_then(|v| v.as_str()) {
+            ai = Some(a.to_string());
+        }
+        if slug.is_none() {
+            if let Some(s) = o.get("slug").and_then(|v| v.as_str()) {
+                slug = Some(s.to_string());
+            }
+        }
+        if first.is_none() && o.get("type").and_then(|v| v.as_str()) == Some("user") {
+            let content = o.get("message").and_then(|m| m.get("content"));
+            let t = match content {
+                Some(serde_json::Value::String(s)) => Some(s.clone()),
+                Some(serde_json::Value::Array(arr)) => arr
+                    .iter()
+                    .find(|b| b.get("type").and_then(|v| v.as_str()) == Some("text"))
+                    .and_then(|b| b.get("text").and_then(|v| v.as_str()))
+                    .map(|s| s.to_string()),
+                _ => None,
+            };
+            if let Some(t) = t {
+                if !t.starts_with('<') {
+                    first = Some(t);
+                }
+            }
+        }
+    }
+    let id8: String = id.chars().take(8).collect();
+    let raw = custom.or(slug).or(ai).or(first).unwrap_or_else(|| id8.clone());
+    let cleaned: String = raw.replace(['\r', '\n', ';'], " ");
+    let cleaned = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    let title: String = cleaned.chars().take(40).collect();
+    let title = if title.trim().is_empty() { id8 } else { title };
+    (cwd, title)
+}
+
+// ── cross-device session hub (GET/PUT /sessions) — mirror of restore.mjs ─────
+#[derive(Debug, Clone, Deserialize)]
+pub struct RemoteSession {
+    pub device: String,
+    pub id: String,
+    #[serde(default)]
+    pub mtime: u64,
+}
+
+pub struct Hub {
+    base: String,
+}
+impl Hub {
+    pub fn new(api: &str) -> Self {
+        Hub { base: api.trim_end_matches('/').to_string() }
+    }
+    pub fn put_session(&self, device: &str, id: &str, body: &[u8]) -> Result<()> {
+        ureq::put(&format!("{}/sessions/{}/{}", self.base, device, id))
+            .set("content-type", "application/x-ndjson")
+            .send_bytes(body)?;
+        Ok(())
+    }
+    pub fn list(&self) -> Result<Vec<RemoteSession>> {
+        Ok(ureq::get(&format!("{}/sessions", self.base)).call()?.into_json()?)
+    }
+    pub fn get_session(&self, device: &str, id: &str) -> Result<String> {
+        Ok(ureq::get(&format!("{}/sessions/{}/{}", self.base, device, id))
+            .call()?
+            .into_string()?)
+    }
 }
 
 #[cfg(test)]
@@ -31,5 +271,22 @@ mod tests {
         let e = endpoints().expect("endpoints.json must parse");
         assert!(e.api.starts_with("http"));
         assert_eq!(e.sync_keep, 20);
+        assert_eq!(e.local.container_name, "claude-superset-api-local");
+        assert_eq!(e.local.ports.proxy, 8789);
+        assert_eq!(e.setup.installer_url, "https://claude.ai/install.sh");
+    }
+    #[test]
+    fn inspect_title_fallback() {
+        let (cwd, title) = inspect("", "abcdef1234");
+        assert!(cwd.is_none());
+        assert_eq!(title, "abcdef12");
+    }
+    #[test]
+    fn inspect_custom_title_wins() {
+        let body = r#"{"cwd":"/home/x"}
+{"customTitle":"my title","type":"user"}"#;
+        let (cwd, title) = inspect(body, "id0");
+        assert_eq!(cwd.as_deref(), Some("/home/x"));
+        assert_eq!(title, "my title");
     }
 }

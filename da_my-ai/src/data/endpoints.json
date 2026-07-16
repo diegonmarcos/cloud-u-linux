@@ -1,5 +1,5 @@
 {
-  "_comment": "my-ai endpoints. Source of truth: cloud build.json ports (oci-apps 10.0.0.6, WG-only). Migrated from claude-superset.json.",
+  "_comment": "my-ai endpoints (claude-superset-api on oci-apps 10.0.0.6, WG-only). Source of truth: cloud build.json ports. Migrated verbatim from claude-superset.json.",
   "proxy": "http://10.0.0.6:8789",
   "api": "http://10.0.0.6:3117",
   "ollama": "http://10.0.0.6:11436",
@@ -19,18 +19,26 @@
     "oci-apps": "82.70.229.129"
   },
   "image": "ghcr.io/diegonmarcos/claude-superset-api-binaries",
+  "setup": {
+    "installer_url": "https://claude.ai/install.sh",
+    "channel": "stable",
+    "rescue_pkg": "@anthropic-ai/claude-code"
+  },
   "local": {
     "proxy": "http://127.0.0.1:8789",
     "api": "http://127.0.0.1:3117",
+    "ollama": "http://127.0.0.1:11436",
+    "dashboard": "http://127.0.0.1:8788/dashboard",
     "image": "ghcr.io/diegonmarcos/claude-superset-api-binaries:latest",
     "container_name": "claude-superset-api-local",
+    "project": "claude-superset-local",
     "volume": "claude-superset-api-home-local",
-    "ports": {
-      "app": 3117,
-      "ollama": 11436,
-      "headroom": 8788,
-      "proxy": 8789
-    }
+    "ports": { "app": 3117, "ollama": 11436, "headroom": 8788, "proxy": 8789 },
+    "model": "claude-sonnet-4-6",
+    "max_concurrency": 12,
+    "call_timeout_ms": 180000,
+    "savings_profile": "agent-90",
+    "min_tokens_to_compress": 250
   },
   "mcps": {
     "c3_infra": "http://10.0.0.6:3100",

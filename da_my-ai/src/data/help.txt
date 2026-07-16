@@ -1,0 +1,50 @@
+my-ai — Claude Code via the Headroom compression proxy (universal: KDE / TTY / Termux)
+
+USAGE
+  my-ai [remote|local|claude] [headroom on|off] [ponytail on|off|<level>]
+        [rtk on|off] [caveman on|off]
+        [fresh|sync|restore …|restore-hours …] [claude args…]
+
+FACE (default: remote)
+  remote                Route through the oci-apps proxy over WireGuard
+                        (direct-Anthropic fallback if unreachable).
+  local                 Run the same container on THIS host (docker compose,
+                        127.0.0.1 only). `local down` tears it down.
+                        (Desktop only — no docker in Termux/TTY.)
+  claude                Bypass everything — plain claude, no proxy/engine/plugins.
+
+PLUGIN TOGGLES (any order, before the action)
+  headroom on|off       on = compress via the proxy (sets ANTHROPIC_BASE_URL).
+  ponytail on|off|LVL   LVL = lite|full|ultra. on = full, off = disabled.
+  rtk on|off            RTK (Rust Token Killer): strip CLI/test noise pre-Headroom.
+  caveman on|off        Caveman: linguistic/conversational compression.
+
+SESSION ACTION (default: fresh)
+  fresh                 Normal fresh session (passes remaining args to claude).
+  sync                  Push the last N local sessions to the hub (also runs
+                        automatically in the background on every fresh launch).
+  restore <X>           Reopen this device's last X sessions, one per tab/window.
+  restore-hours <Y>     Reopen this device's sessions from the last Y hours.
+  restore <device> <X>  Reopen the last X sessions from another device.
+  restore all <X>       Reopen the last X sessions across ALL devices.
+
+SETUP (installer / deps-solver — NO npm, native binaries)
+  setup                 Ensure `claude` is installed (native installer).
+  setup --shell         Ephemeral claude via nix-shell (temporary use).
+  setup rescue [args]   Fallback chain: podman -> npx -> nix -> node.
+
+OTHER
+  (no args) / -h / --help / dash   Live status dashboard (my-ai-dash).
+  help                             This message.
+  --version                        Print version.
+
+EXAMPLES
+  my-ai                                # dashboard
+  my-ai remote                         # remote, fresh, headroom on
+  my-ai local ponytail ultra           # local face, ponytail ultra
+  my-ai headroom off                   # direct, no compression
+  my-ai restore 5                      # reopen last 5 local sessions
+  my-ai restore-hours 8                # reopen local sessions from last 8h
+  my-ai restore android-termux 3       # reopen 3 sessions from the phone
+  my-ai restore all 10                 # reopen last 10 across all devices
+  my-ai sync                           # push local sessions to the hub now
