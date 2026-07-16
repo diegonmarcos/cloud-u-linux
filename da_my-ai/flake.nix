@@ -32,8 +32,10 @@
           # under `nix develop -c <cmd>`, which does not reliably run the shellHook.
           # makeSearchPathOutput "dev" covers every buildInput's *.pc — incl. glib
           # / gobject (glib-sys) which a webkit-only PKG_CONFIG_PATH would miss.
+          # PKG_CONFIG_PATH only — do NOT set LD_LIBRARY_PATH here: webkit libs on
+          # the build process's linker crash rustc/cargo. LD_LIBRARY_PATH is set
+          # for RUNNING the gui (devShells.runtime + build.sh run), never building.
           PKG_CONFIG_PATH = pkgs.lib.makeSearchPathOutput "dev" "lib/pkgconfig" buildInputs;
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
           WEBKIT_DISABLE_COMPOSITING_MODE = "1";
         };
 

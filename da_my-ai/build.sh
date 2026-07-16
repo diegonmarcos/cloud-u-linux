@@ -30,11 +30,13 @@ in_shell() {
   else
     # $(...) captures stdout only; nix's fetch/progress on stderr must NOT be
     # merged in (it would corrupt the path list). Do not redirect stderr.
-    local pcp lp
+    # Inject ONLY PKG_CONFIG_PATH — NOT LD_LIBRARY_PATH: forcing webkit's libs
+    # onto the BUILD process corrupts rustc/cargo's own dynamic linking (silent
+    # crash). LD_LIBRARY_PATH is a runtime-only concern (see `build.sh run`).
+    local pcp
     pcp="$(nix eval --raw ".#pkgConfigPath.$_NSYS")" || die "nix eval pkgConfigPath failed"
-    lp="$(nix eval --raw ".#runtimeLibPath.$_NSYS")" || die "nix eval runtimeLibPath failed"
     [ -n "$pcp" ] || die "resolved PKG_CONFIG_PATH is empty (.#pkgConfigPath.$_NSYS)"
-    nix develop -c env PKG_CONFIG_PATH="$pcp" LD_LIBRARY_PATH="$lp" "$@"
+    nix develop -c env PKG_CONFIG_PATH="$pcp" "$@"
   fi
 }
 
