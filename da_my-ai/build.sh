@@ -36,7 +36,10 @@ in_shell() {
     local pcp
     pcp="$(nix eval --raw ".#pkgConfigPath.$_NSYS")" || die "nix eval pkgConfigPath failed"
     [ -n "$pcp" ] || die "resolved PKG_CONFIG_PATH is empty (.#pkgConfigPath.$_NSYS)"
-    nix develop -c env PKG_CONFIG_PATH="$pcp" "$@"
+    say "PKG_CONFIG_PATH first entry: ${pcp%%:*}"
+    # -L / --print-build-logs streams full nix build logs (default quiet mode
+    # hides devshell build failures, making the step fail with no visible output).
+    nix develop -L -c env PKG_CONFIG_PATH="$pcp" "$@"
   fi
 }
 
