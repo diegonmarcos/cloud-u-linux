@@ -39,6 +39,13 @@
           WEBKIT_DISABLE_COMPOSITING_MODE = "1";
         };
 
+        # Lean Rust-only shell for the pure-Rust crates (my-ai, my-ai-dash) — no
+        # webkit/gtk. Used on BOTH x86_64 and aarch64 (fast; aarch64 never pulls
+        # the webkit closure since the GUI is x86-desktop-only).
+        devShells.cli = pkgs.mkShell {
+          packages = with pkgs; [ rustc cargo pkg-config ];
+        };
+
         # Lean runtime shell for `build.sh run` — only the libs the prebuilt
         # my-ai-gui links, no build toolchain.
         devShells.runtime = pkgs.mkShell {

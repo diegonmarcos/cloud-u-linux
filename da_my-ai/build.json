@@ -16,6 +16,9 @@
     "_remote_note": "Rust/Tauri compile is heavy — built on GHA (ship-my-ai-app.yml), published to a rolling GH release, pulled on the laptop. Never compiled locally (freeze-guard).",
     "repo": "diegonmarcos/unix",
     "release_tag": "my-ai-latest",
+    "_arch_note": "my-ai + my-ai-dash are pure Rust → built for both arches (assets suffixed -x86_64 / -aarch64). my-ai-gui (Tauri/webkit) is desktop-only → built on gui_arches only. Termux (aarch64) pulls cli+dash; desktop (x86_64) pulls the trio.",
+    "arches": ["x86_64", "aarch64"],
+    "gui_arches": ["x86_64"],
     "artifacts": ["my-ai", "my-ai-dash", "my-ai-gui"]
   },
   "runtime": {

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # my-ai universal build engine — 100% data-driven from build.json. Rust workspace:
-#   my-ai (CLI) + my-ai-dash (ratatui TTY) built with cargo; my-ai-gui (Tauri v2
-#   systray/webview) built with cargo-tauri (+ .deb). Heavy steps run inside
-#   `nix develop` (flake.nix) so the host never needs cargo/webkit. Rust/Tauri
-#   compile is heavy → CI (ship-my-ai-app.yml) is the normal build path.
+#   my-ai (CLI) + my-ai-dash (ratatui TTY) — pure Rust, built for BOTH x86_64 and
+#   aarch64 (lean `.#cli` nix shell, no webkit). my-ai-gui (Tauri v2 systray/webview)
+#   needs webkit → built only on x86_64 (build.gui_arches) via the `.#default` shell.
+# Rust/Tauri compile is heavy → CI (ship-my-ai-app.yml, matrixed per-arch) is the
+# normal build path; local `build` is for devs.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"
@@ -13,31 +14,29 @@ J() { jq -r "$1" build.json; }
 BIN="$(J .app.bin)"; DASH="$(J .app.dash_bin)"; GUI="$(J .app.gui_bin)"
 REPO="$(J .build.repo)"; TAG="$(J .build.release_tag)"
 STORE="$HOME/$(J .runtime.store_subdir)"
-mapfile -t ARTIFACTS < <(jq -r '.build.artifacts[]' build.json)
+ARCH="$(uname -m)"                                   # x86_64 | aarch64
+mapfile -t GUI_ARCHES < <(jq -r '.build.gui_arches[]' build.json)
 say() { printf '\033[0;36m[my-ai]\033[0m %s\n' "$*"; }
 die() { printf '\033[0;31m[my-ai] %s\033[0m\n' "$*" >&2; exit 1; }
 
-# Run a command with the Rust/webkit toolchain. Detect the nix devshell via
-# IN_NIX_SHELL — NOT `command -v cargo`: CI runners (and dev machines) ship a
-# system cargo, so a cargo-presence check would bypass nix entirely and miss
-# glib/webkit/pkg-config. When not already in a devshell, enter `nix develop`
-# and let the standard pkg-config setup hook own PKG_CONFIG_PATH — it follows
-# propagatedBuildInputs (so gtk3 pulls in pango/cairo/atk/… transitively). Do
-# NOT override PKG_CONFIG_PATH manually: a direct-buildInputs-only list drops
-# those transitive .pc files (pango not found). -L streams full build logs.
-in_shell() {
-  if [ -n "${IN_NIX_SHELL:-}" ]; then
-    "$@"
-  else
-    nix develop -L -c "$@"
-  fi
+# Is the Tauri GUI built/shipped for the current arch? (webkit desktop only)
+gui_enabled() { local a; for a in "${GUI_ARCHES[@]}"; do [ "$a" = "$ARCH" ] && return 0; done; return 1; }
+
+# Run a command inside a nix devshell (unless already in one). `.#cli` = lean Rust
+# toolchain (pure-Rust crates, no webkit); `.#default` = full webkit/tauri toolchain.
+# Detect an existing devshell via IN_NIX_SHELL — never `command -v cargo` (CI/dev
+# machines ship a system cargo, which would bypass nix). The pkg-config setup hook
+# owns PKG_CONFIG_PATH (follows propagatedBuildInputs: gtk3 → pango/cairo/atk/…);
+# do NOT override it. -L streams full build logs.
+nix_dev() {
+  local sh="$1"; shift
+  if [ -n "${IN_NIX_SHELL:-}" ]; then "$@"; else nix develop -L ".#$sh" -c "$@"; fi
 }
 
 # Ensure src-tauri/icons/*.png exist (tauri build.rs validates these globs even
 # under `cargo check`). Render from icon.svg only if `magick` is DIRECTLY on PATH
-# — never pull nix just to rasterize an icon (that made CI hang/fail in icon()).
-# Otherwise ship a valid placeholder PNG so validation passes; a real render can
-# happen on a dev machine that has imagemagick.
+# — never pull nix just to rasterize an icon. Otherwise ship a valid placeholder
+# PNG so validation passes; a real render happens on a dev machine with imagemagick.
 icon() {
   mkdir -p src-tauri/icons
   if command -v magick >/dev/null 2>&1 && [ -f icon.svg ]; then
@@ -52,41 +51,69 @@ icon() {
   done
 }
 
-cmd_check() {
-  say "icon…"; icon
-  say "cargo check --workspace…"
-  in_shell cargo check --workspace 2>&1 | tee /tmp/my-ai-check.log
+_run_logged() { # <logfile> <cmd...> — tee output, dump tail + exit on failure
+  local log="$1"; shift
+  "$@" 2>&1 | tee "$log"
   local rc=${PIPESTATUS[0]}
-  [ "$rc" = 0 ] || { say "cargo check failed (rc=$rc) — tail:"; tail -100 /tmp/my-ai-check.log; exit "$rc"; }
-  say "check ok"
+  [ "$rc" = 0 ] || { say "FAILED (rc=$rc) — tail:"; tail -100 "$log"; exit "$rc"; }
+}
+
+cmd_check() {
+  say "check core+cli+dash ($ARCH)…"
+  _run_logged /tmp/my-ai-cli.log nix_dev cli cargo check -p my-ai-core -p my-ai-cli -p my-ai-dash
+  if gui_enabled; then
+    say "check gui ($ARCH)…"; icon
+    _run_logged /tmp/my-ai-gui.log nix_dev default cargo check -p my-ai-gui
+  fi
+  say "check ok ($ARCH)"
 }
 
 cmd_build() {
-  icon
-  in_shell cargo build --release -p my-ai-cli -p my-ai-dash
-  in_shell cargo test -p my-ai-core -p my-ai-cli
-  in_shell cargo tauri build          # my-ai-gui + .deb bundle
-  say "built: ${ARTIFACTS[*]} (+ .deb)"
+  say "build core+cli+dash ($ARCH)…"
+  nix_dev cli cargo build --release -p my-ai-cli -p my-ai-dash
+  nix_dev cli cargo test -p my-ai-core -p my-ai-cli
+  if gui_enabled; then
+    say "build gui ($ARCH)…"; icon
+    nix_dev default cargo tauri build          # my-ai-gui + .deb bundle
+  fi
+  say "built $ARCH (gui: $(gui_enabled && echo yes || echo no))"
 }
 
-cmd_dev()   { icon; in_shell cargo tauri dev; }
-cmd_clean() { rm -rf target src-tauri/icons; }
+# Stage arch-suffixed release assets into dist-assets/ (CI uploads this dir).
+cmd_stage() {
+  local d="dist-assets"; rm -rf "$d"; mkdir -p "$d"
+  command cp -f "target/release/$BIN"  "$d/$BIN-$ARCH"
+  command cp -f "target/release/$DASH" "$d/$DASH-$ARCH"
+  if gui_enabled; then
+    command cp -f "target/release/$GUI" "$d/$GUI-$ARCH"
+    local deb; deb="$(command ls target/release/bundle/deb/*.deb 2>/dev/null | head -1 || true)"
+    [ -n "$deb" ] && command cp -f "$deb" "$d/"
+  fi
+  say "staged for $ARCH: $(command ls "$d" | tr '\n' ' ')"
+}
 
-# Fetch the CI-built binaries from the rolling GH release into a dir (default bin_dir).
+cmd_dev()   { icon; nix_dev default cargo tauri dev; }
+cmd_clean() { rm -rf target src-tauri/icons dist-assets; }
+
+# Fetch the CI-built binaries for THIS arch from the rolling GH release.
 cmd_fetch() {
   local dir="${1:-$HOME/$(J .runtime.bin_dir)}"; mkdir -p "$dir"
   command -v gh >/dev/null 2>&1 || die "gh CLI required to fetch the CI binaries"
-  say "fetching $TAG from $REPO → $dir"
-  for b in "${ARTIFACTS[@]}"; do
-    gh release download "$TAG" -R "$REPO" -p "$b" -O "$dir/$b" --clobber && chmod +x "$dir/$b" \
-      || say "($b not in release yet — non-fatal)"
+  say "fetching $TAG ($ARCH) from $REPO → $dir"
+  local b
+  for b in "$BIN" "$DASH"; do
+    gh release download "$TAG" -R "$REPO" -p "$b-$ARCH" -O "$dir/$b" --clobber && chmod +x "$dir/$b" \
+      || say "($b-$ARCH not in release yet — non-fatal)"
   done
+  if gui_enabled; then
+    gh release download "$TAG" -R "$REPO" -p "$GUI-$ARCH" -O "$dir/$GUI" --clobber && chmod +x "$dir/$GUI" \
+      || say "($GUI-$ARCH not in release yet — non-fatal)"
+  fi
 }
 
 # Resolve + cache the webkit runtime lib path for the GUI (my-ai-gui links webkit).
 resolve_libpath() {
-  local cache="$STORE/runtime-libpath" gcroot="$STORE/runtime-gcroot"
-  local sys; sys="$(uname -m)-linux"
+  local cache="$STORE/runtime-libpath" gcroot="$STORE/runtime-gcroot" sys="$ARCH-linux"
   local libpath=""; [ -s "$cache" ] && libpath="$(command cat "$cache")"
   local first="${libpath%%:*}"
   if [ -z "$libpath" ] || [ ! -e "$first/libwebkit2gtk-4.1.so.0" ]; then
@@ -100,8 +127,7 @@ resolve_libpath() {
 
 # Run a built/fetched binary (default the GUI) with only runtime libs + env.
 cmd_run() {
-  local b="${1:-$GUI}"
-  local bin=""
+  local b="${1:-$GUI}" bin=""
   if   [ -x "target/release/$b" ]; then bin="target/release/$b"
   elif [ -x "$STORE/$b" ];         then bin="$STORE/$b"
   else cmd_fetch "$STORE"; bin="$STORE/$b"; fi
@@ -116,17 +142,15 @@ cmd_run() {
   fi
 }
 
-# install — self-contained desktop integration for the GUI + CLI/dash on PATH.
+# install — CLI + dash on PATH; GUI (x86 desktop) gets a self-contained launcher.
 cmd_install() {
   local bindir="$HOME/$(J .runtime.bin_dir)"
   mkdir -p "$bindir" "$STORE"
   cmd_fetch "$STORE"
-  # CLI + dash: plain copies on PATH (no webkit).
   for b in "$BIN" "$DASH"; do
     [ -x "$STORE/$b" ] && { command cp -f "$STORE/$b" "$bindir/$b"; chmod +x "$bindir/$b"; }
   done
-  # GUI: self-contained launcher (webkit libpath + env baked in).
-  if [ -x "$STORE/$GUI" ]; then
+  if gui_enabled && [ -x "$STORE/$GUI" ]; then
     local libpath; libpath="$(resolve_libpath)"
     local envlines; envlines="$(jq -r '.runtime.env | to_entries[] | "export \(.key)=\(.value)"' build.json)"
     {
@@ -134,7 +158,7 @@ cmd_install() {
       echo "# $GUI launcher (generated by build.sh install) — self-contained."
       echo "export LD_LIBRARY_PATH=\"$libpath\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}\""
       echo "$envlines"
-      echo "export PATH=\"$bindir:\$PATH\""   # so the GUI finds my-ai / my-ai-dash
+      echo "export PATH=\"$bindir:\$PATH\""
       echo "exec \"$STORE/$GUI\" \"\$@\""
     } > "$bindir/$GUI"
     chmod +x "$bindir/$GUI"
@@ -156,16 +180,17 @@ Categories=$(J .desktop.categories)
 EOF
     command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$apps" 2>/dev/null || true
   fi
-  say "installed $BIN, $DASH, $GUI → $bindir"
+  say "installed $BIN, $DASH$(gui_enabled && echo ", $GUI" || echo "") → $bindir"
 }
 
 case "${1:-build}" in
   check)   cmd_check ;;
   build)   cmd_build ;;
+  stage)   cmd_stage ;;
   dev)     cmd_dev ;;
   run)     shift; cmd_run "$@" ;;
   fetch)   shift; cmd_fetch "$@" ;;
   install) cmd_install ;;
   clean)   cmd_clean ;;
-  *) die "unknown verb: ${1:-} (check|build|dev|run|fetch|install|clean)" ;;
+  *) die "unknown verb: ${1:-} (check|build|stage|dev|run|fetch|install|clean)" ;;
 esac
