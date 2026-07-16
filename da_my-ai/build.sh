@@ -28,10 +28,11 @@ in_shell() {
   if [ -n "${IN_NIX_SHELL:-}" ]; then
     "$@"
   else
+    # $(...) captures stdout only; nix's fetch/progress on stderr must NOT be
+    # merged in (it would corrupt the path list). Do not redirect stderr.
     local pcp lp
-    pcp="$(nix eval --raw ".#pkgConfigPath.$_NSYS" 2>&1)" || die "nix eval pkgConfigPath failed: $pcp"
-    lp="$(nix eval --raw ".#runtimeLibPath.$_NSYS" 2>&1)" || die "nix eval runtimeLibPath failed: $lp"
-    say "PKG_CONFIG_PATH=$pcp"
+    pcp="$(nix eval --raw ".#pkgConfigPath.$_NSYS")" || die "nix eval pkgConfigPath failed"
+    lp="$(nix eval --raw ".#runtimeLibPath.$_NSYS")" || die "nix eval runtimeLibPath failed"
     [ -n "$pcp" ] || die "resolved PKG_CONFIG_PATH is empty (.#pkgConfigPath.$_NSYS)"
     nix develop -c env PKG_CONFIG_PATH="$pcp" LD_LIBRARY_PATH="$lp" "$@"
   fi
