@@ -17,7 +17,22 @@ mapfile -t ARTIFACTS < <(jq -r '.build.artifacts[]' build.json)
 say() { printf '\033[0;36m[my-ai]\033[0m %s\n' "$*"; }
 die() { printf '\033[0;31m[my-ai] %s\033[0m\n' "$*" >&2; exit 1; }
 
-in_shell() { if command -v cargo >/dev/null 2>&1; then "$@"; else nix develop -c "$@"; fi; }
+# Run a command with the Rust/webkit toolchain. When cargo is on PATH (a nix
+# devshell already), run directly. Otherwise enter `nix develop` and INJECT the
+# pkg-config + lib paths into the command's env via `env VAR=…` — `nix develop -c`
+# does not reliably apply the shellHook / mkShell env vars, so glib-sys etc. can't
+# find their .pc files without this.
+_NSYS="$(uname -m)-linux"
+in_shell() {
+  if command -v cargo >/dev/null 2>&1; then
+    "$@"
+  else
+    local pcp lp
+    pcp="$(nix eval --raw ".#pkgConfigPath.$_NSYS" 2>/dev/null || true)"
+    lp="$(nix eval --raw ".#runtimeLibPath.$_NSYS" 2>/dev/null || true)"
+    nix develop -c env PKG_CONFIG_PATH="$pcp" LD_LIBRARY_PATH="$lp" "$@"
+  fi
+}
 
 # Render icon.svg → src-tauri/icons PNGs (tauri build.rs validates these globs even
 # under `cargo check`). Fallback: a valid 1×1 PNG so validation still passes.

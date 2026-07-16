@@ -46,8 +46,10 @@
           '';
         };
 
-        # Plain string for `nix eval --raw` — build.sh run caches it so every
-        # GUI launch is a straight exec with the right webkit libs.
+        # Plain strings for `nix eval --raw` — build.sh injects these directly into
+        # the command env (`nix develop -c env PKG_CONFIG_PATH=… …`) because
+        # `nix develop -c` does not reliably apply the shellHook / mkShell env vars.
         runtimeLibPath = pkgs.lib.makeLibraryPath buildInputs;
+        pkgConfigPath = pkgs.lib.makeSearchPathOutput "dev" "lib/pkgconfig" buildInputs;
       });
 }
