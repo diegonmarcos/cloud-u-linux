@@ -1,25 +1,35 @@
 {
   "name": "my-ai",
-  "description": "Claude Code via the Headroom compression proxy \u2014 CLI + TTY dashboard + Tauri GUI/systray (rebrand of claude-superset).",
+  "description": "Claude Code via the Headroom compression proxy — CLI + TTY dashboard + Tauri GUI/systray (rebrand of claude-superset).",
   "app": {
+    "identifier": "com.diegonmarcos.my-ai",
+    "product_name": "my-ai",
+    "wm_class": "com.diegonmarcos.my-ai",
     "bin": "my-ai",
-    "bins": [
-      "my-ai",
-      "my-ai-dash"
-    ],
-    "gui_bin": "my-ai-gui",
-    "_gui_comment": "my-ai-gui (Tauri) added in Phase 4."
+    "dash_bin": "my-ai-dash",
+    "gui_bin": "my-ai-gui"
   },
   "build": {
+    "engine": "cargo tauri build",
+    "bundle": "deb",
+    "remote": true,
+    "_remote_note": "Rust/Tauri compile is heavy — built on GHA (ship-my-ai-app.yml), published to a rolling GH release, pulled on the laptop. Never compiled locally (freeze-guard).",
     "repo": "diegonmarcos/unix",
     "release_tag": "my-ai-latest",
-    "artifacts": [
-      "my-ai",
-      "my-ai-dash"
-    ]
+    "artifacts": ["my-ai", "my-ai-dash", "my-ai-gui"]
   },
   "runtime": {
     "store_subdir": ".local/share/my-ai",
-    "bin_dir": ".local/bin"
+    "bin_dir": ".local/bin",
+    "env": {
+      "WEBKIT_DISABLE_COMPOSITING_MODE": "1",
+      "WEBKIT_DISABLE_DMABUF_RENDERER": "1"
+    }
+  },
+  "desktop": {
+    "generic_name": "AI Launcher",
+    "comment": "Claude Code via the Headroom compression proxy — launcher + infra dashboard + systray",
+    "categories": "Utility;Development;",
+    "icon_svg": "icon.svg"
   }
 }

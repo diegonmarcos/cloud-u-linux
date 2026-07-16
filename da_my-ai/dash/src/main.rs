@@ -4,6 +4,7 @@
 mod collect;
 mod offline;
 mod render;
+mod snapshot;
 mod state;
 
 use collect::{collectors, run, Slot};
@@ -21,6 +22,13 @@ type Shared = Arc<Mutex<BTreeMap<String, Slot>>>;
 
 fn main() -> anyhow::Result<()> {
     let ep = my_ai_core::endpoints()?;
+
+    // --snapshot: print a JSON dashboard snapshot and exit (used by my-ai-gui).
+    if std::env::args().any(|a| a == "--snapshot") {
+        println!("{}", snapshot::snapshot(&ep));
+        return Ok(());
+    }
+
     let mcps = offline::load_mcps();
     let plugins = offline::load_plugins();
     let hooks = offline::load_hooks();

@@ -1,7 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["core", "cli", "dash"]
-# src-tauri (my-ai-gui) added in Phase 4.
+members = ["core", "cli", "dash", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
