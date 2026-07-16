@@ -21,25 +21,15 @@ die() { printf '\033[0;31m[my-ai] %s\033[0m\n' "$*" >&2; exit 1; }
 # IN_NIX_SHELL — NOT `command -v cargo`: CI runners (and dev machines) ship a
 # system cargo, so a cargo-presence check would bypass nix entirely and miss
 # glib/webkit/pkg-config. When not already in a devshell, enter `nix develop`
-# and INJECT the pkg-config + lib paths into the command's env via `env VAR=…`
-# (`nix develop -c` does not reliably apply the shellHook / mkShell env vars).
-_NSYS="$(uname -m)-linux"
+# and let the standard pkg-config setup hook own PKG_CONFIG_PATH — it follows
+# propagatedBuildInputs (so gtk3 pulls in pango/cairo/atk/… transitively). Do
+# NOT override PKG_CONFIG_PATH manually: a direct-buildInputs-only list drops
+# those transitive .pc files (pango not found). -L streams full build logs.
 in_shell() {
   if [ -n "${IN_NIX_SHELL:-}" ]; then
     "$@"
   else
-    # $(...) captures stdout only; nix's fetch/progress on stderr must NOT be
-    # merged in (it would corrupt the path list). Do not redirect stderr.
-    # Inject ONLY PKG_CONFIG_PATH — NOT LD_LIBRARY_PATH: forcing webkit's libs
-    # onto the BUILD process corrupts rustc/cargo's own dynamic linking (silent
-    # crash). LD_LIBRARY_PATH is a runtime-only concern (see `build.sh run`).
-    local pcp
-    pcp="$(nix eval --raw ".#pkgConfigPath.$_NSYS")" || die "nix eval pkgConfigPath failed"
-    [ -n "$pcp" ] || die "resolved PKG_CONFIG_PATH is empty (.#pkgConfigPath.$_NSYS)"
-    say "PKG_CONFIG_PATH first entry: ${pcp%%:*}"
-    # -L / --print-build-logs streams full nix build logs (default quiet mode
-    # hides devshell build failures, making the step fail with no visible output).
-    nix develop -L -c env PKG_CONFIG_PATH="$pcp" "$@"
+    nix develop -L -c "$@"
   fi
 }
 
