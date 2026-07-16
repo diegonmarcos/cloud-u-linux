@@ -1,0 +1,13 @@
+[package]
+name = "my-ai-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "my-ai"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+my-ai-core.workspace = true
+clap = { version = "4", features = ["derive"] }

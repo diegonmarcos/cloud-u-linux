@@ -1,0 +1,25 @@
+{
+  "name": "my-ai",
+  "description": "Claude Code via the Headroom compression proxy \u2014 CLI + TTY dashboard + Tauri GUI/systray (rebrand of claude-superset).",
+  "app": {
+    "bin": "my-ai",
+    "bins": [
+      "my-ai",
+      "my-ai-dash"
+    ],
+    "gui_bin": "my-ai-gui",
+    "_gui_comment": "my-ai-gui (Tauri) added in Phase 4."
+  },
+  "build": {
+    "repo": "diegonmarcos/unix",
+    "release_tag": "my-ai-latest",
+    "artifacts": [
+      "my-ai",
+      "my-ai-dash"
+    ]
+  },
+  "runtime": {
+    "store_subdir": ".local/share/my-ai",
+    "bin_dir": ".local/bin"
+  }
+}

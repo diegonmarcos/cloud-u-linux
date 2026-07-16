@@ -1,0 +1,6 @@
+target/
+*.deb
+*.AppImage
+result
+.direnv/
+Cargo.lock
