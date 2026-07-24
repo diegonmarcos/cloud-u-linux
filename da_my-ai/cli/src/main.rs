@@ -298,16 +298,36 @@ fn launch(entries: &[Entry], face: &str) -> Result<()> {
     // the tab is NOT killed.
     let bare = |id: &str| format!("{selfcmd} {face} --resume {id}");
     let cmd = |id: &str| format!("{sh} -c \"{}; exec {sh} -i\"", bare(id));
+    // POSIX single-quote for safe embedding inside a generated /bin/sh script.
+    let shq = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
+    let home = core::home();
+    let home = home.to_string_lossy();
+    // Per-session launcher script: cd <workdir> ; <resume> ; exec <shell> -i
+    let tab_script = |e: &Entry| {
+        format!(
+            "#!/bin/sh\ncd {} 2>/dev/null || cd {}\n{}\nexec {sh} -i\n",
+            shq(&e.workdir), shq(&home), bare(&e.id)
+        )
+    };
     eprintln!("[my-ai] restoring {} session(s)", entries.len());
 
     let konsole = env_bin("CAS_KONSOLE", "konsole");
     if let Some(konsole) = konsole.filter(|_| std::env::var_os("DISPLAY").is_some()) {
-        let lines: Vec<String> = entries
-            .iter()
-            .map(|e| format!("title: {} ;; workdir: {} ;; command: {}", e.title, e.workdir, cmd(&e.id)))
-            .collect();
-        let tabs = PathBuf::from(std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into()))
-            .join("my-ai-tabs");
+        let dir = PathBuf::from(std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into()));
+        // konsole's --tabs-from-file tokenizes `command:` on whitespace WITHOUT
+        // shell quoting, so a quoted `sh -c "…; exec sh -i"` gets split apart, the
+        // shell dies on the fragment, and the tab closes with nothing restored
+        // (the exec keep-alive never runs). Reference a bare `sh <script>` instead.
+        let mut lines: Vec<String> = Vec::with_capacity(entries.len());
+        for e in entries {
+            let scr = dir.join(format!("my-ai-tab-{}.sh", e.id));
+            fs::write(&scr, tab_script(e))?;
+            #[cfg(unix)]
+            { use std::os::unix::fs::PermissionsExt;
+              fs::set_permissions(&scr, fs::Permissions::from_mode(0o755)).ok(); }
+            lines.push(format!("title: {} ;; command: {} {}", e.title, sh, scr.display()));
+        }
+        let tabs = dir.join("my-ai-tabs");
         fs::write(&tabs, lines.join("\n") + "\n")?;
         Command::new(konsole)
             .arg("--tabs-from-file")
