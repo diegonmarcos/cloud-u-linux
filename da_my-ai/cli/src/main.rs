@@ -131,8 +131,8 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
     // Session action (default fresh). sync / restore dispatch and return.
     match rest.first().map(|s| s.as_str()) {
         Some("sync") => return do_sync(ep, &core::device(), ep.sync_keep as u64),
-        Some(k @ ("restore" | "restore-hours")) => {
-            let selector = if k == "restore-hours" { "hours" } else { "count" };
+        Some(k @ ("restore" | "restore-hours" | "list" | "list-hours")) => {
+            let selector = if k.ends_with("-hours") { "hours" } else { "count" };
             let a = rest.get(1).cloned().unwrap_or_default();
             let b = rest.get(2).cloned().unwrap_or_default();
             let (devsel, val) = if a.is_empty() || a.chars().any(|c| !c.is_ascii_digit()) {
@@ -143,7 +143,10 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
             let devsel = if devsel.is_empty() { "local".to_string() } else { devsel };
             let value: u64 = val.parse().unwrap_or(0);
             if value == 0 {
-                return Err(anyhow!("restore needs a positive number"));
+                return Err(anyhow!("{k} needs a positive number"));
+            }
+            if k.starts_with("list") {
+                return do_list(ep, &devsel, selector, value);
             }
             return do_restore(ep, mode, &devsel, selector, value);
         }
@@ -226,6 +229,28 @@ fn do_restore(ep: &core::Endpoints, face: &str, devsel: &str, selector: &str, va
         remote_entries(ep, devsel, selector, value)?
     };
     launch(&entries, face)
+}
+
+// ── list: print recent sessions (no launch), newest first ────────────────────
+fn do_list(ep: &core::Endpoints, devsel: &str, selector: &str, value: u64) -> Result<()> {
+    let sel = if selector == "hours" {
+        core::Selector::Hours(value)
+    } else {
+        core::Selector::Count(value)
+    };
+    let entries = if devsel == "local" {
+        local_entries(&sel)
+    } else {
+        remote_entries(ep, devsel, selector, value)?
+    };
+    if entries.is_empty() {
+        eprintln!("[restore] no matching sessions");
+        return Ok(());
+    }
+    for e in &entries {
+        println!("{}  {}", e.id, e.title);
+    }
+    Ok(())
 }
 
 fn local_entries(sel: &core::Selector) -> Vec<Entry> {
