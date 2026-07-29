@@ -6,7 +6,15 @@ pub const PRESETS_COUNT: [u64; 6] = [1, 3, 5, 10, 20, 50];
 pub const PRESETS_HOURS: [u64; 6] = [1, 4, 8, 24, 72, 168];
 pub const FOCT: [&str; 5] = ["radio", "check", "checklevel", "number", "action"];
 
+/// The agent my-ai wraps. Selection surfaced in the TUI AGENT section.
+///   goose      — Block's goose (default; routes my-ai-api → OpenRouter)
+///   claude-cli — Anthropic's Claude Code CLI (routes my-ai-api anthropic shim)
+///   hermes     — Nous Research Hermes (goose shim pinned to a Hermes model on
+///                OpenRouter via my-ai-api — no standalone hermes CLI exists)
+pub const AGENTS: [&str; 3] = ["goose", "claude-cli", "hermes"];
+
 pub struct St {
+    pub agent: String,
     pub face: String,
     pub headroom: bool,
     pub ponytail: bool,
@@ -20,6 +28,7 @@ pub struct St {
 impl Default for St {
     fn default() -> Self {
         St {
+            agent: "goose".into(),
             face: "remote".into(),
             headroom: true,
             ponytail: true,
@@ -47,6 +56,10 @@ fn row(kind: &'static str, grp: &'static str, val: &'static str, key: &'static s
 
 pub fn build_rows(st: &St) -> Vec<Row> {
     let mut r = Vec::new();
+    r.push(row("sec", "", "", "", "AGENT", ""));
+    r.push(row("radio", "agent", "goose", "", "goose", "Block goose → my-ai-api (OpenRouter)"));
+    r.push(row("radio", "agent", "claude-cli", "", "claude-cli", "Claude Code CLI → my-ai-api (anthropic shim)"));
+    r.push(row("radio", "agent", "hermes", "", "hermes", "Nous Research Hermes → my-ai-api (OpenRouter)"));
     r.push(row("sec", "", "", "", "FACE", ""));
     r.push(row("radio", "face", "remote", "", "remote", "WG compression proxy"));
     r.push(row("radio", "face", "local", "", "local", "container on THIS host"));
@@ -83,7 +96,8 @@ pub fn focusable(rows: &[Row]) -> Vec<usize> {
 /// The launch command args (the token stream passed to `my-ai`).
 pub fn sel_args(st: &St) -> Vec<String> {
     let n = st.restore_n.max(1).to_string();
-    let mut a = vec![st.face.clone()];
+    debug_assert!(AGENTS.contains(&st.agent.as_str()), "invalid agent: {}", st.agent);
+    let mut a = vec!["--agent".into(), st.agent.clone(), st.face.clone()];
     if st.face != "claude" {
         if !st.headroom {
             a.push("headroom".into());

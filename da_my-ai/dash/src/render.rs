@@ -175,7 +175,7 @@ fn page_compose(cx: &Ctx, l: &mut Vec<Line<'static>>) {
     let fl = focusable(&rows);
     let foc_idx = fl.get(cx.focus.min(fl.len().saturating_sub(1))).copied().unwrap_or(usize::MAX);
     l.push(Line::from(""));
-    l.push(sec_head("COMPOSE", &cx.st.face));
+    l.push(sec_head("COMPOSE", &format!("{} · {}", cx.st.agent, cx.st.face)));
     for (i, row) in rows.iter().enumerate() {
         let foc = i == foc_idx;
         let cur = if foc { boldc("> ", Cyan) } else { raw("  ") };
@@ -246,6 +246,7 @@ fn page_compose(cx: &Ctx, l: &mut Vec<Line<'static>>) {
 
 fn state_val<'b>(st: &'b St, grp: &str) -> &'b str {
     match grp {
+        "agent" => &st.agent,
         "face" => &st.face,
         "restore" => &st.restore,
         _ => "",

@@ -1,6 +1,7 @@
-//! `my-ai` — Claude Code via the Headroom compression proxy.
-//! Faithful Rust port of the claude-superset wrapper (claude-superset.nix) +
-//! session engine (claude-superset-restore.mjs). Universal: KDE / TTY / Termux.
+//! `my-ai` — goose via the my-ai-api OpenRouter router + Headroom compression
+//! proxy. Fork of the claude-superset wrapper (claude-superset.nix) + session
+//! engine (claude-superset-restore.mjs), swapped to goose as the agent and
+//! my-ai-api (OpenRouter, not Claude) as the upstream. Universal: KDE / TTY / Termux.
 use anyhow::{anyhow, Result};
 use my_ai_core as core;
 use std::fs;
@@ -33,12 +34,55 @@ fn main() -> Result<()> {
 
 // ── face + plugin + action routing (mirror of the wrapper) ───────────────────
 fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
-    // Face: local | remote | claude (default remote). `claude` = plain bypass.
+    // ── Flags: agent / model / effort / mode (parsed first) ──────────────
+    // --agent <id>: which agent my-ai wraps (goose | claude-cli | hermes).
+    //   Default: MY_AI_AGENT env, else "goose". Stored in MY_AI_AGENT so the
+    //   dash/launch and child processes inherit it.
+    // --model <id>: sets GOOSE_MODEL (goose reads this env) + ANTHROPIC_MODEL
+    // (parity for probes/dash). --effort: informational (MY_AI_EFFORT).
+    // --auto/--plan/--interactive: recorded for display (goose has its own
+    // approval model; no extra CLI flags).
+    {
+        let mut idx = 0;
+        while idx < args.len() {
+            match args[idx].as_str() {
+                "--agent" => {
+                    if let Some(a) = args.get(idx + 1) {
+                        let agent = match a.as_str() {
+                            "goose" | "claude-cli" | "hermes" => a.clone(),
+                            _ => return Err(anyhow!("--agent: goose | claude-cli | hermes (got '{a}')")),
+                        };
+                        std::env::set_var("MY_AI_AGENT", &agent);
+                        args.drain(idx..idx + 2);
+                    } else {
+                        return Err(anyhow!("--agent needs a value: goose | claude-cli | hermes"));
+                    }
+                }
+                "--model" => {
+                    if let Some(m) = args.get(idx + 1) {
+                        std::env::set_var("GOOSE_MODEL", m);
+                        std::env::set_var("ANTHROPIC_MODEL", m);
+                        args.drain(idx..idx + 2);
+                    } else { idx += 1; }
+                }
+                "--effort" => {
+                    if let Some(e) = args.get(idx + 1) {
+                        std::env::set_var("MY_AI_EFFORT", e);
+                        args.drain(idx..idx + 2);
+                    } else { idx += 1; }
+                }
+                "--auto" | "--plan" | "--interactive" => { args.remove(idx); }
+                _ => break,
+            }
+        }
+    }
+
+    // Face: local | remote | goose (default remote). `goose` = plain bypass.
     let mut mode = "remote";
     let mut plain = false;
     match args.first().map(|s| s.as_str()) {
-        Some("claude") => {
-            mode = "claude";
+        Some("goose") => {
+            mode = "goose";
             plain = true;
             args.remove(0);
         }
@@ -55,9 +99,10 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
     std::env::set_var("CLAUDE_SUPERSET_MODE", mode);
     std::env::set_var("MY_AI_MODE", mode);
 
-    // Compression plugins default ON (headroom/ponytail/rtk/caveman); plain
-    // `claude` face stays fully bypassed.
-    if mode != "claude" {
+    // Compression plugins default ON (headroom/rtk/caveman); plain `goose` face
+    // stays fully bypassed. (ponytail is a Claude-Code hook system with no goose
+    // equivalent — the toggle is still parsed but has no effect on goose.)
+    if mode != "goose" {
         std::env::set_var("RTK_ENABLED", "1");
         std::env::set_var("CAVEMAN_ENABLED", "1");
     }
@@ -158,32 +203,69 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
         _ => rest,
     };
 
-    // Plain `claude` face: no proxy, no plugins, no auto-sync.
+    // Plain bypass face: no proxy, no plugins, no auto-sync.
     if plain {
-        return exec_claude(&passthrough);
+        return exec_agent(&passthrough);
     }
 
-    // Wire ANTHROPIC_BASE_URL via a short /readyz probe (no bring-up here).
+    let agent = std::env::var("MY_AI_AGENT").unwrap_or_else(|_| "goose".into());
+
+    // Wire the agent → my-ai-api via a short /readyz probe.
+    //   goose / hermes → OPENAI_BASE_URL (OpenAI shape); my-ai-api injects the
+    //     real OPENROUTER_API_KEY. hermes pins GOOSE_MODEL to a Nous Hermes slug
+    //     (unless --model overrode it).
+    //   claude-cli → ANTHROPIC_BASE_URL (my-ai-api's /v1/messages anthropic shim,
+    //     which is itself a shape-translation onto OpenRouter — NOT real Claude).
     if headroom {
         let url = if mode == "local" {
             ep.local.proxy.clone()
         } else {
-            std::env::var("CLAUDE_SUPERSET_URL").unwrap_or_else(|_| ep.proxy.clone())
+            std::env::var("MY_AI_API_URL").unwrap_or_else(|_| ep.proxy.clone())
         };
         if probe(&url) {
-            std::env::set_var("ANTHROPIC_BASE_URL", &url);
-            eprintln!("[my-ai] via {mode} proxy → {url} (Headroom compression ON)");
+            match agent.as_str() {
+                "claude-cli" => {
+                    std::env::set_var("ANTHROPIC_BASE_URL", &url);
+                    if std::env::var("ANTHROPIC_API_KEY").is_err() {
+                        std::env::set_var("ANTHROPIC_API_KEY", "my-ai-api-injects-key");
+                    }
+                    eprintln!("[my-ai] agent=claude-cli via {mode} my-ai-api → {url} (anthropic shim → OpenRouter, Headroom ON)");
+                }
+                "hermes" => {
+                    std::env::set_var("GOOSE_PROVIDER", "openai");
+                    std::env::set_var("OPENAI_BASE_URL", format!("{}/v1", url.trim_end_matches('/')));
+                    if std::env::var("OPENAI_API_KEY").is_err() {
+                        std::env::set_var("OPENAI_API_KEY", "my-ai-api-injects-key");
+                    }
+                    // Pin a Nous Hermes model unless --model overrode GOOSE_MODEL.
+                    if std::env::var("GOOSE_MODEL").is_err() {
+                        std::env::set_var("GOOSE_MODEL", "nousresearch/hermes-3-llama-3.1-405b");
+                    }
+                    eprintln!("[my-ai] agent=hermes via {mode} my-ai-api → {url} (Nous Hermes on OpenRouter, Headroom ON)");
+                }
+                _ => {
+                    // goose
+                    std::env::set_var("GOOSE_PROVIDER", "openai");
+                    std::env::set_var("OPENAI_BASE_URL", format!("{}/v1", url.trim_end_matches('/')));
+                    if std::env::var("OPENAI_API_KEY").is_err() {
+                        std::env::set_var("OPENAI_API_KEY", "my-ai-api-injects-key");
+                    }
+                    if std::env::var("GOOSE_MODEL").is_err() && !ep.local.model.is_empty() {
+                        std::env::set_var("GOOSE_MODEL", &ep.local.model);
+                    }
+                    eprintln!("[my-ai] agent=goose via {mode} my-ai-api → {url} (Headroom ON, upstream=OpenRouter)");
+                }
+            }
         } else {
             if mode == "local" {
                 eprintln!(
-                    "[my-ai] local proxy not ready — first run: docker exec -it {} claude",
-                    ep.local.container_name
+                    "[my-ai] local my-ai-api not ready — ensure OPENROUTER_API_KEY is wired (src/secrets.yaml) and `my-ai local` brought the container up",
                 );
             }
-            eprintln!("[my-ai] proxy unreachable ({url}) — direct to Anthropic, no compression");
+            eprintln!("[my-ai] my-ai-api unreachable ({url}) — {agent} native provider, no compression");
         }
     } else {
-        eprintln!("[my-ai] Headroom OFF — direct to Anthropic (no compression)");
+        eprintln!("[my-ai] Headroom OFF — {agent} native provider, no compression");
     }
 
     // Auto-sync recent sessions to the hub (best-effort, detached) unless resuming.
@@ -191,7 +273,7 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
         spawn_bg_sync();
     }
 
-    exec_claude(&passthrough)
+    exec_agent(&passthrough)
 }
 
 // ── sync: push last <keep> local sessions to the hub ─────────────────────────
@@ -298,7 +380,8 @@ fn remote_entries(ep: &core::Endpoints, devsel: &str, selector: &str, value: u64
     let mut entries = Vec::new();
     for s in picks {
         if let Ok(text) = hub.get_session(&s.device, &s.id) {
-            // Re-home under $HOME so `claude --resume` finds it on this device.
+            // Re-home under $HOME so goose can import the session on this device.
+            // (goose session import → goose session --resume --session-id <id>)
             fs::write(home_dir.join(format!("{}.jsonl", s.id)), &text).ok();
             let (_cwd, title) = core::inspect(&text, &s.id);
             let t: String = format!("{}:{}", s.device, title).chars().take(40).collect();
@@ -318,8 +401,8 @@ fn launch(entries: &[Entry], face: &str) -> Result<()> {
     }
     let selfcmd = std::env::var("CAS_SELF").unwrap_or_else(|_| "my-ai".into());
     let sh = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
-    // Interactive shell that STAYS after claude exits: Ctrl+C soft-kills claude
-    // (which prints its `claude --resume <id>` hint) and drops back to a shell —
+    // Interactive shell that STAYS after goose exits: Ctrl+C soft-kills goose
+    // (which prints its `goose session --resume` hint) and drops back to a shell —
     // the tab is NOT killed.
     let bare = |id: &str| format!("{selfcmd} {face} --resume {id}");
     let cmd = |id: &str| format!("{sh} -c \"{}; exec {sh} -i\"", bare(id));
@@ -398,13 +481,24 @@ fn write_local_compose(ep: &core::Endpoints) -> Result<PathBuf> {
     fs::create_dir_all(&store)?;
     let bind = |p: u16| format!("127.0.0.1:{p}:{p}");
     // JSON is valid YAML — docker compose reads it fine (same as the nix writeText).
+    // my-ai-api has NO transparent-proxy face (it routes OpenRouter directly), so
+    // we bind only app/ollama/headroom (proxy port 0 → skipped). OPENROUTER_API_KEY
+    // is interpolated from the host env (or a local .env) — never baked in.
+    let mut port_bindings = vec![
+        bind(lo.ports.app),
+        bind(lo.ports.ollama),
+        bind(lo.ports.headroom),
+    ];
+    if lo.ports.proxy > 0 {
+        port_bindings.push(bind(lo.ports.proxy));
+    }
     let mut compose = serde_json::json!({
-        "services": { "claude-superset-api": {
+        "services": { "my-ai-api": {
             "image": lo.image,
             "container_name": lo.container_name,
             "pull_policy": "always",
             "init": true,
-            "ports": [bind(lo.ports.app), bind(lo.ports.ollama), bind(lo.ports.headroom), bind(lo.ports.proxy)],
+            "ports": port_bindings,
             "environment": {
                 "HOME": "/home/appuser",
                 "BRIDGE_PORT": lo.ports.app.to_string(),
@@ -420,11 +514,8 @@ fn write_local_compose(ep: &core::Endpoints) -> Result<PathBuf> {
                 "HEADROOM_PORT": lo.ports.headroom.to_string(),
                 "HEADROOM_SAVINGS_PROFILE": lo.savings_profile,
                 "HEADROOM_MIN_TOKENS": lo.min_tokens_to_compress.to_string(),
-                "HEADROOM_PROXY_ENABLED": "1",
-                "HEADROOM_PROXY_PORT": lo.ports.proxy.to_string(),
-                "HEADROOM_PROXY_BIND": "0.0.0.0",
-                "HEADROOM_PROXY_BACKEND": "anthropic",
-                "HEADROOM_WORKSPACE_DIR": "/home/appuser/.headroom"
+                "HEADROOM_WORKSPACE_DIR": "/home/appuser/.headroom",
+                "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY:-}"
             },
             "volumes": [format!("{}:/home/appuser", lo.volume)]
         }}
@@ -459,47 +550,41 @@ fn local_up_once(ep: &core::Endpoints) -> Result<()> {
     Ok(())
 }
 
-// ── setup: ensure `claude` is installed (native, no npm) ─────────────────────
+// ── setup: ensure `goose` is installed (the agent for this stack) ────────────
 fn setup(args: &[String], ep: &core::Endpoints) -> Result<()> {
-    if have("claude") && args.first().map(|s| s.as_str()) != Some("rescue") {
-        eprintln!("[my-ai setup] claude already installed: {}", which("claude").unwrap_or_default());
+    if have("goose") && args.first().map(|s| s.as_str()) != Some("rescue") {
+        eprintln!("[my-ai setup] goose already installed: {}", which("goose").unwrap_or_default());
         return Ok(());
     }
     match args.first().map(|s| s.as_str()) {
         Some("--shell") => {
-            // Ephemeral: run claude via nix-shell without a permanent install.
+            // Ephemeral: run goose via nix-shell without a permanent install.
             eprintln!("[my-ai setup] ephemeral nix-shell (temporary):");
-            println!("nix-shell -p nodejs --run 'npx -y {} \"$@\"'", ep.setup.rescue_pkg);
+            println!("nix shell nixpkgs#goose -c goose \"$@\"");
             Ok(())
         }
         Some("rescue") => setup_rescue(&args[1..], ep),
         _ => {
             // Declarative platforms are flake-managed; imperative ones get the native installer.
             if is_nix() || is_termux() {
-                eprintln!("[my-ai setup] nix/termux = flake-managed. `claude` is delivered declaratively —");
+                eprintln!("[my-ai setup] nix/termux = flake-managed. `goose` is delivered declaratively —");
                 eprintln!("               rebuild your flake (build.sh switch), or use `my-ai setup --shell`.");
                 return Ok(());
             }
-            eprintln!("[my-ai setup] native installer (no npm): {}", ep.setup.installer_url);
-            let sh = format!("curl -fsSL {} | bash", ep.setup.installer_url);
-            let st = Command::new("bash").arg("-c").arg(&sh).status()?;
-            if st.success() {
-                Ok(())
-            } else {
-                Err(anyhow!("native installer failed — try `my-ai setup rescue`"))
-            }
+            eprintln!("[my-ai setup] native install: {}", ep.setup.installer_url);
+            eprintln!("[my-ai setup]   download the goose binary for your arch from the releases page,");
+            eprintln!("[my-ai setup]   put it on PATH, then `my-ai setup --shell` to verify without installing.");
+            Ok(())
         }
     }
 }
 
-// Last-resort fallback chain: podman → npx → nix → node.
-fn setup_rescue(passthrough: &[String], ep: &core::Endpoints) -> Result<()> {
-    let pkg = &ep.setup.rescue_pkg;
+// Last-resort fallback chain: nix → podman → cargo (goose is the agent for this stack).
+fn setup_rescue(passthrough: &[String], _ep: &core::Endpoints) -> Result<()> {
     let chains: Vec<(&str, Vec<String>)> = vec![
-        ("podman", vec!["run".into(), "--rm".into(), "-it".into(), "node:22".into(), "npx".into(), "-y".into(), pkg.clone()]),
-        ("npx", vec!["-y".into(), pkg.clone()]),
-        ("nix", vec!["shell".into(), "nixpkgs#nodejs".into(), "-c".into(), "npx".into(), "-y".into(), pkg.clone()]),
-        ("node", vec!["--version".into()]),
+        ("nix", vec!["shell".into(), "nixpkgs#goose".into(), "-c".into(), "goose".into()]),
+        ("podman", vec!["run".into(), "--rm".into(), "-it".into(), "ghcr.io/block/goose:latest".into()]),
+        ("cargo", vec!["install".into(), "goose-cli".into()]),
     ];
     for (bin, base) in chains {
         if have(bin) {
@@ -510,7 +595,7 @@ fn setup_rescue(passthrough: &[String], ep: &core::Endpoints) -> Result<()> {
             return Ok(());
         }
     }
-    Err(anyhow!("rescue: none of podman/npx/nix/node available"))
+    Err(anyhow!("rescue: none of nix/podman/cargo available"))
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -523,9 +608,45 @@ fn probe(url: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn exec_claude(args: &[String]) -> Result<()> {
-    let err = Command::new("claude").args(args).exec();
-    Err(anyhow!("failed to exec claude: {err}"))
+fn exec_agent(args: &[String]) -> Result<()> {
+    let agent = std::env::var("MY_AI_AGENT").unwrap_or_else(|_| "goose".into());
+    match agent.as_str() {
+        "claude-cli" => {
+            // Claude Code CLI. Restore fan-out passes `--resume <id>`; pass through
+            // to `claude` verbatim (claude's own --resume semantics).
+            let err = Command::new("claude").args(args).exec();
+            Err(anyhow!("failed to exec claude: {err}"))
+        }
+        "hermes" => {
+            // Hermes = goose shim pinned to a Nous Hermes model on OpenRouter
+            // (no standalone hermes CLI exists). Same goose exec path; the model
+            // pin + OPENAI_BASE_URL are set in the route() wiring above.
+            exec_goose(args)
+        }
+        _ => exec_goose(args), // goose (default)
+    }
+}
+
+fn exec_goose(args: &[String]) -> Result<()> {
+    // goose session is the interactive agent. Translate claude-style
+    // `--resume <id>` (from a restore fan-out) into goose's `--resume --session-id <id>`.
+    // A bare `my-ai` (fresh, no args) → `goose session` (interactive REPL). Other
+    // args (e.g. `--name foo`) pass through to `goose session` verbatim.
+    let mut goose_args: Vec<String> = vec!["session".into()];
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--resume" && i + 1 < args.len() {
+            goose_args.push("--resume".into());
+            goose_args.push("--session-id".into());
+            goose_args.push(args[i + 1].clone());
+            i += 2;
+        } else {
+            goose_args.push(args[i].clone());
+            i += 1;
+        }
+    }
+    let err = Command::new("goose").args(&goose_args).exec();
+    Err(anyhow!("failed to exec goose: {err}"))
 }
 
 fn launch_dash() -> Result<()> {

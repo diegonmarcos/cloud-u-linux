@@ -189,6 +189,7 @@ fn refresh(ep: &my_ai_core::Endpoints, mcps: &[offline::Mcp], data: &Shared) {
 fn activate(st: &mut St, row: &state::Row) {
     match row.kind {
         "radio" => match row.grp {
+            "agent" => st.agent = row.val.to_string(),
             "face" => st.face = row.val.to_string(),
             "restore" => st.restore = row.val.to_string(),
             _ => {}
@@ -221,6 +222,7 @@ fn adjust(st: &mut St, rows: &[state::Row], foc: Option<usize>, dir: i64, num_bu
         "radio" => {
             let opts: Vec<&str> = rows.iter().filter(|r| r.kind == "radio" && r.grp == row.grp).map(|r| r.val).collect();
             let cur: &str = match row.grp {
+                "agent" => &st.agent,
                 "face" => &st.face,
                 "restore" => &st.restore,
                 _ => return,
@@ -229,6 +231,7 @@ fn adjust(st: &mut St, rows: &[state::Row], foc: Option<usize>, dir: i64, num_bu
             let ni = (ci as i64 + dir).rem_euclid(opts.len() as i64) as usize;
             let val = opts[ni].to_string();
             match row.grp {
+                "agent" => st.agent = val,
                 "face" => st.face = val,
                 "restore" => st.restore = val,
                 _ => {}

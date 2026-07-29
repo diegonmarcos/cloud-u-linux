@@ -16,6 +16,9 @@ pub struct Ports {
     pub app: u16,
     pub ollama: u16,
     pub headroom: u16,
+    #[serde(default)]
+    /// my-ai-api has no transparent-proxy face (it routes OpenRouter directly),
+    /// so `proxy` is optional; 0 = no proxy port. claude-superset-api keeps 8789.
     pub proxy: u16,
 }
 
@@ -43,7 +46,7 @@ pub struct LocalCfg {
     pub min_tokens_to_compress: u32,
 }
 fn default_project() -> String {
-    "claude-superset-local".into()
+    "my-ai-local".into()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -271,9 +274,10 @@ mod tests {
         let e = endpoints().expect("endpoints.json must parse");
         assert!(e.api.starts_with("http"));
         assert_eq!(e.sync_keep, 20);
-        assert_eq!(e.local.container_name, "claude-superset-api-local");
-        assert_eq!(e.local.ports.proxy, 8789);
-        assert_eq!(e.setup.installer_url, "https://claude.ai/install.sh");
+        // my-ai-api (sibling of claude-superset-api): routes OpenRouter, no proxy face.
+        assert_eq!(e.local.container_name, "my-ai-api-local");
+        assert_eq!(e.local.ports.proxy, 0); // no proxy port in the my-ai stack
+        assert_eq!(e.setup.installer_url, "https://github.com/block/goose/releases");
     }
     #[test]
     fn inspect_title_fallback() {
