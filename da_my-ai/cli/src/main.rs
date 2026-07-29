@@ -5,6 +5,7 @@
 use anyhow::{anyhow, Result};
 use my_ai_core as core;
 use std::fs;
+use std::io::{BufRead, BufReader, Write};
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -610,6 +611,7 @@ fn probe(url: &str) -> bool {
 
 fn exec_agent(args: &[String]) -> Result<()> {
     let agent = std::env::var("MY_AI_AGENT").unwrap_or_else(|_| "goose".into());
+    let mode = std::env::var("MY_AI_MODE").unwrap_or_else(|_| "remote".into());
     match agent.as_str() {
         "claude-cli" => {
             // Claude Code CLI. Restore fan-out passes `--resume <id>`; pass through
@@ -623,7 +625,17 @@ fn exec_agent(args: &[String]) -> Result<()> {
             // pin + OPENAI_BASE_URL are set in the route() wiring above.
             exec_goose(args)
         }
-        _ => exec_goose(args), // goose (default)
+        _ => {
+            // goose (default): remote face connects to the server-side goosed agent
+            // over HTTP/SSE — the agent loop runs on oci-apps, not locally. Local face
+            // keeps the traditional exec-goose path (agent runs locally, LLM is remote).
+            if mode == "remote" {
+                let ep = core::endpoints()?;
+                goosed_repl(&ep.goosed)
+            } else {
+                exec_goose(args)
+            }
+        }
     }
 }
 
@@ -647,6 +659,124 @@ fn exec_goose(args: &[String]) -> Result<()> {
     }
     let err = Command::new("goose").args(&goose_args).exec();
     Err(anyhow!("failed to exec goose: {err}"))
+}
+
+// ── goosed remote REPL: thin HTTP/SSE client for the server-side agent ───────
+// The agent loop executes on oci-apps inside the my-ai-api container (goosed,
+// port 3227). This function is a minimal blocking REPL:
+//   1. POST /sessions → creates a session, gets session_id.
+//   2. Loop: read user line from stdin → POST /sessions/{id}/reply (SSE response)
+//            → print accumulated assistant text → repeat.
+// Secret: GOOSE_SERVER__SECRET_KEY env var (same key the container reads from sops).
+// If the endpoint is unreachable or the secret is unset, we print a clear error
+// and return — no silent fallback to a local agent.
+fn goosed_repl(base_url: &str) -> Result<()> {
+    if base_url.is_empty() {
+        return Err(anyhow!(
+            "[my-ai] goosed endpoint not configured (endpoints.json 'goosed' key is empty)"
+        ));
+    }
+    let secret = std::env::var("GOOSE_SERVER__SECRET_KEY").map_err(|_| {
+        anyhow!(
+            "[my-ai] GOOSE_SERVER__SECRET_KEY is not set — \
+             export it from your vault before using FACE=remote with agent=goose"
+        )
+    })?;
+    if secret.is_empty() {
+        return Err(anyhow!(
+            "[my-ai] GOOSE_SERVER__SECRET_KEY is set but empty"
+        ));
+    }
+
+    let base = base_url.trim_end_matches('/');
+
+    // 1. Create a session on the remote goosed.
+    let create_url = format!("{}/sessions", base);
+    let create_resp = ureq::post(&create_url)
+        .set("X-Secret-Key", &secret)
+        .set("Content-Type", "application/json")
+        .timeout(Duration::from_secs(10))
+        .send_string("{}")
+        .map_err(|e| anyhow!("[my-ai] goosed unreachable at {base_url}: {e}\nIs the WireGuard tunnel up?"))?;
+
+    let session_json: serde_json::Value = create_resp.into_json()
+        .map_err(|e| anyhow!("[my-ai] goosed /sessions response parse error: {e}"))?;
+    let session_id = session_json
+        .get("session_id")
+        .or_else(|| session_json.get("id"))
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("[my-ai] goosed /sessions response missing session_id: {session_json}"))?
+        .to_string();
+
+    eprintln!("[my-ai] goosed session {session_id} on {base_url} (agent runs server-side)");
+    eprintln!("[my-ai] Type your message and press Enter. Ctrl+D to exit.");
+
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+    loop {
+        print!("> ");
+        stdout.flush().ok();
+        let mut line = String::new();
+        match stdin.lock().read_line(&mut line) {
+            Ok(0) => break, // EOF (Ctrl+D)
+            Err(e) => return Err(anyhow!("stdin read error: {e}")),
+            Ok(_) => {}
+        }
+        let user_input = line.trim_end_matches('\n').trim_end_matches('\r');
+        if user_input.is_empty() {
+            continue;
+        }
+
+        // 2. POST /sessions/{id}/reply — response is an SSE stream.
+        let reply_url = format!("{}/sessions/{}/reply", base, session_id);
+        let body = serde_json::json!({ "content": user_input }).to_string();
+        let response = ureq::post(&reply_url)
+            .set("X-Secret-Key", &secret)
+            .set("Content-Type", "application/json")
+            .timeout(Duration::from_secs(120))
+            .send_string(&body)
+            .map_err(|e| anyhow!("[my-ai] goosed /reply error: {e}"))?;
+
+        // 3. Read SSE stream: each line is `data: <json>` or blank.
+        // Accumulate assistant text from delta/text/content/message fields.
+        let reader = BufReader::new(response.into_reader());
+        let mut printed_any = false;
+        for raw in reader.lines() {
+            let raw = match raw {
+                Ok(l) => l,
+                Err(_) => break,
+            };
+            let data = match raw.strip_prefix("data: ") {
+                Some(d) => d.trim(),
+                None => continue, // blank line or `event:` line — skip
+            };
+            if data == "[DONE]" {
+                break;
+            }
+            // Parse the JSON payload defensively — grab any string field that
+            // looks like assistant text (goose ACP may use delta/text/content/message).
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(data) {
+                let text = val.get("delta")
+                    .or_else(|| val.get("text"))
+                    .or_else(|| val.get("content"))
+                    .or_else(|| val.get("message"))
+                    .and_then(|v| v.as_str());
+                if let Some(t) = text {
+                    print!("{t}");
+                    stdout.flush().ok();
+                    printed_any = true;
+                }
+                // Check for a finish/done signal inside the payload.
+                if val.get("done").and_then(|v| v.as_bool()).unwrap_or(false) {
+                    break;
+                }
+            }
+        }
+        if printed_any {
+            println!(); // newline after last chunk
+        }
+    }
+    Ok(())
 }
 
 fn launch_dash() -> Result<()> {

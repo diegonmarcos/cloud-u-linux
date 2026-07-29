@@ -1,6 +1,7 @@
 {
-  "_comment": "my-ai endpoints (my-ai-api on oci-apps 10.0.0.6, WG-only). Source of truth: cloud build.json ports. The agent is goose; the upstream is OpenRouter (NOT Claude). `proxy`/`api` both point at the my-ai-api app port (3217) — goose hits this as OPENAI_BASE_URL; the dash probes /readyz + /health here. `anthropic` is the upstream reachability probe target (OpenRouter base, kept for the dash 'direct' probe + future direct-fallback).",
+  "_comment": "my-ai endpoints (my-ai-api on oci-apps 10.0.0.6, WG-only). Source of truth: cloud build.json ports. The agent is goose; the upstream is OpenRouter (NOT Claude). `proxy`/`api` both point at the my-ai-api app port (3217) — goose hits this as OPENAI_BASE_URL; the dash probes /readyz + /health here. `anthropic` is the upstream reachability probe target (OpenRouter base, kept for the dash 'direct' probe + future direct-fallback). `goosed` = goose ACP agent server (goose serve, X-Secret-Key auth, WireGuard-only) at port 3227.",
   "proxy": "http://10.0.0.6:3217",
+  "goosed": "http://10.0.0.6:3227",
   "api": "http://10.0.0.6:3217",
   "ollama": "http://10.0.0.6:12436",
   "dashboard": "http://10.0.0.6:8890/dashboard",

@@ -63,6 +63,10 @@ pub struct Endpoints {
     pub ollama: String,
     pub dashboard: String,
     pub anthropic: String,
+    /// goosed ACP agent server (goose serve, X-Secret-Key auth). Port 3227, WG-only.
+    /// Secret: GOOSE_SERVER__SECRET_KEY env var (same key the container reads from sops).
+    #[serde(default)]
+    pub goosed: String,
     #[serde(default = "default_keep")]
     pub sync_keep: u32,
     #[serde(default)]
@@ -278,6 +282,8 @@ mod tests {
         assert_eq!(e.local.container_name, "my-ai-api-local");
         assert_eq!(e.local.ports.proxy, 0); // no proxy port in the my-ai stack
         assert_eq!(e.setup.installer_url, "https://github.com/block/goose/releases");
+        // goosed ACP server: port 3227, WG-only.
+        assert_eq!(e.goosed, "http://10.0.0.6:3227");
     }
     #[test]
     fn inspect_title_fallback() {
