@@ -56,6 +56,22 @@ pub struct Setup {
     pub rescue_pkg: String,
 }
 
+/// One Claude Code context profile from `claude_profiles` in endpoints.json.
+/// `tokens` is the session preload measured with `/context`; `measured` says
+/// whether that number came off a real run or is derived from a known delta.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClaudeProfile {
+    #[serde(default)]
+    pub tokens: u32,
+    #[serde(default)]
+    pub measured: bool,
+    #[serde(default)]
+    pub desc: String,
+    /// Env vars exported before exec'ing `claude`. Empty = ship everything.
+    #[serde(default)]
+    pub flags: BTreeMap<String, String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Endpoints {
     pub proxy: String,
@@ -79,6 +95,8 @@ pub struct Endpoints {
     pub image: String,
     pub setup: Setup,
     pub local: LocalCfg,
+    #[serde(default)]
+    pub claude_profiles: BTreeMap<String, ClaudeProfile>,
 }
 fn default_keep() -> u32 {
     20

@@ -110,6 +110,9 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
 
     // Plugin toggles (any order, before the session action).
     let mut headroom = true;
+    // Set by the `claude <profile>` toggle; purely for the startup banner —
+    // the flags themselves are exported to the env as the toggle is parsed.
+    let mut claude_profile: Option<String> = None;
     let mut i = 0usize;
     while i < args.len() {
         match args[i].as_str() {
@@ -143,6 +146,31 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
                     "off" => std::env::remove_var("CAVEMAN_ENABLED"),
                     _ => return Err(anyhow!("caveman: on|off")),
                 }
+                i += 2;
+            }
+            // Claude Code context profile. Only affects --agent claude-cli.
+            // Tool schemas are built once at startup, so this must be chosen at
+            // launch — switching model mid-session will NOT reload them.
+            "claude" => {
+                let v = args.get(i + 1).map(|s| s.as_str()).unwrap_or("lean");
+                let prof = ep.claude_profiles.get(v).ok_or_else(|| {
+                    let names: Vec<&str> = ep
+                        .claude_profiles
+                        .keys()
+                        .map(|s| s.as_str())
+                        .filter(|n| !n.starts_with('_') && *n != "default")
+                        .collect();
+                    anyhow!("claude: unknown profile {v:?} (have: {names:?})")
+                })?;
+                for (k, val) in &prof.flags {
+                    std::env::set_var(k, val);
+                }
+                claude_profile = Some(format!(
+                    "{v} (~{}k preload{}, {} flags)",
+                    prof.tokens / 1000,
+                    if prof.measured { "" } else { ", est" },
+                    prof.flags.len()
+                ));
                 i += 2;
             }
             _ => break,
@@ -231,6 +259,9 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
                         std::env::set_var("ANTHROPIC_API_KEY", "my-ai-api-injects-key");
                     }
                     eprintln!("[my-ai] agent=claude-cli via {mode} my-ai-api → {url} (anthropic shim → OpenRouter, Headroom ON)");
+                    if let Some(p) = &claude_profile {
+                        eprintln!("[my-ai] claude profile={p}");
+                    }
                 }
                 "hermes" => {
                     std::env::set_var("GOOSE_PROVIDER", "openai");
