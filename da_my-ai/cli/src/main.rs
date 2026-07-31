@@ -656,8 +656,17 @@ fn exec_agent(args: &[String]) -> Result<()> {
         "claude-cli" | "claude-cli-ghost" => {
             // Claude Code CLI. Restore fan-out passes `--resume <id>`; pass through
             // to `claude` verbatim (claude's own --resume semantics). For ghost mode
-            // CLAUDE_CONFIG_DIR + login-only wipe are already applied in route().
-            let err = Command::new("claude").args(args).exec();
+            // HOME + CLAUDE_CONFIG_DIR relocation + login-only wipe are already applied
+            // in route(); here we also force the ghost's dedicated MCP file so it
+            // ignores user MCP and the project ./.mcp.json.
+            let mut a: Vec<String> = Vec::new();
+            if let Ok(mcp) = std::env::var("MY_AI_GHOST_MCP") {
+                a.push("--strict-mcp-config".into());
+                a.push("--mcp-config".into());
+                a.push(mcp);
+            }
+            a.extend_from_slice(args);
+            let err = Command::new("claude").args(&a).exec();
             Err(anyhow!("failed to exec claude: {err}"))
         }
         "hermes" => {
@@ -705,16 +714,21 @@ fn exec_goose(args: &[String]) -> Result<()> {
 // ── claude-cli-ghost: throwaway Claude HOME, login-only ──────────────────────
 // A REAL ghost isolates every layer Claude Code reads, not just the config dir:
 //   ~/.claude/            (config dir; CLAUDE_CONFIG_DIR)
-//   ~/.claude.json        (global state: user MCP, project index, onboarding)
-//   ~/.mcp.json           (user MCP servers)
+//   ~/.claude.json        (global state: user MCP servers, project index, onboarding)
 //   ~/CLAUDE.md           (home-level memory)
-// Redirecting CLAUDE_CONFIG_DIR alone leaves the other three leaking. Instead we
+// Redirecting CLAUDE_CONFIG_DIR alone leaves the other two leaking. Instead we
 // relocate HOME to a throwaway dir, so ALL of them resolve fresh in one move —
 // and because nothing real is ever renamed, a crash / kill -9 can never strand
 // the user's real config (no stash+restore trap to skip). Login is preserved by
 // copying just the credential into the ghost ~/.claude. Wiped every launch.
-// (A project-local ./CLAUDE.md in the working dir still loads — that is cwd, not
-// HOME, and matches "anonymous Claude working in your real repo".)
+//
+// MCP is the one layer HOME can't reset: the project ./.mcp.json lives in cwd,
+// not HOME. So the ghost gets its OWN curated MCP file (~/.config/my-ai/
+// mcp-ghost.json, persistent — outside the wiped dir) and launches with
+// `--mcp-config … --strict-mcp-config`, which makes claude use ONLY that file
+// and ignore both user MCP and the project ./.mcp.json. (A project-local
+// ./CLAUDE.md still loads — that is cwd too, matching "anonymous Claude working
+// in your real repo".)
 fn ghost_prepare() -> Result<()> {
     let home = std::env::var("HOME").map_err(|_| anyhow!("HOME unset"))?;
     let real_cfg = std::env::var("CLAUDE_CONFIG_DIR")
@@ -739,6 +753,18 @@ fn ghost_prepare() -> Result<()> {
             cred.display()
         );
     }
+
+    // Dedicated ghost MCP file, OUTSIDE the wiped throwaway so it persists and
+    // you can curate it. Seeded to zero servers on first use; edit to add
+    // ghost-only MCP. exec_agent passes it via --mcp-config --strict-mcp-config.
+    let ghost_mcp = PathBuf::from(&home).join(".config/my-ai/mcp-ghost.json");
+    if !ghost_mcp.exists() {
+        if let Some(parent) = ghost_mcp.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&ghost_mcp, "{\n  \"mcpServers\": {}\n}\n")?;
+    }
+    std::env::set_var("MY_AI_GHOST_MCP", &ghost_mcp);
 
     std::env::set_var("HOME", &ghost_home);
     std::env::set_var("CLAUDE_CONFIG_DIR", &ghost_cfg);

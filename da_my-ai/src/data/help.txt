@@ -21,10 +21,13 @@ AGENT (--agent, default: goose / MY_AI_AGENT env)
   claude-cli           Anthropic Claude Code CLI → my-ai-api (anthropic shim).
   claude-cli-ghost     Claude Code CLI in a throwaway HOME ($HOME/.claude-ghost),
                        wiped to login-only on every launch — a real ghost: HOME is
-                       relocated so ALL layers reset (~/.claude, ~/.claude.json,
-                       ~/.mcp.json, ~/CLAUDE.md), not just CLAUDE_CONFIG_DIR. Fresh
-                       anonymous Claude (no history/projects/memory/settings/MCP);
-                       nothing real is touched, so a crash can't strand your config.
+                       relocated so ALL home layers reset (~/.claude, ~/.claude.json,
+                       ~/CLAUDE.md), not just CLAUDE_CONFIG_DIR. Fresh anonymous
+                       Claude (no history/projects/memory/settings); nothing real is
+                       touched, so a crash can't strand your config. MCP comes ONLY
+                       from ~/.config/my-ai/mcp-ghost.json (--strict-mcp-config) —
+                       your user MCP and the project ./.mcp.json are ignored. Edit
+                       that file to give the ghost its own curated servers.
   hermes               Nous Research Hermes → goose shim pinned to a Hermes model
                        (nousresearch/hermes-3-llama-3.1-405b) on OpenRouter via
                        my-ai-api. No standalone hermes CLI exists.
