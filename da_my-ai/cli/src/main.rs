@@ -644,6 +644,8 @@ fn setup_rescue(passthrough: &[String], _ep: &core::Endpoints) -> Result<()> {
 fn usage_cmd(args: &[String]) -> Result<()> {
     let mut json_mode = false;
     let mut statusline = false;
+    let mut daemon = false;
+    let mut interval = core::usage::DAEMON_INTERVAL_SECS;
     let mut since_hours: Option<u64> = None;
     let mut i = 0;
     while i < args.len() {
@@ -656,6 +658,19 @@ fn usage_cmd(args: &[String]) -> Result<()> {
                 statusline = true;
                 i += 1;
             }
+            "--daemon" => {
+                daemon = true;
+                i += 1;
+            }
+            "--interval" => {
+                let s = args
+                    .get(i + 1)
+                    .and_then(|s| s.parse::<u64>().ok())
+                    .filter(|s| *s > 0)
+                    .ok_or_else(|| anyhow!("--interval needs a positive seconds value"))?;
+                interval = s;
+                i += 2;
+            }
             "--since" => {
                 let h = args
                     .get(i + 1)
@@ -664,10 +679,15 @@ fn usage_cmd(args: &[String]) -> Result<()> {
                 since_hours = Some(h);
                 i += 2;
             }
-            a => return Err(anyhow!("usage: unknown flag '{a}' (expected --json | --statusline | --since <h>)")),
+            a => return Err(anyhow!(
+                "usage: unknown flag '{a}' (expected --json | --statusline | --daemon | --interval <s> | --since <h>)"
+            )),
         }
     }
 
+    if daemon {
+        return usage_daemon(interval);
+    }
     if statusline {
         return usage_statusline();
     }
@@ -761,7 +781,41 @@ fn print_usage_report(blocks: &[core::usage::Block], now: i64) {
 // ~/.claude/projects/**/*.jsonl on each call would be too expensive. Reuse a
 // cached line while it's younger than STATUSLINE_CACHE_TTL_SECS (tunable in
 // core::usage), keyed off the cache file's own mtime.
+/// Publish the 5h-window segment on a loop so the status line never computes.
+///
+/// This is the producer half of the contract documented on `usage::seg_path()`:
+/// one process for the whole machine, at a fixed interval, instead of one heavy
+/// process per status-line repaint per session. Memory stays flat and bounded,
+/// so no repaint burst can push /user.slice past oomd's pressure limit.
+///
+/// A scan failure is logged and skipped rather than fatal — a transient unreadable
+/// transcript must not take the daemon down and silently stop all updates.
+fn usage_daemon(interval: u64) -> Result<()> {
+    let projects = core::projects_dir();
+    eprintln!(
+        "[my-ai] usage daemon: publishing {} every {interval}s",
+        core::usage::seg_path().display()
+    );
+    loop {
+        match core::usage::current_statusline(&projects) {
+            Ok(line) => {
+                if let Err(e) = core::usage::publish_seg(&line) {
+                    eprintln!("[my-ai] usage daemon: publish failed: {e}");
+                }
+            }
+            Err(e) => eprintln!("[my-ai] usage daemon: scan failed: {e}"),
+        }
+        std::thread::sleep(std::time::Duration::from_secs(interval));
+    }
+}
+
 fn usage_statusline() -> Result<()> {
+    // Prefer whatever the daemon published — it is already fresh, and this turns
+    // the call into a single file read with no scan at all.
+    if let Some(line) = core::usage::read_seg() {
+        print!("{line}");
+        return Ok(());
+    }
     let cache_path = core::store_dir().join("usage-statusline.cache");
     if let Ok(meta) = fs::metadata(&cache_path) {
         if let Ok(age) = meta.modified().and_then(|m| m.elapsed().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))) {

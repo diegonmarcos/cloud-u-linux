@@ -65,9 +65,33 @@ fn sync_now() -> Result<(), String> {
     Ok(())
 }
 
+/// One scan+publish cycle for the in-process ccusage daemon. Returns the plain-text
+/// segment for the tray, or None when idle (no active 5h block).
+fn publish_once() -> Option<String> {
+    let line = my_ai_core::usage::current_statusline(&my_ai_core::projects_dir()).ok()?;
+    if line.trim().is_empty() {
+        return None;
+    }
+    if let Err(e) = my_ai_core::usage::publish_seg(&line) {
+        eprintln!("[my-ai-gui] usage publish failed: {e}");
+    }
+    Some(my_ai_core::usage::strip_ansi(&line).trim().to_string())
+}
+
+/// Reflect the latest segment in the tray: tooltip (hover) + the usage menu row.
+fn show_usage(app: &AppHandle, item: &MenuItem<tauri::Wry>, text: Option<&str>) {
+    let label = text.unwrap_or("5h usage: idle");
+    let _ = item.set_text(label);
+    if let Some(tray) = app.tray_by_id("my-ai-tray") {
+        let _ = tray.set_tooltip(Some(label));
+    }
+}
+
 fn handle_menu(app: &AppHandle, id: &str) {
     match id {
         "quit" => app.exit(0),
+        // The usage row is a live readout, not a button — clicking it does nothing.
+        "usage" => {}
         "sync" => {
             let _ = Command::new(sibling("my-ai")).arg("sync").spawn();
         }
@@ -88,6 +112,7 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![snapshot, launch, sync_now])
         .setup(|app| {
+            let usage = MenuItem::with_id(app, "usage", "5h usage: …", false, None::<&str>)?;
             let show = MenuItem::with_id(app, "show", "Open dashboard window", true, None::<&str>)?;
             let remote = MenuItem::with_id(app, "remote", "Launch: remote", true, None::<&str>)?;
             let local = MenuItem::with_id(app, "local", "Launch: local", true, None::<&str>)?;
@@ -96,7 +121,10 @@ fn main() {
             let sync = MenuItem::with_id(app, "sync", "Sync sessions now", true, None::<&str>)?;
             let dash = MenuItem::with_id(app, "dash", "Open TTY dashboard", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &remote, &local, &claude, &restore, &sync, &dash, &quit])?;
+            let menu = Menu::with_items(
+                app,
+                &[&usage, &show, &remote, &local, &claude, &restore, &sync, &dash, &quit],
+            )?;
 
             let icon = app.default_window_icon().cloned().expect("bundle icon required");
             TrayIconBuilder::with_id("my-ai-tray")
@@ -105,6 +133,23 @@ fn main() {
                 .menu(&menu)
                 .on_menu_event(|app, event| handle_menu(app, event.id.as_ref()))
                 .build(app)?;
+
+            // ccusage daemon, in-process. This is the producer the status line reads:
+            // one publisher for the machine on a fixed interval, instead of a heavy
+            // process per repaint per session. Runs on its own thread so a slow scan
+            // never blocks the UI, and publishes before sleeping so the tray is
+            // populated immediately rather than one interval late.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                let text = publish_once();
+                let item = usage.clone();
+                let h = handle.clone();
+                // Menu/tray mutation must happen on the main thread.
+                let _ = handle.run_on_main_thread(move || show_usage(&h, &item, text.as_deref()));
+                std::thread::sleep(std::time::Duration::from_secs(
+                    my_ai_core::usage::DAEMON_INTERVAL_SECS,
+                ));
+            });
             Ok(())
         })
         .run(tauri::generate_context!())

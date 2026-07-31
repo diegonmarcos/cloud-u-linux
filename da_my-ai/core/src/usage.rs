@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Bundled fallback pricing (src/data/pricing.json), used when the user has no
@@ -23,6 +23,71 @@ pub const BLOCK_MS: i64 = 5 * 3_600_000;
 /// line if it's younger than this, so the per-render cost of a fresh scan is
 /// paid at most once per TTL window.
 pub const STATUSLINE_CACHE_TTL_SECS: u64 = 30;
+
+/// Default publish interval for `my-ai usage --daemon`.
+pub const DAEMON_INTERVAL_SECS: u64 = 30;
+
+/// Where the daemon publishes the ready-to-print statusline segment.
+///
+/// This is the contract with the status line: it *only* reads this file, never
+/// spawning anything on its paint path. An in-process TTL cache cannot serve
+/// that role — a cache *hit* still costs a full process start, which is what
+/// previously drove the status line to ~296MB per render and let systemd-oomd
+/// kill the desktop. $XDG_RUNTIME_DIR is tmpfs (no disk I/O for the reader) and
+/// is wiped on logout, so a stale segment can never outlive the session.
+pub fn seg_path() -> PathBuf {
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("my-ai-usage.seg")
+}
+
+/// Publish a segment atomically: write a sibling temp file, then rename. Rename
+/// is atomic within a filesystem, so a concurrently-painting status line reads
+/// either the old segment or the new one — never a half-written line.
+pub fn publish_seg(line: &str) -> std::io::Result<()> {
+    let path = seg_path();
+    let tmp = path.with_extension("seg.tmp");
+    fs::write(&tmp, line)?;
+    fs::rename(&tmp, &path)
+}
+
+/// Read the published segment, if a daemon has written one.
+pub fn read_seg() -> Option<String> {
+    fs::read_to_string(seg_path()).ok().filter(|s| !s.trim().is_empty())
+}
+
+/// Strip ANSI SGR escapes. The published segment is coloured for the terminal
+/// status line; tray tooltips and menu labels must be plain text or they render
+/// the raw escape bytes.
+pub fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c != '\x1b' {
+            out.push(c);
+            continue;
+        }
+        // ESC [ ... <final byte in @..~> — consume through the terminator.
+        if chars.next() != Some('[') {
+            continue;
+        }
+        for c in chars.by_ref() {
+            if ('\x40'..='\x7e').contains(&c) {
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// Compute the current statusline segment from the transcripts on disk.
+pub fn current_statusline(projects: &Path) -> Result<String> {
+    let pricing = Pricing::load();
+    let entries = collect_entries(projects)?;
+    let blocks = bucket_blocks(&entries, &pricing);
+    Ok(format_statusline(&blocks, now_ms()).unwrap_or_default())
+}
 
 // ── one usage event, after dedup ──────────────────────────────────────────────
 #[derive(Debug, Clone)]
@@ -448,5 +513,18 @@ mod tests {
         // "now" far beyond the last block's window -> idle (no active block).
         let idle_now = parse_rfc3339_ms("2026-08-01T00:00:00.000Z").unwrap();
         assert_eq!(active_block_index(&blocks, idle_now), None);
+    }
+
+    #[test]
+    fn strip_ansi_removes_sgr_keeps_text() {
+        // Shape of a real segment: coloured label + reset.
+        assert_eq!(strip_ansi("\x1b[37m|\x1b[0m 5h: 1.2M"), "| 5h: 1.2M");
+        // Multi-parameter SGR.
+        assert_eq!(strip_ansi("\x1b[1;33mwarn\x1b[0m"), "warn");
+        // No escapes -> unchanged.
+        assert_eq!(strip_ansi("plain"), "plain");
+        // Truncated escape at end must not panic or emit garbage.
+        assert_eq!(strip_ansi("abc\x1b["), "abc");
+        assert_eq!(strip_ansi("abc\x1b"), "abc");
     }
 }
