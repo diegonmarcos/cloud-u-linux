@@ -77,6 +77,22 @@ SESSION ACTION (default: fresh)
   list <X>              Print this device's last X sessions (id + title); no launch.
   list-hours <Y>        Print this device's sessions from the last Y hours; no launch.
 
+USAGE / TOKEN TRACKING
+  usage                  Native ccusage-equivalent token-usage report. Scans
+                        every ~/.claude/projects/**/*.jsonl transcript, dedups
+                        by message.id+requestId, buckets into ccusage-style
+                        5-hour billing blocks, and prices them (longest-prefix
+                        match against ~/.claude/claude-pricing.json, else a
+                        bundled default table). Prints the last ~5 blocks,
+                        highlighting the ACTIVE one with burn rate + reset ETA.
+  usage --json           Machine-readable JSON: {active_block, blocks:[...]}.
+  usage --statusline     Single-line, ANSI-colored summary for a statusline
+                        host (printed via printf %b) — prints NOTHING and
+                        exits 0 if idle (no active block). Cached for 30s
+                        ($STORE/usage-statusline.cache) so it's cheap to call
+                        on every render.
+  usage --since <hours>  Restrict the report to usage from the last N hours.
+
 SETUP (installer / deps-solver)
   setup                 Ensure `goose` is installed. Platform-aware:
                         nix/termux = flake-managed (declarative); other = goose

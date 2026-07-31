@@ -29,6 +29,7 @@ fn main() -> Result<()> {
         // --help / -h / dash / no-args → the live dashboard (my-ai-dash).
         Some("--help" | "-h" | "dash") | None => launch_dash(),
         Some("setup") => setup(&args[1..], &ep),
+        Some("usage") => usage_cmd(&args[1..]),
         _ => route(args, &ep),
     }
 }
@@ -637,6 +638,152 @@ fn setup_rescue(passthrough: &[String], _ep: &core::Endpoints) -> Result<()> {
         }
     }
     Err(anyhow!("rescue: none of nix/podman/cargo available"))
+}
+
+// ── usage: native ccusage-equivalent token-usage counter ─────────────────────
+fn usage_cmd(args: &[String]) -> Result<()> {
+    let mut json_mode = false;
+    let mut statusline = false;
+    let mut since_hours: Option<u64> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--json" => {
+                json_mode = true;
+                i += 1;
+            }
+            "--statusline" => {
+                statusline = true;
+                i += 1;
+            }
+            "--since" => {
+                let h = args
+                    .get(i + 1)
+                    .and_then(|s| s.parse::<u64>().ok())
+                    .ok_or_else(|| anyhow!("--since needs an hours value"))?;
+                since_hours = Some(h);
+                i += 2;
+            }
+            a => return Err(anyhow!("usage: unknown flag '{a}' (expected --json | --statusline | --since <h>)")),
+        }
+    }
+
+    if statusline {
+        return usage_statusline();
+    }
+
+    let pricing = core::usage::Pricing::load();
+    let mut entries = core::usage::collect_entries(&core::projects_dir())?;
+    if let Some(h) = since_hours {
+        let cutoff = core::usage::now_ms() - (h as i64) * 3_600_000;
+        entries.retain(|e| e.ts_ms >= cutoff);
+    }
+    let blocks = core::usage::bucket_blocks(&entries, &pricing);
+    let now = core::usage::now_ms();
+
+    if json_mode {
+        print_usage_json(&blocks, now);
+    } else {
+        print_usage_report(&blocks, now);
+    }
+    Ok(())
+}
+
+fn print_usage_json(blocks: &[core::usage::Block], now: i64) {
+    let block_json = |b: &core::usage::Block| {
+        let t = &b.totals;
+        serde_json::json!({
+            "start": b.start_ms,
+            "reset_at": b.end_ms(),
+            "input": t.input,
+            "output": t.output,
+            "cache_write": t.cache_write,
+            "cache_read": t.cache_read,
+            "total": t.total_tokens(),
+            "cost": t.cost(),
+        })
+    };
+    let active_idx = core::usage::active_block_index(blocks, now);
+    let active_json = active_idx.map(|idx| {
+        let b = &blocks[idx];
+        let mut v = block_json(b);
+        v["burn_per_min"] = serde_json::json!(core::usage::burn_rate(b, now));
+        v["minutes_elapsed"] = serde_json::json!((now - b.start_ms) / 60_000);
+        v
+    });
+    let blocks_json: Vec<_> = blocks.iter().map(block_json).collect();
+    let out = serde_json::json!({ "active_block": active_json, "blocks": blocks_json });
+    println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+}
+
+fn print_usage_report(blocks: &[core::usage::Block], now: i64) {
+    if blocks.is_empty() {
+        println!("[usage] no Claude Code usage found under ~/.claude/projects/");
+        return;
+    }
+    let active_idx = core::usage::active_block_index(blocks, now);
+    let start = blocks.len().saturating_sub(5);
+    println!(
+        "{:<18} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
+        "BLOCK START(UTC)", "INPUT", "CACHE-W", "CACHE-R", "OUTPUT", "TOTAL", "COST$"
+    );
+    for (idx, b) in blocks.iter().enumerate().skip(start) {
+        let t = &b.totals;
+        let marker = if Some(idx) == active_idx { "  *ACTIVE*" } else { "" };
+        println!(
+            "{:<18} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9.2}{marker}",
+            core::usage::fmt_utc(b.start_ms),
+            core::usage::fmt_tokens(t.input),
+            core::usage::fmt_tokens(t.cache_write),
+            core::usage::fmt_tokens(t.cache_read),
+            core::usage::fmt_tokens(t.output),
+            core::usage::fmt_tokens(t.total_tokens()),
+            t.cost(),
+        );
+    }
+    println!();
+    match active_idx {
+        Some(idx) => {
+            let b = &blocks[idx];
+            let mins_left = (b.end_ms() - now).max(0) / 60_000;
+            println!(
+                "Active block: burn {:.0} tok/min, resets in {}h {}m",
+                core::usage::burn_rate(b, now),
+                mins_left / 60,
+                mins_left % 60
+            );
+        }
+        None => println!("No active block (idle)."),
+    }
+}
+
+// Cache: my-ai renders on every statusline tick, so a fresh scan of every
+// ~/.claude/projects/**/*.jsonl on each call would be too expensive. Reuse a
+// cached line while it's younger than STATUSLINE_CACHE_TTL_SECS (tunable in
+// core::usage), keyed off the cache file's own mtime.
+fn usage_statusline() -> Result<()> {
+    let cache_path = core::store_dir().join("usage-statusline.cache");
+    if let Ok(meta) = fs::metadata(&cache_path) {
+        if let Ok(age) = meta.modified().and_then(|m| m.elapsed().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))) {
+            if age.as_secs() < core::usage::STATUSLINE_CACHE_TTL_SECS {
+                if let Ok(cached) = fs::read_to_string(&cache_path) {
+                    print!("{cached}");
+                    return Ok(());
+                }
+            }
+        }
+    }
+    let pricing = core::usage::Pricing::load();
+    let entries = core::usage::collect_entries(&core::projects_dir())?;
+    let blocks = core::usage::bucket_blocks(&entries, &pricing);
+    let now = core::usage::now_ms();
+    let line = core::usage::format_statusline(&blocks, now).unwrap_or_default();
+    if let Some(parent) = cache_path.parent() {
+        fs::create_dir_all(parent).ok();
+    }
+    fs::write(&cache_path, &line).ok();
+    print!("{line}");
+    Ok(())
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

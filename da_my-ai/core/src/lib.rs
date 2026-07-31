@@ -8,6 +8,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub mod usage;
+
 /// Endpoints are compiled in from src/data/endpoints.json (data-driven, single source).
 pub const ENDPOINTS_JSON: &str = include_str!("../../src/data/endpoints.json");
 
@@ -116,6 +118,11 @@ pub fn home() -> PathBuf {
 }
 pub fn projects_dir() -> PathBuf {
     home().join(".claude").join("projects")
+}
+/// $STORE from build.json's `runtime.store_subdir` (".local/share/my-ai") —
+/// same path main.rs's local-face compose writer uses.
+pub fn store_dir() -> PathBuf {
+    home().join(".local/share/my-ai")
 }
 /// This device's id: CAS_DEVICE override, else hostname (matches restore.mjs).
 pub fn device() -> String {
