@@ -4,7 +4,7 @@ my-ai — goose via the my-ai-api OpenRouter router + Headroom compression proxy
 USAGE
   my-ai [--agent goose|claude-cli|hermes] [remote|local|goose]
         [headroom on|off] [rtk on|off] [caveman on|off]
-        [fresh|sync|restore …|restore-hours …] [agent args…]
+        [fresh|sync|restore …|restore-hours …|list …|list-hours …] [agent args…]
 
 my-ai wraps one of three agents (selectable via --agent or the dashboard AGENT
 section): goose (Block, default), claude-cli (Anthropic Claude Code), or hermes
@@ -65,6 +65,8 @@ SESSION ACTION (default: fresh)
   restore-hours <Y>     Reopen this device's sessions from the last Y hours.
   restore <device> <X>  Reopen the last X sessions from another device.
   restore all <X>       Reopen the last X sessions across ALL devices.
+  list <X>              Print this device's last X sessions (id + title); no launch.
+  list-hours <Y>        Print this device's sessions from the last Y hours; no launch.
 
 SETUP (installer / deps-solver)
   setup                 Ensure `goose` is installed. Platform-aware:
