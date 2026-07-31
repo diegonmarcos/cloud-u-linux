@@ -2,7 +2,7 @@
 //! cross-device session-hub client. Faithful port of the data + logic in
 //! claude-superset.json + claude-superset-restore.mjs.
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -97,8 +97,25 @@ pub struct Endpoints {
     pub image: String,
     pub setup: Setup,
     pub local: LocalCfg,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_claude_profiles")]
     pub claude_profiles: BTreeMap<String, ClaudeProfile>,
+}
+
+/// Deserialize `claude_profiles`, keeping only entries whose value is a real
+/// profile object. endpoints.json intentionally carries noise keys in this map
+/// (`_comment` docs, `default: "<name>"` pointer) — those are strings, not
+/// profiles, so drop them here rather than fail the whole parse. The CLI's
+/// valid-names listing already skips `_`/`default` keys, so this keeps the
+/// typed map in sync with that intent.
+fn de_claude_profiles<'de, D>(d: D) -> std::result::Result<BTreeMap<String, ClaudeProfile>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw: BTreeMap<String, serde_json::Value> = BTreeMap::deserialize(d)?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|(k, v)| serde_json::from_value::<ClaudeProfile>(v).ok().map(|p| (k, p)))
+        .collect())
 }
 fn default_keep() -> u32 {
     20
