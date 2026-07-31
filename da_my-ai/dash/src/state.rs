@@ -11,7 +11,7 @@ pub const FOCT: [&str; 5] = ["radio", "check", "checklevel", "number", "action"]
 ///   claude-cli — Anthropic's Claude Code CLI (routes my-ai-api anthropic shim)
 ///   hermes     — Nous Research Hermes (goose shim pinned to a Hermes model on
 ///                OpenRouter via my-ai-api — no standalone hermes CLI exists)
-pub const AGENTS: [&str; 3] = ["goose", "claude-cli", "hermes"];
+pub const AGENTS: [&str; 4] = ["goose", "claude-cli", "claude-cli-ghost", "hermes"];
 
 pub struct St {
     pub agent: String,
@@ -59,6 +59,7 @@ pub fn build_rows(st: &St) -> Vec<Row> {
     r.push(row("sec", "", "", "", "AGENT", ""));
     r.push(row("radio", "agent", "goose", "", "goose", "Block goose → my-ai-api (OpenRouter)"));
     r.push(row("radio", "agent", "claude-cli", "", "claude-cli", "Claude Code CLI → my-ai-api (anthropic shim)"));
+    r.push(row("radio", "agent", "claude-cli-ghost", "", "claude-cli-ghost", "Claude Code CLI, throwaway ~/.claude-ghost (login-only, wiped each launch)"));
     r.push(row("radio", "agent", "hermes", "", "hermes", "Nous Research Hermes → my-ai-api (OpenRouter)"));
     r.push(row("sec", "", "", "", "FACE", ""));
     r.push(row("radio", "face", "remote", "", "remote", "WG compression proxy"));

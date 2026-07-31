@@ -50,13 +50,13 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
                 "--agent" => {
                     if let Some(a) = args.get(idx + 1) {
                         let agent = match a.as_str() {
-                            "goose" | "claude-cli" | "hermes" => a.clone(),
-                            _ => return Err(anyhow!("--agent: goose | claude-cli | hermes (got '{a}')")),
+                            "goose" | "claude-cli" | "claude-cli-ghost" | "hermes" => a.clone(),
+                            _ => return Err(anyhow!("--agent: goose | claude-cli | claude-cli-ghost | hermes (got '{a}')")),
                         };
                         std::env::set_var("MY_AI_AGENT", &agent);
                         args.drain(idx..idx + 2);
                     } else {
-                        return Err(anyhow!("--agent needs a value: goose | claude-cli | hermes"));
+                        return Err(anyhow!("--agent needs a value: goose | claude-cli | claude-cli-ghost | hermes"));
                     }
                 }
                 "--model" => {
@@ -245,6 +245,11 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
     //     (unless --model overrode it).
     //   claude-cli → ANTHROPIC_BASE_URL (my-ai-api's /v1/messages anthropic shim,
     //     which is itself a shape-translation onto OpenRouter — NOT real Claude).
+    // Ghost mode: point Claude at a throwaway config dir and wipe it to login-only
+    // BEFORE launch — unconditional, so it holds even if headroom is off/unreachable.
+    if agent == "claude-cli-ghost" {
+        ghost_prepare()?;
+    }
     if headroom {
         let url = if mode == "local" {
             ep.local.proxy.clone()
@@ -253,12 +258,16 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
         };
         if probe(&url) {
             match agent.as_str() {
-                "claude-cli" => {
+                "claude-cli" | "claude-cli-ghost" => {
                     std::env::set_var("ANTHROPIC_BASE_URL", &url);
                     if std::env::var("ANTHROPIC_API_KEY").is_err() {
                         std::env::set_var("ANTHROPIC_API_KEY", "my-ai-api-injects-key");
                     }
-                    eprintln!("[my-ai] agent=claude-cli via {mode} my-ai-api → {url} (anthropic shim → OpenRouter, Headroom ON)");
+                    if agent == "claude-cli-ghost" {
+                        eprintln!("[my-ai] agent=claude-cli-ghost via {mode} my-ai-api → {url} (ghost config, login-only, Headroom ON)");
+                    } else {
+                        eprintln!("[my-ai] agent=claude-cli via {mode} my-ai-api → {url} (anthropic shim → OpenRouter, Headroom ON)");
+                    }
                     if let Some(p) = &claude_profile {
                         eprintln!("[my-ai] claude profile={p}");
                     }
@@ -644,9 +653,10 @@ fn exec_agent(args: &[String]) -> Result<()> {
     let agent = std::env::var("MY_AI_AGENT").unwrap_or_else(|_| "goose".into());
     let mode = std::env::var("MY_AI_MODE").unwrap_or_else(|_| "remote".into());
     match agent.as_str() {
-        "claude-cli" => {
+        "claude-cli" | "claude-cli-ghost" => {
             // Claude Code CLI. Restore fan-out passes `--resume <id>`; pass through
-            // to `claude` verbatim (claude's own --resume semantics).
+            // to `claude` verbatim (claude's own --resume semantics). For ghost mode
+            // CLAUDE_CONFIG_DIR + login-only wipe are already applied in route().
             let err = Command::new("claude").args(args).exec();
             Err(anyhow!("failed to exec claude: {err}"))
         }
@@ -690,6 +700,51 @@ fn exec_goose(args: &[String]) -> Result<()> {
     }
     let err = Command::new("goose").args(&goose_args).exec();
     Err(anyhow!("failed to exec goose: {err}"))
+}
+
+// ── claude-cli-ghost: throwaway Claude config, login-only ────────────────────
+// Launch Claude Code from $HOME/.claude-ghost with everything wiped except the
+// login credential — a fresh, anonymous Claude every time (no history, projects,
+// todos, memory, settings, MCP/session state). Seeds the login from the real
+// ~/.claude on first use so the ghost is usable without a manual re-login.
+fn ghost_prepare() -> Result<()> {
+    // The files that ARE the login/API key — keep these, delete everything else.
+    const KEEP: &[&str] = &[".credentials.json"];
+    let home = std::env::var("HOME").map_err(|_| anyhow!("HOME unset"))?;
+    let real = PathBuf::from(&home).join(".claude");
+    let ghost = PathBuf::from(&home).join(".claude-ghost");
+    fs::create_dir_all(&ghost)?;
+    // Seed login from the real config if the ghost has none yet (copy only the
+    // credential, never any other state).
+    for name in KEEP {
+        let dst = ghost.join(name);
+        if !dst.exists() {
+            let src = real.join(name);
+            if src.exists() {
+                let _ = fs::copy(&src, &dst);
+            }
+        }
+    }
+    // Wipe everything that is not a kept login file.
+    for entry in fs::read_dir(&ghost)? {
+        let entry = entry?;
+        let keep = entry
+            .file_name()
+            .to_str()
+            .map(|n| KEEP.contains(&n))
+            .unwrap_or(false);
+        if keep {
+            continue;
+        }
+        let p = entry.path();
+        let _ = if p.is_dir() {
+            fs::remove_dir_all(&p)
+        } else {
+            fs::remove_file(&p)
+        };
+    }
+    std::env::set_var("CLAUDE_CONFIG_DIR", &ghost);
+    Ok(())
 }
 
 // ── goosed remote REPL: thin HTTP/SSE client for the server-side agent ───────
