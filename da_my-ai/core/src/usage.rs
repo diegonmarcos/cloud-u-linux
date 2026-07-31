@@ -59,25 +59,43 @@ pub fn read_seg() -> Option<String> {
 
 /// Strip ANSI SGR escapes. The published segment is coloured for the terminal
 /// status line; tray tooltips and menu labels must be plain text or they render
-/// the raw escape bytes.
+/// the escapes as visible garbage.
+///
+/// Handles BOTH forms. The segment carries the literal four characters `\033`,
+/// not byte 0x1b: the status line assembles its rows as plain text and only
+/// converts them with `printf %b` at the very end, so the escapes travel as text
+/// for their whole life. Stripping only 0x1b would leave `\033[37m` on screen.
 pub fn strip_ansi(s: &str) -> String {
+    let b = s.as_bytes();
     let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
-        if c != '\x1b' {
-            out.push(c);
+    let mut i = 0;
+    let mut chunk = 0;
+    while i < b.len() {
+        let esc = if b[i] == 0x1b {
+            1
+        } else if b[i..].starts_with(br"\033") {
+            4
+        } else {
+            i += 1;
             continue;
-        }
-        // ESC [ ... <final byte in @..~> — consume through the terminator.
-        if chars.next() != Some('[') {
-            continue;
-        }
-        for c in chars.by_ref() {
-            if ('\x40'..='\x7e').contains(&c) {
-                break;
+        };
+        // `i` sits on ASCII (0x1b or '\\'), so this slice is on a char boundary
+        // even though the segment contains multi-byte glyphs like '│'.
+        out.push_str(&s[chunk..i]);
+        i += esc;
+        // CSI: '[' then parameters, terminated by a byte in @..~ .
+        if b.get(i) == Some(&b'[') {
+            i += 1;
+            while i < b.len() && !(0x40..=0x7e).contains(&b[i]) {
+                i += 1;
+            }
+            if i < b.len() {
+                i += 1;
             }
         }
+        chunk = i;
     }
+    out.push_str(&s[chunk..]);
     out
 }
 
@@ -517,14 +535,27 @@ mod tests {
 
     #[test]
     fn strip_ansi_removes_sgr_keeps_text() {
-        // Shape of a real segment: coloured label + reset.
+        // Real 0x1b form.
         assert_eq!(strip_ansi("\x1b[37m|\x1b[0m 5h: 1.2M"), "| 5h: 1.2M");
-        // Multi-parameter SGR.
         assert_eq!(strip_ansi("\x1b[1;33mwarn\x1b[0m"), "warn");
         // No escapes -> unchanged.
         assert_eq!(strip_ansi("plain"), "plain");
-        // Truncated escape at end must not panic or emit garbage.
+        // Truncated escapes must not panic or emit garbage.
         assert_eq!(strip_ansi("abc\x1b["), "abc");
         assert_eq!(strip_ansi("abc\x1b"), "abc");
+    }
+
+    #[test]
+    fn strip_ansi_removes_literal_backslash_033_form() {
+        // This is what publish_seg actually writes — verified against a live
+        // segment, which contained zero 0x1b bytes and only the literal form.
+        let seg = r"5h \033[37m│\033[0m New:2.3k($0.03) \033[1mΣ119.4M\033[0m";
+        assert_eq!(strip_ansi(seg), "5h │ New:2.3k($0.03) Σ119.4M");
+        // Multi-byte glyph adjacent to an escape must survive intact.
+        assert_eq!(strip_ansi(r"\033[37m│\033[0m"), "│");
+        // Truncated literal form.
+        assert_eq!(strip_ansi(r"abc\033["), "abc");
+        // A lone backslash is not an escape.
+        assert_eq!(strip_ansi(r"a\b"), r"a\b");
     }
 }
