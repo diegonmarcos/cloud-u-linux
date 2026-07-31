@@ -702,48 +702,46 @@ fn exec_goose(args: &[String]) -> Result<()> {
     Err(anyhow!("failed to exec goose: {err}"))
 }
 
-// ── claude-cli-ghost: throwaway Claude config, login-only ────────────────────
-// Launch Claude Code from $HOME/.claude-ghost with everything wiped except the
-// login credential — a fresh, anonymous Claude every time (no history, projects,
-// todos, memory, settings, MCP/session state). Seeds the login from the real
-// ~/.claude on first use so the ghost is usable without a manual re-login.
+// ── claude-cli-ghost: throwaway Claude HOME, login-only ──────────────────────
+// A REAL ghost isolates every layer Claude Code reads, not just the config dir:
+//   ~/.claude/            (config dir; CLAUDE_CONFIG_DIR)
+//   ~/.claude.json        (global state: user MCP, project index, onboarding)
+//   ~/.mcp.json           (user MCP servers)
+//   ~/CLAUDE.md           (home-level memory)
+// Redirecting CLAUDE_CONFIG_DIR alone leaves the other three leaking. Instead we
+// relocate HOME to a throwaway dir, so ALL of them resolve fresh in one move —
+// and because nothing real is ever renamed, a crash / kill -9 can never strand
+// the user's real config (no stash+restore trap to skip). Login is preserved by
+// copying just the credential into the ghost ~/.claude. Wiped every launch.
+// (A project-local ./CLAUDE.md in the working dir still loads — that is cwd, not
+// HOME, and matches "anonymous Claude working in your real repo".)
 fn ghost_prepare() -> Result<()> {
-    // The files that ARE the login/API key — keep these, delete everything else.
-    const KEEP: &[&str] = &[".credentials.json"];
     let home = std::env::var("HOME").map_err(|_| anyhow!("HOME unset"))?;
-    let real = PathBuf::from(&home).join(".claude");
-    let ghost = PathBuf::from(&home).join(".claude-ghost");
-    fs::create_dir_all(&ghost)?;
-    // Seed login from the real config if the ghost has none yet (copy only the
-    // credential, never any other state).
-    for name in KEEP {
-        let dst = ghost.join(name);
-        if !dst.exists() {
-            let src = real.join(name);
-            if src.exists() {
-                let _ = fs::copy(&src, &dst);
-            }
-        }
+    let real_cfg = std::env::var("CLAUDE_CONFIG_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(&home).join(".claude"));
+    let ghost_home = PathBuf::from(&home).join(".claude-ghost");
+    let ghost_cfg = ghost_home.join(".claude");
+
+    // Clean slate every launch — no leftover history/projects/settings.
+    if ghost_home.exists() {
+        let _ = fs::remove_dir_all(&ghost_home);
     }
-    // Wipe everything that is not a kept login file.
-    for entry in fs::read_dir(&ghost)? {
-        let entry = entry?;
-        let keep = entry
-            .file_name()
-            .to_str()
-            .map(|n| KEEP.contains(&n))
-            .unwrap_or(false);
-        if keep {
-            continue;
-        }
-        let p = entry.path();
-        let _ = if p.is_dir() {
-            fs::remove_dir_all(&p)
-        } else {
-            fs::remove_file(&p)
-        };
+    fs::create_dir_all(&ghost_cfg)?;
+
+    // Keep login only: carry the credential across (nothing else).
+    let cred = real_cfg.join(".credentials.json");
+    if cred.exists() {
+        let _ = fs::copy(&cred, ghost_cfg.join(".credentials.json"));
+    } else {
+        eprintln!(
+            "[my-ai] ghost: no {} to carry over — Claude may prompt a login",
+            cred.display()
+        );
     }
-    std::env::set_var("CLAUDE_CONFIG_DIR", &ghost);
+
+    std::env::set_var("HOME", &ghost_home);
+    std::env::set_var("CLAUDE_CONFIG_DIR", &ghost_cfg);
     Ok(())
 }
 

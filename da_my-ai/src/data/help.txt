@@ -19,9 +19,12 @@ real OPENROUTER_API_KEY, so the client needs no upstream key of its own.
 AGENT (--agent, default: goose / MY_AI_AGENT env)
   goose                Block's goose CLI → my-ai-api (OpenRouter, OpenAI shape).
   claude-cli           Anthropic Claude Code CLI → my-ai-api (anthropic shim).
-  claude-cli-ghost     Claude Code CLI from a throwaway $HOME/.claude-ghost config
-                       (CLAUDE_CONFIG_DIR) wiped to login-only on every launch —
-                       fresh, anonymous Claude (no history/projects/memory/settings).
+  claude-cli-ghost     Claude Code CLI in a throwaway HOME ($HOME/.claude-ghost),
+                       wiped to login-only on every launch — a real ghost: HOME is
+                       relocated so ALL layers reset (~/.claude, ~/.claude.json,
+                       ~/.mcp.json, ~/CLAUDE.md), not just CLAUDE_CONFIG_DIR. Fresh
+                       anonymous Claude (no history/projects/memory/settings/MCP);
+                       nothing real is touched, so a crash can't strand your config.
   hermes               Nous Research Hermes → goose shim pinned to a Hermes model
                        (nousresearch/hermes-3-llama-3.1-405b) on OpenRouter via
                        my-ai-api. No standalone hermes CLI exists.
