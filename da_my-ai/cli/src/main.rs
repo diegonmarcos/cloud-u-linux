@@ -51,13 +51,13 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
                 "--agent" => {
                     if let Some(a) = args.get(idx + 1) {
                         let agent = match a.as_str() {
-                            "goose" | "claude-cli" | "claude-cli-ghost" | "hermes" => a.clone(),
-                            _ => return Err(anyhow!("--agent: goose | claude-cli | claude-cli-ghost | hermes (got '{a}')")),
+                            "goose" | "claude-cli" | "claude-cli-ghost" | "hermes" | "claude-superset" => a.clone(),
+                            _ => return Err(anyhow!("--agent: goose | claude-cli | claude-cli-ghost | hermes | claude-superset (got '{a}')")),
                         };
                         std::env::set_var("MY_AI_AGENT", &agent);
                         args.drain(idx..idx + 2);
                     } else {
-                        return Err(anyhow!("--agent needs a value: goose | claude-cli | claude-cli-ghost | hermes"));
+                        return Err(anyhow!("--agent needs a value: goose | claude-cli | claude-cli-ghost | hermes | claude-superset"));
                     }
                 }
                 "--model" => {
@@ -238,7 +238,7 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
         return exec_agent(&passthrough);
     }
 
-    let agent = std::env::var("MY_AI_AGENT").unwrap_or_else(|_| "goose".into());
+    let agent = std::env::var("MY_AI_AGENT").unwrap_or_else(|_| "claude-superset".into());
 
     // Wire the agent → my-ai-api via a short /readyz probe.
     //   goose / hermes → OPENAI_BASE_URL (OpenAI shape); my-ai-api injects the
@@ -284,6 +284,13 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
                         std::env::set_var("GOOSE_MODEL", "nousresearch/hermes-3-llama-3.1-405b");
                     }
                     eprintln!("[my-ai] agent=hermes via {mode} my-ai-api → {url} (Nous Hermes on OpenRouter, Headroom ON)");
+                }
+                "claude-superset" => {
+                    // claude-superset is a self-contained wrapper: it does its own
+                    // face/headroom/proxy probing (claude-superset.nix) once exec'd,
+                    // so no ANTHROPIC_*/OPENAI_*/GOOSE_* env wiring here — setting
+                    // any would be silently ignored noise at best, misleading at worst.
+                    eprintln!("[my-ai] agent=claude-superset — deferring to claude-superset's own {mode} face/plugin wiring");
                 }
                 _ => {
                     // goose
@@ -860,7 +867,7 @@ fn probe(url: &str) -> bool {
 }
 
 fn exec_agent(args: &[String]) -> Result<()> {
-    let agent = std::env::var("MY_AI_AGENT").unwrap_or_else(|_| "goose".into());
+    let agent = std::env::var("MY_AI_AGENT").unwrap_or_else(|_| "claude-superset".into());
     let mode = std::env::var("MY_AI_MODE").unwrap_or_else(|_| "remote".into());
     match agent.as_str() {
         "claude-cli" | "claude-cli-ghost" => {
@@ -876,8 +883,21 @@ fn exec_agent(args: &[String]) -> Result<()> {
                 a.push(mcp);
             }
             a.extend_from_slice(args);
-            let err = Command::new("claude").args(&a).exec();
-            Err(anyhow!("failed to exec claude: {err}"))
+            let bin = which("claude").unwrap_or_else(|| "claude".into());
+            let err = Command::new(&bin).args(&a).exec();
+            Err(anyhow!("failed to exec claude ({bin}): {err}"))
+        }
+        "claude-superset" => {
+            // claude-superset's own CLI contract (see claude-superset.nix):
+            //   claude-superset [local|remote|claude] [headroom on|off]
+            //     [ponytail on|off|lite|full|ultra] [rtk on|off] [caveman on|off]
+            //     [restore N | restore-hours N | sync | fresh [claude-args…]]
+            // `args` here is my-ai's own passthrough, which mirrors that exact
+            // shape (route() above is a port of the same wrapper), so it can be
+            // forwarded verbatim.
+            let bin = which("claude-superset").unwrap_or_else(|| "claude-superset".into());
+            let err = Command::new(&bin).args(args).exec();
+            Err(anyhow!("failed to exec claude-superset ({bin}): {err}"))
         }
         "hermes" => {
             // Hermes = goose shim pinned to a Nous Hermes model on OpenRouter
@@ -1129,12 +1149,36 @@ fn which(bin: &str) -> Option<String> {
     if bin.contains('/') {
         return std::path::Path::new(bin).exists().then(|| bin.to_string());
     }
-    std::env::var_os("PATH").and_then(|paths| {
+    if let Some(hit) = std::env::var_os("PATH").and_then(|paths| {
         std::env::split_paths(&paths)
             .map(|d| d.join(bin))
             .find(|p| p.exists())
             .map(|p| p.to_string_lossy().into_owned())
-    })
+    }) {
+        return Some(hit);
+    }
+    // Fallback: my-ai is a plain compiled binary that can be launched from
+    // contexts with a minimal PATH (systemd --user, a desktop-launcher .desktop
+    // entry, the Tauri systray) that never sourced the interactive shell's
+    // nix-profile PATH additions — `claude`/`claude-superset` live there and
+    // would otherwise silently fail to exec with "No such file or directory".
+    // Check the well-known install locations directly before giving up.
+    if let Some(home) = std::env::var_os("HOME") {
+        let home = PathBuf::from(home);
+        for dir in [".nix-profile/bin", ".local/bin", ".local/state/nix/profile/bin"] {
+            let cand = home.join(dir).join(bin);
+            if cand.exists() {
+                return Some(cand.to_string_lossy().into_owned());
+            }
+        }
+    }
+    for dir in ["/run/current-system/sw/bin", "/nix/var/nix/profiles/default/bin", "/usr/local/bin", "/usr/bin"] {
+        let cand = PathBuf::from(dir).join(bin);
+        if cand.exists() {
+            return Some(cand.to_string_lossy().into_owned());
+        }
+    }
+    None
 }
 /// A binary from an env override (e.g. CAS_KONSOLE) or PATH lookup of `name`.
 fn env_bin(var: &str, name: &str) -> Option<String> {

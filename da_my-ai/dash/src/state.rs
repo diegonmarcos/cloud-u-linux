@@ -7,11 +7,14 @@ pub const PRESETS_HOURS: [u64; 6] = [1, 4, 8, 24, 72, 168];
 pub const FOCT: [&str; 5] = ["radio", "check", "checklevel", "number", "action"];
 
 /// The agent my-ai wraps. Selection surfaced in the TUI AGENT section.
-///   goose      — Block's goose (default; routes my-ai-api → OpenRouter)
-///   claude-cli — Anthropic's Claude Code CLI (routes my-ai-api anthropic shim)
-///   hermes     — Nous Research Hermes (goose shim pinned to a Hermes model on
-///                OpenRouter via my-ai-api — no standalone hermes CLI exists)
-pub const AGENTS: [&str; 4] = ["goose", "claude-cli", "claude-cli-ghost", "hermes"];
+///   goose            — Block's goose (routes my-ai-api → OpenRouter)
+///   claude-cli       — Anthropic's Claude Code CLI (routes my-ai-api anthropic shim)
+///   claude-cli-ghost — claude-cli in a throwaway, login-only HOME (no history/MCP)
+///   hermes           — Nous Research Hermes (goose shim pinned to a Hermes model
+///                      on OpenRouter via my-ai-api — no standalone hermes CLI exists)
+///   claude-superset  — the full claude-superset wrapper (proxy face select +
+///                      Headroom/RTK/Caveman/Ponytail + session restore), default.
+pub const AGENTS: [&str; 5] = ["goose", "claude-cli", "claude-cli-ghost", "hermes", "claude-superset"];
 
 pub struct St {
     pub agent: String,
@@ -28,7 +31,7 @@ pub struct St {
 impl Default for St {
     fn default() -> Self {
         St {
-            agent: "goose".into(),
+            agent: "claude-superset".into(),
             face: "remote".into(),
             headroom: true,
             ponytail: true,
@@ -61,6 +64,7 @@ pub fn build_rows(st: &St) -> Vec<Row> {
     r.push(row("radio", "agent", "claude-cli", "", "claude-cli", "Claude Code CLI → my-ai-api (anthropic shim)"));
     r.push(row("radio", "agent", "claude-cli-ghost", "", "claude-cli-ghost", "Claude Code CLI, throwaway ~/.claude-ghost (login-only, wiped each launch)"));
     r.push(row("radio", "agent", "hermes", "", "hermes", "Nous Research Hermes → my-ai-api (OpenRouter)"));
+    r.push(row("radio", "agent", "claude-superset", "", "claude-superset", "full wrapper: face select + Headroom/RTK/Caveman/Ponytail + restore (default)"));
     r.push(row("sec", "", "", "", "FACE", ""));
     r.push(row("radio", "face", "remote", "", "remote", "WG compression proxy"));
     r.push(row("radio", "face", "local", "", "local", "container on THIS host"));
