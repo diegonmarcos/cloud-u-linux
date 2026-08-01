@@ -8,6 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub mod statusline_assets;
 pub mod usage;
 
 /// Endpoints are compiled in from src/data/endpoints.json (data-driven, single source).

@@ -808,6 +808,15 @@ fn usage_daemon(interval: u64) -> Result<()> {
     // ONE scanner for the process lifetime: the first tick reads the whole
     // corpus, every tick after it reads only what was appended. Rebuilding the
     // world every interval (what this used to do) cost ~27% of a core forever.
+    // The binary owns the status line's assets, so it installs them. Doing this
+    // on every start makes the dependency self-healing: `global_blocks()` shells
+    // out to these scripts, and if a different component shipped them they could
+    // drift out of step with this binary and leave `.blocks` silently empty.
+    match core::statusline_assets::install(&core::statusline_assets::claude_dir()) {
+        Ok(w) if !w.is_empty() => eprintln!("[my-ai] statusline assets installed: {}", w.join(", ")),
+        Ok(_) => {}
+        Err(e) => eprintln!("[my-ai] statusline asset install failed: {e}"),
+    }
     let mut scanner = core::usage::Scanner::new();
     loop {
         scanner.tick(&projects, &pricing);

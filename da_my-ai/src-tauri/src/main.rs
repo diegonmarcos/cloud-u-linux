@@ -151,6 +151,12 @@ fn main() {
             // populated immediately rather than one interval late.
             let handle = app.handle().clone();
             std::thread::spawn(move || {
+                // Same self-healing install as the headless daemon: whichever of
+                // the two is running, the assets match the binary running them.
+                let dir = my_ai_core::statusline_assets::claude_dir();
+                if let Err(e) = my_ai_core::statusline_assets::install(&dir) {
+                    eprintln!("[my-ai-gui] statusline asset install failed: {e}");
+                }
                 let pricing = my_ai_core::usage::Pricing::load();
                 let mut scanner = my_ai_core::usage::Scanner::new();
                 loop {

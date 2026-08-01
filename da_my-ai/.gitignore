@@ -4,3 +4,4 @@ target/
 result
 .direnv/
 Cargo.lock
+src-tauri/gen/
