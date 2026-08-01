@@ -69,6 +69,48 @@ pub fn snapshot_path() -> PathBuf {
         .join("my-ai-usage.json")
 }
 
+/// The machine-global status-line rows, rendered ONCE per interval.
+///
+/// MCP health, plugin/skill state, hook rules and CLI flags are properties of
+/// the MACHINE, not of a session — every session was computing the identical
+/// five strings, every second, by spawning five shell scripts each (~0.43s of
+/// work per render). At ten sessions that is fifty processes a second to
+/// produce five strings that are the same for all of them.
+///
+/// The daemon runs them once and publishes the output. A status line then
+/// prints these verbatim: no spawn, no computation, no per-session duplication.
+pub fn global_blocks(home: &Path, cwd: &str) -> serde_json::Map<String, Value> {
+    let claude = home.join(".claude");
+    // (json key, script, args) — the exact invocations the status line used.
+    let jobs: [(&str, &str, &[&str]); 5] = [
+        ("mcp", "claude-mcp-status.sh", &[]),
+        ("flags", "claude-flags-status.sh", &["--format", "ansi"]),
+        ("skl", "claude-plugins-status.sh", &["--part", "skl", "--format", "ansi"]),
+        ("sys", "claude-plugins-status.sh", &["--part", "sys", "--format", "ansi"]),
+        ("rul", "claude-hooks-status.sh", &["--format", "ansi"]),
+    ];
+    let mut out = serde_json::Map::new();
+    for (key, script, args) in jobs {
+        let path = claude.join(script);
+        if !path.exists() {
+            continue;
+        }
+        let mut cmd = std::process::Command::new("bash");
+        cmd.arg(&path);
+        if key == "mcp" {
+            cmd.arg(cwd); // this one takes the working dir as its only argument
+        }
+        cmd.args(args);
+        if let Ok(o) = cmd.output() {
+            let s = String::from_utf8_lossy(&o.stdout).trim_end().to_string();
+            if !s.is_empty() {
+                out.insert(key.to_string(), Value::String(s));
+            }
+        }
+    }
+    out
+}
+
 /// Publish the snapshot atomically (write-temp + rename), same contract as
 /// `publish_seg`: a concurrent reader sees the old document or the new one.
 pub fn publish_snapshot(json: &str) -> std::io::Result<()> {
@@ -564,11 +606,18 @@ impl Scanner {
                 )
             })
             .collect();
+        // Machine-global rows, computed once here instead of once per session
+        // per second. `blocks` is what makes a status line a pure reader.
+        let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+        let cwd = std::env::current_dir()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| home.to_string_lossy().into_owned());
         serde_json::json!({
             "generated_ms": now,
             "block": block,
             "block_sessions": block_sessions,
             "sessions": sessions,
+            "blocks": global_blocks(&home, &cwd),
         })
         .to_string()
     }
