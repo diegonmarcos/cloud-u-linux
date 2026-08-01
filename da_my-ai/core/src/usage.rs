@@ -548,9 +548,26 @@ impl Scanner {
                 )
             })
             .collect();
+        let block_sessions: serde_json::Map<String, Value> = block_sessions
+            .iter()
+            .map(|(id, s)| {
+                (
+                    id.clone(),
+                    serde_json::json!({
+                        "input": s.input, "output": s.output,
+                        "cache_read": s.cache_read, "cache_write": s.cache_write,
+                        "total_tokens": s.total_tokens(),
+                        "cost_input": s.cost_input, "cost_output": s.cost_output,
+                        "cost_cache_read": s.cost_cache_read, "cost_cache_write": s.cost_cache_write,
+                        "cost": s.cost(),
+                    }),
+                )
+            })
+            .collect();
         serde_json::json!({
             "generated_ms": now,
             "block": block,
+            "block_sessions": block_sessions,
             "sessions": sessions,
         })
         .to_string()
@@ -878,6 +895,26 @@ mod tests {
         let snap: Value = serde_json::from_str(&s.snapshot_json(&pricing, now_ms())).unwrap();
         assert_eq!(snap["sessions"]["sess-a"]["input"], 135);
         assert_eq!(snap["sessions"]["sess-b"]["total_tokens"], 7);
+
+        // `block_sessions` must actually be SERIALISED. It was computed and then
+        // left out of the JSON, so the status line read null, dropped the 5h-S
+        // row, and the only version on screen was the stale one showing
+        // session-cumulative numbers.
+        assert!(
+            snap["block_sessions"].is_object(),
+            "block_sessions missing from snapshot: {snap}"
+        );
+
+        // Whenever a block is active, a session's slice of it can never exceed
+        // that session's all-time total — that inversion is the bug 5h-S had.
+        let entry_time = parse_rfc3339_ms("2026-08-01T10:00:00.000Z").unwrap();
+        let snap: Value =
+            serde_json::from_str(&s.snapshot_json(&pricing, entry_time + 60_000)).unwrap();
+        assert!(snap["block"].is_object(), "block should be active at entry time");
+        let in_block = snap["block_sessions"]["sess-a"]["total_tokens"].as_u64().unwrap();
+        let all_time = snap["sessions"]["sess-a"]["total_tokens"].as_u64().unwrap();
+        assert!(in_block > 0, "active block must attribute usage to sess-a");
+        assert!(in_block <= all_time, "5h-S ({in_block}) exceeded session total ({all_time})");
 
         fs::remove_dir_all(&dir).unwrap();
     }
