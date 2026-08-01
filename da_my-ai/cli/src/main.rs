@@ -792,18 +792,27 @@ fn print_usage_report(blocks: &[core::usage::Block], now: i64) {
 /// transcript must not take the daemon down and silently stop all updates.
 fn usage_daemon(interval: u64) -> Result<()> {
     let projects = core::projects_dir();
+    let pricing = core::usage::Pricing::load();
     eprintln!(
-        "[my-ai] usage daemon: publishing {} every {interval}s",
+        "[my-ai] usage daemon: publishing {} + {} every {interval}s",
+        core::usage::snapshot_path().display(),
         core::usage::seg_path().display()
     );
+    // ONE scanner for the process lifetime: the first tick reads the whole
+    // corpus, every tick after it reads only what was appended. Rebuilding the
+    // world every interval (what this used to do) cost ~27% of a core forever.
+    let mut scanner = core::usage::Scanner::new();
     loop {
-        match core::usage::current_statusline(&projects) {
-            Ok(line) => {
-                if let Err(e) = core::usage::publish_seg(&line) {
-                    eprintln!("[my-ai] usage daemon: publish failed: {e}");
-                }
-            }
-            Err(e) => eprintln!("[my-ai] usage daemon: scan failed: {e}"),
+        scanner.tick(&projects, &pricing);
+        let now = core::usage::now_ms();
+        // The snapshot is the contract: all the DATA the status line draws.
+        if let Err(e) = core::usage::publish_snapshot(&scanner.snapshot_json(&pricing, now)) {
+            eprintln!("[my-ai] usage daemon: snapshot publish failed: {e}");
+        }
+        // The pre-rendered segment stays for the tray and for any consumer that
+        // wants a ready line rather than fields.
+        if let Err(e) = core::usage::publish_seg(&scanner.statusline(&pricing, now)) {
+            eprintln!("[my-ai] usage daemon: segment publish failed: {e}");
         }
         std::thread::sleep(std::time::Duration::from_secs(interval));
     }

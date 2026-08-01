@@ -65,10 +65,20 @@ fn sync_now() -> Result<(), String> {
     Ok(())
 }
 
-/// One scan+publish cycle for the in-process ccusage daemon. Returns the plain-text
-/// segment for the tray, or None when idle (no active 5h block).
-fn publish_once() -> Option<String> {
-    let line = my_ai_core::usage::current_statusline(&my_ai_core::projects_dir()).ok()?;
+/// One incremental scan+publish cycle for the in-process ccusage daemon. Returns
+/// the plain-text segment for the tray, or None when idle (no active 5h block).
+/// Takes the long-lived `Scanner` so each cycle reads only newly appended
+/// transcript bytes instead of the whole ~600 MB corpus.
+fn publish_once(
+    scanner: &mut my_ai_core::usage::Scanner,
+    pricing: &my_ai_core::usage::Pricing,
+) -> Option<String> {
+    scanner.tick(&my_ai_core::projects_dir(), pricing);
+    let now = my_ai_core::usage::now_ms();
+    if let Err(e) = my_ai_core::usage::publish_snapshot(&scanner.snapshot_json(pricing, now)) {
+        eprintln!("[my-ai-gui] usage snapshot publish failed: {e}");
+    }
+    let line = scanner.statusline(pricing, now);
     if line.trim().is_empty() {
         return None;
     }
@@ -140,15 +150,20 @@ fn main() {
             // never blocks the UI, and publishes before sleeping so the tray is
             // populated immediately rather than one interval late.
             let handle = app.handle().clone();
-            std::thread::spawn(move || loop {
-                let text = publish_once();
-                let item = usage.clone();
-                let h = handle.clone();
-                // Menu/tray mutation must happen on the main thread.
-                let _ = handle.run_on_main_thread(move || show_usage(&h, &item, text.as_deref()));
-                std::thread::sleep(std::time::Duration::from_secs(
-                    my_ai_core::usage::DAEMON_INTERVAL_SECS,
-                ));
+            std::thread::spawn(move || {
+                let pricing = my_ai_core::usage::Pricing::load();
+                let mut scanner = my_ai_core::usage::Scanner::new();
+                loop {
+                    let text = publish_once(&mut scanner, &pricing);
+                    let item = usage.clone();
+                    let h = handle.clone();
+                    // Menu/tray mutation must happen on the main thread.
+                    let _ =
+                        handle.run_on_main_thread(move || show_usage(&h, &item, text.as_deref()));
+                    std::thread::sleep(std::time::Duration::from_secs(
+                        my_ai_core::usage::DAEMON_INTERVAL_SECS,
+                    ));
+                }
             });
             Ok(())
         })

@@ -57,6 +57,27 @@ pub fn read_seg() -> Option<String> {
     fs::read_to_string(seg_path()).ok().filter(|s| !s.trim().is_empty())
 }
 
+/// Where the daemon publishes the structured snapshot (`Scanner::snapshot_json`).
+///
+/// The `.seg` file above is a pre-rendered line for one specific row; this is the
+/// DATA behind every row the status line draws, so the status line can format
+/// what it likes without parsing transcripts itself.
+pub fn snapshot_path() -> PathBuf {
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("my-ai-usage.json")
+}
+
+/// Publish the snapshot atomically (write-temp + rename), same contract as
+/// `publish_seg`: a concurrent reader sees the old document or the new one.
+pub fn publish_snapshot(json: &str) -> std::io::Result<()> {
+    let path = snapshot_path();
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, json)?;
+    fs::rename(&tmp, &path)
+}
+
 /// Strip ANSI SGR escapes. The published segment is coloured for the terminal
 /// status line; tray tooltips and menu labels must be plain text or they render
 /// the escapes as visible garbage.
@@ -116,6 +137,10 @@ pub struct UsageEntry {
     pub output: u64,
     pub cache_write: u64,
     pub cache_read: u64,
+    /// Transcript file stem = Claude Code's session id. Carried per entry so the
+    /// active 5h block can be split per session (the `5h-S` row) rather than only
+    /// summed across all of them (`5h-T`).
+    pub session: String,
 }
 
 impl UsageEntry {
@@ -282,6 +307,12 @@ fn visit_jsonl(dir: &Path, f: &mut impl FnMut(&str)) {
     }
 }
 
+fn parse_line_in(v: &Value, session: &str) -> Option<(String, UsageEntry)> {
+    let (key, mut e) = parse_line(v)?;
+    e.session = session.to_string();
+    Some((key, e))
+}
+
 fn parse_line(v: &Value) -> Option<(String, UsageEntry)> {
     let usage = v.get("message")?.get("usage")?;
     let ts_ms = parse_rfc3339_ms(v.get("timestamp")?.as_str()?)?;
@@ -299,8 +330,260 @@ fn parse_line(v: &Value) -> Option<(String, UsageEntry)> {
             output: n("output_tokens"),
             cache_write: n("cache_creation_input_tokens"),
             cache_read: n("cache_read_input_tokens"),
+            session: String::new(),
         },
     ))
+}
+
+// ── incremental scanner (the daemon's engine) ────────────────────────────────
+
+/// How far back the scanner keeps individual entries. Only the ACTIVE 5h block
+/// is ever rendered, and a block can only start after a >5h idle gap, so a 24h
+/// tail is far more history than the active block can reach back into.
+const RETAIN_MS: i64 = 24 * 3_600_000;
+
+/// All-time token + cost totals for ONE session (one transcript file).
+#[derive(Debug, Clone, Default)]
+pub struct SessionTotals {
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    pub cost_input: f64,
+    pub cost_output: f64,
+    pub cost_cache_read: f64,
+    pub cost_cache_write: f64,
+    /// Timestamp of the newest `user` / `assistant` record seen for this session.
+    /// The status line's Usr:/Agt: idle timers are `now - these`, so it never has
+    /// to open a transcript to draw them.
+    pub last_user_ms: i64,
+    pub last_assistant_ms: i64,
+}
+
+impl SessionTotals {
+    pub fn total_tokens(&self) -> u64 {
+        self.input + self.output + self.cache_read + self.cache_write
+    }
+    pub fn cost(&self) -> f64 {
+        self.cost_input + self.cost_output + self.cost_cache_read + self.cost_cache_write
+    }
+}
+
+/// Append-only incremental scanner over `~/.claude/projects/**/*.jsonl`.
+///
+/// The daemon holds ONE of these for its lifetime. Transcripts only ever grow,
+/// so each tick reads just the bytes appended since the last tick — the first
+/// tick pays for the whole corpus (~618 MB here), every tick after it pays for
+/// a few hundred KB. Re-reading everything on a 30s timer was ~27% of a core,
+/// permanently.
+///
+/// This is deliberately the ONLY place transcripts get parsed. The status line
+/// renders `snapshot_json()` and computes nothing itself; a second incremental
+/// scanner living in the status line's shell script was the wrong shape (same
+/// work, done per render, per session).
+#[derive(Default)]
+pub struct Scanner {
+    offsets: BTreeMap<PathBuf, u64>,
+    seen: HashSet<String>,
+    sessions: BTreeMap<String, SessionTotals>,
+    entries: Vec<UsageEntry>,
+}
+
+impl Scanner {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Session id = transcript file stem, which is what Claude Code puts in the
+    /// status line's `session_id` / `transcript_path`, so the status line can
+    /// look its own row up directly.
+    fn session_id_of(path: &Path) -> String {
+        path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown").to_string()
+    }
+
+    /// Read only the appended bytes of every transcript, folding them into the
+    /// per-session totals and the rolling entry window.
+    pub fn tick(&mut self, root: &Path, pricing: &Pricing) {
+        let mut files = Vec::new();
+        collect_jsonl_paths(root, &mut files);
+        for path in files {
+            let len = match fs::metadata(&path) {
+                Ok(m) => m.len(),
+                Err(_) => continue,
+            };
+            let off = self.offsets.entry(path.clone()).or_insert(0);
+            // Shrunk => rewritten, not appended. Re-read it whole; the dedup set
+            // keeps the already-counted entries from being counted twice.
+            if len < *off {
+                *off = 0;
+            }
+            if len == *off {
+                continue;
+            }
+            let Some((text, consumed)) = read_from(&path, *off, len) else { continue };
+            *off += consumed;
+            let sid = Self::session_id_of(&path);
+            for line in text.lines() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let Ok(v) = serde_json::from_str::<Value>(line) else { continue };
+                // Idle timers first: they care about EVERY user/assistant record,
+                // including the ones with no usage{} for parse_line to find.
+                if let (Some(kind), Some(ts)) = (
+                    v.get("type").and_then(|t| t.as_str()),
+                    v.get("timestamp").and_then(|t| t.as_str()).and_then(parse_rfc3339_ms),
+                ) {
+                    if kind == "user" || kind == "assistant" {
+                        let s = self.sessions.entry(sid.clone()).or_default();
+                        let slot = if kind == "user" { &mut s.last_user_ms } else { &mut s.last_assistant_ms };
+                        if ts > *slot {
+                            *slot = ts;
+                        }
+                    }
+                }
+                let Some((key, entry)) = parse_line_in(&v, &sid) else { continue };
+                if !self.seen.insert(key) {
+                    continue;
+                }
+                let p = pricing.price_for(&entry.model);
+                let s = self.sessions.entry(sid.clone()).or_default();
+                s.input += entry.input;
+                s.output += entry.output;
+                s.cache_read += entry.cache_read;
+                s.cache_write += entry.cache_write;
+                s.cost_input += (entry.input as f64 / 1e6) * p.input;
+                s.cost_output += (entry.output as f64 / 1e6) * p.output;
+                s.cost_cache_read += (entry.cache_read as f64 / 1e6) * p.cache_read;
+                s.cost_cache_write += (entry.cache_write as f64 / 1e6) * p.cache_write;
+                self.entries.push(entry);
+            }
+        }
+        self.entries.sort_by_key(|e| e.ts_ms);
+        let cutoff = now_ms() - RETAIN_MS;
+        self.entries.retain(|e| e.ts_ms >= cutoff);
+        // `seen` is only needed to dedup within what we still hold; letting it
+        // grow for the process lifetime would be a slow leak.
+        if self.seen.len() > 200_000 {
+            self.seen.clear();
+        }
+    }
+
+    pub fn sessions(&self) -> &BTreeMap<String, SessionTotals> {
+        &self.sessions
+    }
+
+    /// The pre-rendered 5h-T line for the tray and the `.seg` file. Empty when
+    /// no block is active.
+    pub fn statusline(&self, pricing: &Pricing, now: i64) -> String {
+        let blocks = bucket_blocks(&self.entries, pricing);
+        format_statusline(&blocks, now).unwrap_or_default()
+    }
+
+    /// Everything the status line needs, as one JSON document:
+    ///
+    /// * `block` — the active 5h window summed across ALL projects (`5h-T`),
+    ///   absent when idle;
+    /// * `block_sessions` — the SAME window split per session (`5h-S`), so a
+    ///   session's row is directly comparable to the total above it;
+    /// * `sessions` — all-time per-session totals, for rows that are meant to
+    ///   cover the whole session rather than the billing window.
+    ///
+    /// The status line does one `jq` read of this and formats. It performs no
+    /// scanning and no arithmetic over transcripts.
+    pub fn snapshot_json(&self, pricing: &Pricing, now: i64) -> String {
+        let blocks = bucket_blocks(&self.entries, pricing);
+        let active = active_block_index(&blocks, now);
+
+        // 5h-S: per-session totals restricted to the active block's window.
+        // Summing a session's whole history here would print numbers far larger
+        // than the 5h-T line above it and read as a bug.
+        let mut block_sessions: BTreeMap<String, SessionTotals> = BTreeMap::new();
+        if let Some(i) = active {
+            let (start, end) = (blocks[i].start_ms, blocks[i].end_ms());
+            for e in self.entries.iter().filter(|e| e.ts_ms >= start && e.ts_ms < end) {
+                let p = pricing.price_for(&e.model);
+                let s = block_sessions.entry(e.session.clone()).or_default();
+                s.input += e.input;
+                s.output += e.output;
+                s.cache_read += e.cache_read;
+                s.cache_write += e.cache_write;
+                s.cost_input += (e.input as f64 / 1e6) * p.input;
+                s.cost_output += (e.output as f64 / 1e6) * p.output;
+                s.cost_cache_read += (e.cache_read as f64 / 1e6) * p.cache_read;
+                s.cost_cache_write += (e.cache_write as f64 / 1e6) * p.cache_write;
+            }
+        }
+
+        let block = active.map(|i| {
+            let b = &blocks[i];
+            let t = &b.totals;
+            serde_json::json!({
+                "input": t.input, "output": t.output,
+                "cache_read": t.cache_read, "cache_write": t.cache_write,
+                "total_tokens": t.total_tokens(),
+                "cost_input": t.cost_input, "cost_output": t.cost_output,
+                "cost_cache_read": t.cost_cache_read, "cost_cache_write": t.cost_cache_write,
+                "cost": t.cost(),
+                "reset_in": fmt_duration(b.end_ms() - now),
+                "burn_per_min": burn_rate(b, now),
+            })
+        });
+        let sessions: serde_json::Map<String, Value> = self
+            .sessions
+            .iter()
+            .map(|(id, s)| {
+                (
+                    id.clone(),
+                    serde_json::json!({
+                        "input": s.input, "output": s.output,
+                        "cache_read": s.cache_read, "cache_write": s.cache_write,
+                        "total_tokens": s.total_tokens(),
+                        "cost_input": s.cost_input, "cost_output": s.cost_output,
+                        "cost_cache_read": s.cost_cache_read, "cost_cache_write": s.cost_cache_write,
+                        "cost": s.cost(),
+                        "last_user_ms": s.last_user_ms,
+                        "last_assistant_ms": s.last_assistant_ms,
+                    }),
+                )
+            })
+            .collect();
+        serde_json::json!({
+            "generated_ms": now,
+            "block": block,
+            "sessions": sessions,
+        })
+        .to_string()
+    }
+}
+
+/// Read `[off, len)` of `path`, truncated to the last complete line. The tail
+/// of a transcript can be a half-written record; dropping it (and not counting
+/// its bytes) means the next tick re-reads it whole.
+fn read_from(path: &Path, off: u64, len: u64) -> Option<(String, u64)> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = fs::File::open(path).ok()?;
+    f.seek(SeekFrom::Start(off)).ok()?;
+    let mut buf = vec![0u8; (len - off) as usize];
+    f.read_exact(&mut buf).ok()?;
+    let end = match buf.iter().rposition(|&b| b == b'\n') {
+        Some(i) => i + 1,
+        None => return None, // no complete line yet — leave the offset alone
+    };
+    buf.truncate(end);
+    Some((String::from_utf8_lossy(&buf).into_owned(), end as u64))
+}
+
+fn collect_jsonl_paths(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    for de in entries.flatten() {
+        let p = de.path();
+        if p.is_dir() {
+            collect_jsonl_paths(&p, out);
+        } else if p.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+            out.push(p);
+        }
+    }
 }
 
 /// Deduped, ascending-by-timestamp usage entries from every `*.jsonl` under `root`
@@ -535,6 +818,68 @@ mod tests {
         // "now" far beyond the last block's window -> idle (no active block).
         let idle_now = parse_rfc3339_ms("2026-08-01T00:00:00.000Z").unwrap();
         assert_eq!(active_block_index(&blocks, idle_now), None);
+    }
+
+    /// The scanner's whole point: appending to a transcript and ticking again
+    /// must equal reading the file once, and re-ticking with nothing appended
+    /// must change nothing. A half-written trailing line is skipped, then
+    /// counted exactly once when its newline arrives.
+    #[test]
+    fn scanner_is_incremental_and_never_double_counts() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("my-ai-scan-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("sess-a.jsonl");
+
+        let rec = |id: &str, inp: u64, out: u64| {
+            format!(
+                r#"{{"type":"assistant","timestamp":"2026-08-01T10:00:00.000Z","requestId":"{id}","message":{{"id":"{id}","model":"claude-opus-5","usage":{{"input_tokens":{inp},"output_tokens":{out},"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}}}}"#
+            )
+        };
+        let pricing = Pricing::load();
+        let mut s = Scanner::new();
+
+        fs::write(&f, format!("{}\n{}\n", rec("m1", 10, 1), rec("m2", 20, 2))).unwrap();
+        s.tick(&dir, &pricing);
+        assert_eq!(s.sessions()["sess-a"].input, 30);
+        assert_eq!(s.sessions()["sess-a"].output, 3);
+
+        // Idle tick: nothing appended, nothing may change.
+        s.tick(&dir, &pricing);
+        assert_eq!(s.sessions()["sess-a"].input, 30, "idle tick double-counted");
+
+        // Append: only the new bytes are read, totals accumulate.
+        let mut h = fs::OpenOptions::new().append(true).open(&f).unwrap();
+        writeln!(h, "{}", rec("m3", 5, 4)).unwrap();
+        s.tick(&dir, &pricing);
+        assert_eq!(s.sessions()["sess-a"].input, 35);
+        assert_eq!(s.sessions()["sess-a"].output, 7);
+
+        // A partial line (still being written) is ignored...
+        write!(h, "{}", &rec("m4", 100, 9)[..40]).unwrap();
+        h.flush().unwrap();
+        s.tick(&dir, &pricing);
+        assert_eq!(s.sessions()["sess-a"].input, 35, "counted a half-written line");
+
+        // ...and counted once the rest of it, plus the newline, lands.
+        write!(h, "{}\n", &rec("m4", 100, 9)[40..]).unwrap();
+        h.flush().unwrap();
+        s.tick(&dir, &pricing);
+        assert_eq!(s.sessions()["sess-a"].input, 135);
+
+        // A second session is tracked under its own file stem.
+        fs::write(dir.join("sess-b.jsonl"), format!("{}\n", rec("n1", 7, 0))).unwrap();
+        s.tick(&dir, &pricing);
+        assert_eq!(s.sessions()["sess-b"].input, 7);
+        assert_eq!(s.sessions()["sess-a"].input, 135, "sessions leaked into each other");
+
+        // The snapshot must expose those sessions by id.
+        let snap: Value = serde_json::from_str(&s.snapshot_json(&pricing, now_ms())).unwrap();
+        assert_eq!(snap["sessions"]["sess-a"]["input"], 135);
+        assert_eq!(snap["sessions"]["sess-b"]["total_tokens"], 7);
+
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
