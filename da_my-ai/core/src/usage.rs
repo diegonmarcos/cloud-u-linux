@@ -426,7 +426,11 @@ pub fn burn_rate(active: &Block, now_ms: i64) -> f64 {
 /// Build the exact `--statusline` line, or `None` if there's no active block
 /// (idle) — the caller should then print nothing.
 /// Format:
-/// `5h \033[37m│\033[0m New:<in>($<c>) CchW:<cw>($<c>) CchR:<cr>($<c>) Out:<out>($<c>) \033[1mΣ<tot>($<total>)\033[0m \033[37m│\033[0m Reset:<Xh Ym> Burn:<k>k/m`
+/// `5h-T [ New:<in>($<c>) CchW:<cw>($<c>) CchR:<cr>($<c>) Out:<out>($<c>) \033[1mΣ<tot>($<total>)\033[0m ] \033[37m│\033[0m Reset:<Xh Ym> Burn:<k>k/m`
+///
+/// `-T` = Total across every project in the active 5h block. The statusline
+/// renders a matching `5h-S` row underneath it for THIS session alone, so the
+/// two are read as a pair: same fields, same order, different scope.
 /// (Literal backslash-escapes, not raw ESC bytes — the statusline host prints
 /// this via `printf %b`.)
 pub fn format_statusline(blocks: &[Block], now_ms: i64) -> Option<String> {
@@ -436,7 +440,7 @@ pub fn format_statusline(blocks: &[Block], now_ms: i64) -> Option<String> {
     let reset_in = fmt_duration(b.end_ms() - now_ms);
     let burn = burn_rate(b, now_ms);
     Some(format!(
-        "5h \\033[37m│\\033[0m New:{}(${:.2}) CchW:{}(${:.2}) CchR:{}(${:.2}) Out:{}(${:.2}) \\033[1mΣ{}(${:.2})\\033[0m \\033[37m│\\033[0m Reset:{} Burn:{:.1}k/m",
+        "5h-T \\033[37m[\\033[0m New:{}(${:.2}) CchW:{}(${:.2}) CchR:{}(${:.2}) Out:{}(${:.2}) \\033[1mΣ{}(${:.2})\\033[0m \\033[37m]\\033[0m \\033[37m│\\033[0m Reset:{} Burn:{:.1}k/m",
         fmt_tokens(t.input), t.cost_input,
         fmt_tokens(t.cache_write), t.cost_cache_write,
         fmt_tokens(t.cache_read), t.cost_cache_read,
