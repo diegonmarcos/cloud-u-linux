@@ -1,24 +1,47 @@
-my-ai — goose via the my-ai-api OpenRouter router + Headroom compression proxy
-(universal: KDE / TTY / Termux)
+my-ai — Claude Code (or goose/hermes) via the my-ai-api OpenRouter router +
+Headroom compression proxy (universal: KDE / TTY / Termux).
 
 USAGE
-  my-ai [--agent goose|claude-cli|claude-cli-ghost|hermes] [remote|local|goose]
-        [headroom on|off] [rtk on|off] [caveman on|off]
+  my-ai [--agent claude-superset|goose|claude-cli|claude-cli-ghost|hermes]
+        [remote|local|goose] [headroom on|off] [rtk on|off] [caveman on|off]
+        [claude <profile>] [ponytail on|off|lite|full|ultra]
         [fresh|sync|restore …|restore-hours …|list …|list-hours …] [agent args…]
 
-my-ai wraps one of three agents (selectable via --agent or the dashboard AGENT
-section): goose (Block, default), claude-cli (Anthropic Claude Code), or hermes
-(Nous Research — a goose shim pinned to a Hermes model on OpenRouter). my-ai-api
-(sibling of claude-superset-api on oci-apps) routes OpenRouter — NOT Claude —
-and adds a vendored Headroom (Apache-2.0) compression hop in front of every call.
-goose/hermes point at my-ai-api as a custom OpenAI provider (OPENAI_BASE_URL);
-claude-cli points at my-ai-api's anthropic shim (ANTHROPIC_BASE_URL, itself a
-shape-translation onto OpenRouter — NOT real Claude). The container injects the
-real OPENROUTER_API_KEY, so the client needs no upstream key of its own.
+my-ai wraps one of five agents (selectable via --agent or MY_AI_AGENT).
+claude-superset (the default) is a self-contained wrapper that does its own
+face/headroom/plugin wiring — the other four agents are wired directly to
+my-ai-api (sibling of claude-superset-api on oci-apps), which routes
+OpenRouter — NOT Claude — and adds a vendored Headroom (Apache-2.0) compression
+hop in front of every call. goose/hermes point at my-ai-api as a custom OpenAI
+provider (OPENAI_BASE_URL); claude-cli points at my-ai-api's anthropic shim
+(ANTHROPIC_BASE_URL, itself a shape-translation onto OpenRouter — NOT real
+Claude). The container injects the real OPENROUTER_API_KEY, so the client
+needs no upstream key of its own.
 
-AGENT (--agent, default: goose / MY_AI_AGENT env)
-  goose                Block's goose CLI → my-ai-api (OpenRouter, OpenAI shape).
-  claude-cli           Anthropic Claude Code CLI → my-ai-api (anthropic shim).
+my-ai-dash (the ratatui TTY dashboard) has been discontinued. This --help text
+is now the only helper surface; `dash` as an argument prints a discontinued
+notice and this same text.
+
+AGENTS (--agent, default: claude-superset / MY_AI_AGENT env)
+  claude-superset      DEFAULT. Anthropic Claude Code, run through the
+                       claude-superset wrapper (claude-superset.nix) — the
+                       same wrapper my-ai itself was forked from. It is
+                       self-contained: it does its own remote/local face
+                       detection, headroom/rtk/caveman/ponytail plugin wiring,
+                       and session restore, once exec'd. my-ai sets NO
+                       ANTHROPIC_*/OPENAI_*/GOOSE_* env for it — doing so would
+                       be ignored noise at best — and forwards the passthrough
+                       args verbatim, since claude-superset's own CLI shape
+                       ([local|remote|claude] [headroom on|off] [ponytail
+                       on|off|lite|full|ultra] [rtk on|off] [caveman on|off]
+                       [restore N | restore-hours N | sync | fresh
+                       [claude-args…]]) is what route() below already mirrors.
+  goose                Block's goose CLI → my-ai-api (OpenRouter, OpenAI
+                       shape). Remote face runs the agent loop server-side
+                       (goosed on oci-apps, HTTP/SSE); local face execs `goose
+                       session` locally against the my-ai-api router.
+  claude-cli           Anthropic Claude Code CLI → my-ai-api's anthropic shim
+                       (ANTHROPIC_BASE_URL).
   claude-cli-ghost     Claude Code CLI in a throwaway HOME ($HOME/.claude-ghost),
                        wiped to login-only on every launch — a real ghost: HOME is
                        relocated so ALL home layers reset (~/.claude, ~/.claude.json,
@@ -32,44 +55,52 @@ AGENT (--agent, default: goose / MY_AI_AGENT env)
                        (nousresearch/hermes-3-llama-3.1-405b) on OpenRouter via
                        my-ai-api. No standalone hermes CLI exists.
 
-FACE (default: remote)
-  remote                Route goose through the my-ai-api router on oci-apps over
-                        WireGuard (goose uses OPENAI_BASE_URL=http://10.0.0.6:3217/v1).
+FACES (default: remote)
+  remote                Route the agent through the my-ai-api router on
+                        oci-apps over WireGuard.
   local                 Run the same my-ai-api container on THIS host (docker
-                        compose, 127.0.0.1 only). `local down` tears it down.
-                        (Desktop only — no docker in Termux/TTY.)
-  goose                 Bypass everything — plain goose with its native provider
-                        (no my-ai-api hop, no compression plugins).
+                        compose, 127.0.0.1 only). `local down`/`local stop`
+                        tears it down. (Desktop only — no docker in Termux/TTY.)
+  goose                 Bypass everything — plain exec of the chosen agent
+                        with its native provider (no my-ai-api hop, no
+                        compression plugins, no auto-sync). Despite the name,
+                        this bypass face works for any --agent, not just goose.
 
-MODE (comes first; default: --auto)
-  --auto                Auto-approve: passed through to goose as needed.
-  --plan                Plan-first mode: recorded for display.
-  --interactive         Explicit interactive mode.
-  --model <id>          Override the model (sets GOOSE_MODEL; any OpenRouter slug
-                        or a short alias from build.json runtime.model_aliases).
+MODE FLAGS (must come before the session action)
+  --agent <id>          claude-superset | goose | claude-cli |
+                        claude-cli-ghost | hermes. See AGENTS above.
+  --model <id>          Override the model (sets GOOSE_MODEL + ANTHROPIC_MODEL;
+                        any OpenRouter slug or a short alias from
+                        build.json runtime.model_aliases).
   --effort <lvl>        Effort tier (informational; sets MY_AI_EFFORT).
+  --auto                Auto-approve: recorded for display.
+  --plan                Plan-first mode: recorded for display.
+  --interactive          Explicit interactive mode.
 
-  Mode + model flags must appear before all other arguments.
-
-PLUGIN TOGGLES (any order, before the action)
-  headroom on|off       on = compress via the my-ai-api Headroom sidecar (sets
-                        OPENAI_BASE_URL so goose's traffic is routed + compressed).
-                        off = plain goose with its native provider (no compression).
+PLUGIN TOGGLES (any order, before the session action)
+  headroom on|off       on = compress via the my-ai-api Headroom sidecar
+                        (routes the agent's traffic through the compression
+                        hop). off = plain agent, native provider, no
+                        compression.
   rtk on|off            RTK (Rust Token Killer): strip CLI/test noise BEFORE
                         Headroom compresses. (RTK_ENABLED)
   caveman on|off        Caveman: linguistic/conversational compression.
                         (CAVEMAN_ENABLED)
+  ponytail on|off|lite|full|ultra
+                        Claude-Code-specific hook system (PONYTAIL_DEFAULT_MODE).
+                        Only meaningful for the claude-superset/claude-cli*
+                        agents; accepted but has no effect on goose/hermes.
+  claude <profile>      Claude Code context profile (only affects --agent
+                        claude-cli / claude-cli-ghost). Sets env flags from
+                        the matching profile in endpoints.json; shown in the
+                        startup banner. Tool schemas are built once at
+                        startup, so pick the profile at launch — switching
+                        mid-session does not reload them.
 
-  (ponytail is a Claude-Code-specific hook system; it has no goose equivalent and
-  is accepted but ignored by my-ai.)
-
-SESSION ACTION (default: fresh)
-  fresh                 Normal fresh goose session (execs `goose session`).
+SESSIONS (default: fresh)
+  fresh                 Normal fresh agent session (default action).
   sync                  Push the last N local sessions to the hub (also runs
                         automatically in the background on every fresh launch).
-                        NOTE: goose stores sessions in SQLite; .jsonl sync/restore
-                        is being migrated to `goose session export/import` — until
-                        then sync/restore are best-effort and may find no sessions.
   restore <X>           Reopen this device's last X sessions, one per tab/window.
   restore-hours <Y>     Reopen this device's sessions from the last Y hours.
   restore <device> <X>  Reopen the last X sessions from another device.
@@ -93,23 +124,25 @@ USAGE / TOKEN TRACKING
                         on every render.
   usage --since <hours>  Restrict the report to usage from the last N hours.
 
-SETUP (installer / deps-solver)
+SETUP (installer / deps-solver, for the goose agent)
   setup                 Ensure `goose` is installed. Platform-aware:
                         nix/termux = flake-managed (declarative); other = goose
                         releases (github.com/block/goose).
   setup --shell         Ephemeral goose via nix-shell (temporary use).
-  setup rescue [args]   Fallback chain: podman -> npx -> nix -> cargo.
+  setup rescue [args]   Fallback chain: nix -> podman -> cargo.
 
 OTHER
-  (no args) / -h / --help / dash   Live status dashboard (my-ai-dash).
-  help                             This message.
+  (no args) / -h / --help / dash   Print this help text. (my-ai-dash, the
+                                   former live TTY dashboard, is discontinued.)
+  help                             Same as --help.
   --version                        Print version.
 
 EXAMPLES
-  my-ai                                # dashboard
-  my-ai remote                         # remote, fresh, headroom on (default)
-  my-ai local                          # local face, fresh
-  my-ai headroom off                   # plain goose, no compression
-  my-ai --model openai/gpt-4o          # override model (OpenRouter slug)
-  my-ai goose                          # bypass — plain goose
-  my-ai sync                           # push local sessions to the hub now
+  my-ai                                 # help text
+  my-ai remote                          # claude-superset, remote, fresh (default)
+  my-ai local                           # local face, fresh
+  my-ai headroom off                    # native provider, no compression
+  my-ai --agent goose remote            # goose agent instead of claude-superset
+  my-ai --model openai/gpt-4o           # override model (OpenRouter slug)
+  my-ai goose                           # bypass face — plain exec, no my-ai-api hop
+  my-ai sync                            # push local sessions to the hub now
