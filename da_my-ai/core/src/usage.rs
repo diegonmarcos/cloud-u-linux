@@ -512,10 +512,44 @@ impl Scanner {
         let cutoff = now_ms() - RETAIN_MS;
         for path in files {
             alive.insert(path.clone());
-            let len = match fs::metadata(&path) {
-                Ok(m) => m.len(),
+            let meta = match fs::metadata(&path) {
+                Ok(m) => m,
                 Err(_) => continue,
             };
+            let len = meta.len();
+            // A transcript untouched since the cutoff cannot contribute anything
+            // we would keep, so it is never opened. Everything in it is older
+            // than the retention window (skipped at ingestion anyway), and the
+            // session it belongs to has no activity inside the window, so
+            // `sessions.retain` below evicts it regardless.
+            //
+            // This is what makes a COLD START cheap. Skipping records still
+            // costs a full parse of every byte — 633 MB across 493 files — and
+            // that parse is where the peak lives: 128 MB RSS with 111 MB of
+            // swap, every time the daemon restarted, which is what kept
+            // tripping systemd-oomd and restarting it again. Reading only the
+            // files that changed in the last 24h turns that into a handful.
+            //
+            // Only applied when the offset is 0 (i.e. we have never read this
+            // file). A file already being followed keeps being followed even if
+            // it goes quiet, so a live session that pauses for a day does not
+            // silently stop being counted.
+            let unseen = !self.offsets.contains_key(&path);
+            if unseen {
+                let stale = meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| (d.as_millis() as i64) < cutoff)
+                    .unwrap_or(false);
+                if stale {
+                    // Record the size as the starting offset rather than 0, so a
+                    // later append is read as an append instead of re-reading the
+                    // whole file the moment it becomes relevant again.
+                    self.offsets.insert(path.clone(), len);
+                    continue;
+                }
+            }
             let off = self.offsets.entry(path.clone()).or_insert(0);
             // Shrunk => rewritten, not appended. Re-read it whole; the dedup set
             // keeps the already-counted entries from being counted twice.
