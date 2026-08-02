@@ -4,6 +4,7 @@
 //! my-ai-api (OpenRouter, not Claude) as the upstream. Universal: KDE / TTY / Termux.
 use anyhow::{anyhow, Result};
 use my_ai_core as core;
+mod tray;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::process::CommandExt;
@@ -818,17 +819,34 @@ fn usage_daemon(interval: u64) -> Result<()> {
         Err(e) => eprintln!("[my-ai] statusline asset install failed: {e}"),
     }
     let mut scanner = core::usage::Scanner::new();
+
+    // Real system tray (ksni/StatusNotifierItem), only where a desktop session
+    // could plausibly show one — same $WAYLAND_DISPLAY/$DISPLAY signal
+    // build.sh's wrapper already used to decide GUI-vs-headless, now reused
+    // here since this path is the default ExecStart either way. A failed
+    // spawn (no D-Bus session, no StatusNotifierWatcher, headless/SSH/CI) is
+    // logged once by tray::try_spawn and must never take the publish loop
+    // down with it.
+    let has_display = std::env::var_os("WAYLAND_DISPLAY").is_some() || std::env::var_os("DISPLAY").is_some();
+    let tray_handle = if has_display { tray::try_spawn() } else { None };
+
     loop {
         scanner.tick(&projects, &pricing);
         let now = core::usage::now_ms();
         // The snapshot is the contract: all the DATA the status line draws.
-        if let Err(e) = core::usage::publish_snapshot(&scanner.snapshot_json(&pricing, now)) {
+        let snapshot_json = scanner.snapshot_json(&pricing, now);
+        if let Err(e) = core::usage::publish_snapshot(&snapshot_json) {
             eprintln!("[my-ai] usage daemon: snapshot publish failed: {e}");
         }
         // The pre-rendered segment stays for the tray and for any consumer that
         // wants a ready line rather than fields.
-        if let Err(e) = core::usage::publish_seg(&scanner.statusline(&pricing, now)) {
+        let seg_line = scanner.statusline(&pricing, now);
+        if let Err(e) = core::usage::publish_seg(&seg_line) {
             eprintln!("[my-ai] usage daemon: segment publish failed: {e}");
+        }
+        // Tooltip reuses exactly what was just published above — no second scan.
+        if let Some(t) = &tray_handle {
+            t.update(&seg_line, &snapshot_json);
         }
         std::thread::sleep(std::time::Duration::from_secs(interval));
     }

@@ -12,3 +12,10 @@ anyhow.workspace = true
 my-ai-core.workspace = true
 serde_json.workspace = true
 ureq = { version = "2", features = ["json"] }
+# NOT tauri's "tray-icon" feature: on Linux tray-icon's tooltip is a
+# documented no-op, and this binary has no webview/tauri runtime to host it
+# anyway (see cli/src/tray.rs). ksni implements StatusNotifierItem directly,
+# matching da_my-konsole/src-tauri/Cargo.toml's dependency.
+ksni = { version = "0.3", features = ["blocking"] }
+# PNG -> raw RGBA decode for the tray icon (see cli/src/tray.rs::load_icon).
+image = { version = "0.25", default-features = false, features = ["png"] }
