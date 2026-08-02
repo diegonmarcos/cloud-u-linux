@@ -6,7 +6,9 @@
     "product_name": "my-ai",
     "wm_class": "com.diegonmarcos.my-ai",
     "bin": "my-ai",
-    "gui_bin": "my-ai-gui"
+    "gui_bin": "my-ai-gui",
+    "dash_bin": "my-ai-dash",
+    "_dash_note": "my-ai-dash is an internal TUI engine only — fetched into runtime.store_subdir, never copied into bin_dir/PATH. `my-ai --help` execs it from there; there is no standalone `my-ai-dash` command."
   },
   "build": {
     "engine": "cargo tauri build",
@@ -18,7 +20,7 @@
     "_arch_note": "my-ai is pure Rust → built for both arches (assets suffixed -x86_64 / -aarch64). my-ai-gui (Tauri/webkit) is desktop-only → built on gui_arches only. Termux (aarch64) pulls cli only; desktop (x86_64) pulls cli+gui.",
     "arches": ["x86_64", "aarch64"],
     "gui_arches": ["x86_64"],
-    "artifacts": ["my-ai", "my-ai-gui"]
+    "artifacts": ["my-ai", "my-ai-dash", "my-ai-gui"]
   },
   "runtime": {
     "store_subdir": ".local/share/my-ai",

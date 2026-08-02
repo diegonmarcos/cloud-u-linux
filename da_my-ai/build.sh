@@ -11,7 +11,7 @@ cd "$HERE"
 
 command -v jq >/dev/null 2>&1 || { echo "jq required (reads build.json)"; exit 1; }
 J() { jq -r "$1" build.json; }
-BIN="$(J .app.bin)"; GUI="$(J .app.gui_bin)"
+BIN="$(J .app.bin)"; GUI="$(J .app.gui_bin)"; DASH="$(J .app.dash_bin)"
 REPO="$(J .build.repo)"; TAG="$(J .build.release_tag)"
 STORE="$HOME/$(J .runtime.store_subdir)"
 ARCH="$(uname -m)"                                   # x86_64 | aarch64
@@ -65,8 +65,8 @@ _run_logged() { # <logfile> <cmd...> — tee output, dump tail + exit on failure
 }
 
 cmd_check() {
-  say "check core+cli ($ARCH)…"
-  _run_logged /tmp/my-ai-cli.log nix_dev cli cargo check -p my-ai-core -p my-ai-cli
+  say "check core+cli+dash ($ARCH)…"
+  _run_logged /tmp/my-ai-cli.log nix_dev cli cargo check -p my-ai-core -p my-ai-cli -p my-ai-dash
   if gui_enabled; then
     say "check gui ($ARCH)…"; icon
     _run_logged /tmp/my-ai-gui.log nix_dev default cargo check -p my-ai-gui
@@ -75,9 +75,9 @@ cmd_check() {
 }
 
 cmd_build() {
-  say "build core+cli ($ARCH)…"
-  nix_dev cli cargo build --release -p my-ai-cli
-  nix_dev cli cargo test -p my-ai-core -p my-ai-cli
+  say "build core+cli+dash ($ARCH)…"
+  nix_dev cli cargo build --release -p my-ai-cli -p my-ai-dash
+  nix_dev cli cargo test -p my-ai-core -p my-ai-cli -p my-ai-dash
   if gui_enabled; then
     say "build gui ($ARCH)…"; icon
     nix_dev default cargo tauri build          # my-ai-gui + .deb bundle
@@ -89,6 +89,7 @@ cmd_build() {
 cmd_stage() {
   local d="dist-assets"; rm -rf "$d"; mkdir -p "$d"
   command cp -f "target/release/$BIN"  "$d/$BIN-$ARCH"
+  command cp -f "target/release/$DASH" "$d/$DASH-$ARCH"
   if gui_enabled; then
     command cp -f "target/release/$GUI" "$d/$GUI-$ARCH"
     local deb; deb="$(command ls target/release/bundle/deb/*.deb 2>/dev/null | head -1 || true)"
@@ -110,6 +111,8 @@ cmd_fetch() {
     gh release download "$TAG" -R "$REPO" -p "$b-$ARCH" -O "$dir/$b" --clobber && chmod +x "$dir/$b" \
       || say "($b-$ARCH not in release yet — non-fatal)"
   done
+  gh release download "$TAG" -R "$REPO" -p "$DASH-$ARCH" -O "$STORE/$DASH" --clobber && chmod +x "$STORE/$DASH" \
+    || say "($DASH-$ARCH not in release yet — non-fatal)"
   if gui_enabled; then
     gh release download "$TAG" -R "$REPO" -p "$GUI-$ARCH" -O "$dir/$GUI" --clobber && chmod +x "$dir/$GUI" \
       || say "($GUI-$ARCH not in release yet — non-fatal)"

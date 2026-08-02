@@ -1,0 +1,16 @@
+[package]
+name = "my-ai-dash"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "my-ai-dash"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+my-ai-core.workspace = true
+serde_json.workspace = true
+ureq = { version = "2", features = ["json", "tls"] }
+ratatui = "0.29"
+crossterm = "0.28"

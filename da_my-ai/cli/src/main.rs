@@ -14,12 +14,27 @@ use std::time::Duration;
 
 const HELP: &str = include_str!("../../src/data/help.txt");
 
+/// Exec the internal TUI engine (my-ai-dash, fetched into $STORE — never on
+/// PATH; there is no standalone `my-ai-dash` command). `--help`/`-h`/no-args/
+/// `dash` all land here; `my-ai h`/`help` prints the static HELP text instead.
+fn launch_dash() -> Result<()> {
+    let bin = core::store_dir().join("my-ai-dash");
+    if !bin.exists() {
+        eprintln!("my-ai-dash not installed yet — run `my-ai h` for static help, or `./build.sh fetch` to install the TUI.");
+        print!("{HELP}");
+        return Ok(());
+    }
+    let err = Command::new(bin).exec();
+    Err(anyhow!("failed to launch my-ai-dash: {err}"))
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let ep = core::endpoints()?;
 
     match args.first().map(|s| s.as_str()) {
-        Some("help") => {
+        // Plain static reference text (this used to be the "help" subcommand).
+        Some("help" | "h") => {
             print!("{HELP}");
             Ok(())
         }
@@ -27,17 +42,10 @@ fn main() -> Result<()> {
             println!("my-ai {}", core::version());
             Ok(())
         }
-        // my-ai-dash is discontinued — --help/-h/no-args print the static
-        // help text directly instead of launching the ratatui dashboard.
-        Some("--help" | "-h") | None => {
-            print!("{HELP}");
-            Ok(())
-        }
-        Some("dash") => {
-            eprintln!("my-ai-dash is discontinued — see: my-ai --help");
-            print!("{HELP}");
-            Ok(())
-        }
+        // --help / -h / no-args / dash → the live TUI dashboard. It's an
+        // internal engine (my-ai-dash in $STORE, never on PATH) execed from
+        // here — there is no standalone `my-ai-dash` command.
+        Some("--help" | "-h" | "dash") | None => launch_dash(),
         Some("setup") => setup(&args[1..], &ep),
         Some("usage") => usage_cmd(&args[1..]),
         _ => route(args, &ep),
