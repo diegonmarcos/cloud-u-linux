@@ -103,7 +103,7 @@ impl ksni::Tray for UsageTray {
 
 /// A live handle to the spawned tray, used only to push tooltip updates —
 /// nothing here depends on menu/click state surviving a restart.
-pub struct TrayHandle(ksni::Handle<UsageTray>);
+pub struct TrayHandle(ksni::blocking::Handle<UsageTray>);
 
 impl TrayHandle {
     /// Push the current 5h totals into the tooltip. Takes the already-rendered

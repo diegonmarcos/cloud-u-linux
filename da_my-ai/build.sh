@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # my-ai universal build engine — 100% data-driven from build.json. Rust workspace:
-#   my-ai (CLI) + my-ai-dash (ratatui TTY) — pure Rust, built for BOTH x86_64 and
-#   aarch64 (lean `.#cli` nix shell, no webkit). my-ai-gui (Tauri v2 systray/webview)
-#   needs webkit → built only on x86_64 (build.gui_arches) via the `.#default` shell.
+#   my-ai (CLI) — pure Rust, built for BOTH x86_64 and aarch64 (lean `.#cli` nix
+#   shell, no webkit). my-ai-gui (Tauri v2 systray/webview) needs webkit → built
+#   only on x86_64 (build.gui_arches) via the `.#default` shell.
 # Rust/Tauri compile is heavy → CI (ship-my-ai-app.yml, matrixed per-arch) is the
 # normal build path; local `build` is for devs.
 set -euo pipefail
@@ -11,7 +11,7 @@ cd "$HERE"
 
 command -v jq >/dev/null 2>&1 || { echo "jq required (reads build.json)"; exit 1; }
 J() { jq -r "$1" build.json; }
-BIN="$(J .app.bin)"; DASH="$(J .app.dash_bin)"; GUI="$(J .app.gui_bin)"
+BIN="$(J .app.bin)"; GUI="$(J .app.gui_bin)"
 REPO="$(J .build.repo)"; TAG="$(J .build.release_tag)"
 STORE="$HOME/$(J .runtime.store_subdir)"
 ARCH="$(uname -m)"                                   # x86_64 | aarch64
@@ -65,8 +65,8 @@ _run_logged() { # <logfile> <cmd...> — tee output, dump tail + exit on failure
 }
 
 cmd_check() {
-  say "check core+cli+dash ($ARCH)…"
-  _run_logged /tmp/my-ai-cli.log nix_dev cli cargo check -p my-ai-core -p my-ai-cli -p my-ai-dash
+  say "check core+cli ($ARCH)…"
+  _run_logged /tmp/my-ai-cli.log nix_dev cli cargo check -p my-ai-core -p my-ai-cli
   if gui_enabled; then
     say "check gui ($ARCH)…"; icon
     _run_logged /tmp/my-ai-gui.log nix_dev default cargo check -p my-ai-gui
@@ -75,8 +75,8 @@ cmd_check() {
 }
 
 cmd_build() {
-  say "build core+cli+dash ($ARCH)…"
-  nix_dev cli cargo build --release -p my-ai-cli -p my-ai-dash
+  say "build core+cli ($ARCH)…"
+  nix_dev cli cargo build --release -p my-ai-cli
   nix_dev cli cargo test -p my-ai-core -p my-ai-cli
   if gui_enabled; then
     say "build gui ($ARCH)…"; icon
@@ -89,7 +89,6 @@ cmd_build() {
 cmd_stage() {
   local d="dist-assets"; rm -rf "$d"; mkdir -p "$d"
   command cp -f "target/release/$BIN"  "$d/$BIN-$ARCH"
-  command cp -f "target/release/$DASH" "$d/$DASH-$ARCH"
   if gui_enabled; then
     command cp -f "target/release/$GUI" "$d/$GUI-$ARCH"
     local deb; deb="$(command ls target/release/bundle/deb/*.deb 2>/dev/null | head -1 || true)"
@@ -107,7 +106,7 @@ cmd_fetch() {
   command -v gh >/dev/null 2>&1 || die "gh CLI required to fetch the CI binaries"
   say "fetching $TAG ($ARCH) from $REPO → $dir"
   local b
-  for b in "$BIN" "$DASH"; do
+  for b in "$BIN"; do
     gh release download "$TAG" -R "$REPO" -p "$b-$ARCH" -O "$dir/$b" --clobber && chmod +x "$dir/$b" \
       || say "($b-$ARCH not in release yet — non-fatal)"
   done
@@ -148,12 +147,12 @@ cmd_run() {
   fi
 }
 
-# install — CLI + dash on PATH; GUI (x86 desktop) gets a self-contained launcher.
+# install — CLI on PATH; GUI (x86 desktop) gets a self-contained launcher.
 cmd_install() {
   local bindir="$HOME/$(J .runtime.bin_dir)"
   mkdir -p "$bindir" "$STORE"
   cmd_fetch "$STORE"
-  for b in "$BIN" "$DASH"; do
+  for b in "$BIN"; do
     [ -x "$STORE/$b" ] && { command cp -f "$STORE/$b" "$bindir/$b"; chmod +x "$bindir/$b"; }
   done
   if gui_enabled && [ -x "$STORE/$GUI" ]; then
@@ -246,7 +245,7 @@ EOF
     && say "usage daemon: enabled + started" \
     || say "usage daemon: installed unit, but couldn't start it now (no user session bus?) — will start on next login"
 
-  say "installed $BIN, $DASH$(gui_enabled && echo ", $GUI" || echo "") → $bindir"
+  say "installed $BIN$(gui_enabled && echo ", $GUI" || echo "") → $bindir"
 }
 
 case "${1:-build}" in

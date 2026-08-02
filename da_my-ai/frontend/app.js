@@ -1,5 +1,6 @@
-// my-ai-gui frontend — renders the `my-ai-dash --snapshot` JSON as a graphical
-// dashboard and wires the launch bar to the Rust commands.
+// my-ai-gui frontend — renders the `snapshot` command's JSON as a graphical
+// dashboard and wires the launch bar to the Rust commands. (my-ai-dash, the
+// snapshot's original backing binary, has been discontinued — see main.rs.)
 const invoke = (cmd, args) => window.__TAURI__.core.invoke(cmd, args);
 const $ = (s) => document.querySelector(s);
 const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstChild; };

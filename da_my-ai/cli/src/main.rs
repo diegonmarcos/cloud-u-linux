@@ -27,8 +27,17 @@ fn main() -> Result<()> {
             println!("my-ai {}", core::version());
             Ok(())
         }
-        // --help / -h / dash / no-args → the live dashboard (my-ai-dash).
-        Some("--help" | "-h" | "dash") | None => launch_dash(),
+        // my-ai-dash is discontinued — --help/-h/no-args print the static
+        // help text directly instead of launching the ratatui dashboard.
+        Some("--help" | "-h") | None => {
+            print!("{HELP}");
+            Ok(())
+        }
+        Some("dash") => {
+            eprintln!("my-ai-dash is discontinued — see: my-ai --help");
+            print!("{HELP}");
+            Ok(())
+        }
         Some("setup") => setup(&args[1..], &ep),
         Some("usage") => usage_cmd(&args[1..]),
         _ => route(args, &ep),
@@ -1144,17 +1153,6 @@ fn goosed_repl(base_url: &str) -> Result<()> {
         }
     }
     Ok(())
-}
-
-fn launch_dash() -> Result<()> {
-    // Prefer a sibling my-ai-dash (installed next to this binary), else PATH.
-    let sibling = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join("my-ai-dash")))
-        .filter(|p| p.exists());
-    let bin = sibling.unwrap_or_else(|| PathBuf::from("my-ai-dash"));
-    let err = Command::new(bin).exec();
-    Err(anyhow!("failed to launch my-ai-dash: {err}"))
 }
 
 fn spawn_bg_sync() {

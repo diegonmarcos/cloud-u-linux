@@ -449,6 +449,14 @@ impl Scanner {
         let mut files = Vec::new();
         collect_jsonl_paths(root, &mut files);
         let mut alive: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+        // Computed once, outside the loop: entries older than this are never
+        // pushed into `entries` at all. A cold start on 633 MB of history used
+        // to push EVERY record (all-time, across every file) into the Vec and
+        // only `retain()` the last 24h *after* the whole corpus was in memory —
+        // peak RSS tracked history size, not the retention window. Session
+        // totals below are still all-time; only the per-entry window (used for
+        // the 5h block math) is bounded at ingestion.
+        let cutoff = now_ms() - RETAIN_MS;
         for path in files {
             alive.insert(path.clone());
             let len = match fs::metadata(&path) {
@@ -494,6 +502,17 @@ impl Scanner {
                 if !self.seen.insert(key) {
                     return;
                 }
+                // Cap `seen` DURING the loop, not just after it. A cold start
+                // reading 633 MB in one tick would otherwise let it grow to one
+                // entry per historical record before the post-loop check ever
+                // ran — the same peak-before-prune shape `entries` had. Clearing
+                // mid-corpus sacrifices dedup for records already behind the
+                // cursor we just cleared past, but a duplicate id landing right
+                // on that boundary is a rare cosmetic double-count, not a memory
+                // problem, so it's the right side to give up.
+                if self.seen.len() > 200_000 {
+                    self.seen.clear();
+                }
                 let p = pricing.price_for(&entry.model);
                 let s = self.sessions.entry(sid.clone()).or_default();
                 s.input += entry.input;
@@ -504,17 +523,27 @@ impl Scanner {
                 s.cost_output += (entry.output as f64 / 1e6) * p.output;
                 s.cost_cache_read += (entry.cache_read as f64 / 1e6) * p.cache_read;
                 s.cost_cache_write += (entry.cache_write as f64 / 1e6) * p.cache_write;
-                self.entries.push(entry);
+                // Session totals above are all-time and must count this record
+                // regardless of age. `entries` is the rolling window the block
+                // math reads, so an old record has no business in it.
+                if entry.ts_ms >= cutoff {
+                    self.entries.push(entry);
+                }
             });
             if let Some(c) = consumed {
                 *self.offsets.get_mut(&path).unwrap() = start_off + c;
             }
         }
+        // Files are processed one at a time above, so entries from different
+        // files can interleave out of timestamp order even though each file's
+        // own entries land in order — bucket_blocks needs them fully sorted.
+        // No second `retain()` needed here: nothing older than `cutoff` was
+        // ever pushed, and a tick this frequent (30s) can't age an entry past
+        // the window between the push above and this line.
         self.entries.sort_by_key(|e| e.ts_ms);
-        let cutoff = now_ms() - RETAIN_MS;
-        self.entries.retain(|e| e.ts_ms >= cutoff);
-        // `seen` is only needed to dedup within what we still hold; letting it
-        // grow for the process lifetime would be a slow leak.
+        // `seen` is already bounded during the loop above (per-line, so it
+        // never peaks with corpus size); this is just the steady-state trim
+        // for the process lifetime between ticks.
         if self.seen.len() > 200_000 {
             self.seen.clear();
         }
@@ -1097,6 +1126,71 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         s.tick(&dir, &pricing);
         assert_eq!(s.offsets.len(), 0, "offsets kept entries for files no longer on disk");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Regression test for the actual OOM: a synthetic corpus far larger than
+    /// anything a real cold start would produce, all stale (outside RETAIN_MS),
+    /// fed to a single `tick()`. The old code pushed every parsed record into
+    /// `entries` and only `retain()`'d the window AFTER the whole loop, so
+    /// peak memory tracked input size (633 MB / hundreds of thousands of
+    /// records in production) instead of the 24h window. This asserts the
+    /// scanner's retained state — `entries.len()`, `seen.len()` — stays
+    /// bounded by the retention/dedup caps regardless of how much stale input
+    /// it was handed, which the post-hoc eviction tests above don't cover:
+    /// they check the state AFTER pruning, not whether it ever peaked higher
+    /// on the way there.
+    #[test]
+    fn cold_start_on_large_stale_corpus_stays_bounded() {
+        let dir = std::env::temp_dir().join(format!("my-ai-scan-peak-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let rec = |ts: &str, id: &str| {
+            format!(
+                r#"{{"type":"assistant","timestamp":"{ts}","requestId":"{id}","message":{{"id":"{id}","model":"claude-opus-5","usage":{{"input_tokens":1,"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}}}}"#
+            )
+        };
+
+        // One file, many stale records — a single big historical transcript is
+        // exactly the shape that hit the 128M cap (one 59MB file, not 493 tiny
+        // ones). 10k lines, all 30h old (outside the 24h window).
+        const N: usize = 10_000;
+        let stale_ts = "2026-07-01T00:00:00.000Z";
+        let mut body = String::new();
+        for i in 0..N {
+            body.push_str(&rec(stale_ts, &format!("stale-{i}")));
+            body.push('\n');
+        }
+        fs::write(dir.join("big-stale.jsonl"), body).unwrap();
+
+        // One live record so the window isn't trivially empty.
+        fs::write(
+            dir.join("live.jsonl"),
+            format!("{}\n", rec(&chrono_now_rfc3339(), "live-1")),
+        )
+        .unwrap();
+
+        let pricing = Pricing::load();
+        let mut s = Scanner::new();
+        s.tick(&dir, &pricing);
+
+        // Peak, not just steady-state: `entries` must never have held the
+        // stale 10k, only ever the 1 live record — this is what "filter at
+        // parse time, not after accumulation" actually buys.
+        assert_eq!(s.entries.len(), 1, "entries grew with stale corpus size instead of staying window-bounded");
+        // `seen` must be far below N: it's capped mid-loop now, not only after
+        // the whole file was consumed.
+        assert!(s.seen.len() <= 200_000, "seen was not bounded during ingestion: {}", s.seen.len());
+
+        // The 10k stale records all share one session id (the file stem), and
+        // that session's own activity is 30h stale, so it's evicted by the
+        // existing RETAIN_MS sessions.retain() at the end of this same tick —
+        // same as `stale_sessions_and_dead_files_are_evicted_not_accumulated`
+        // above. Only the live session should remain.
+        assert_eq!(s.sessions.len(), 1, "sessions not bounded: {}", s.sessions.len());
+        assert!(s.sessions.contains_key("live"));
 
         fs::remove_dir_all(&dir).unwrap();
     }

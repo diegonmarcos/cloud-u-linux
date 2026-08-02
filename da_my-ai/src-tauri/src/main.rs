@@ -1,7 +1,9 @@
-//! my-ai-gui — Tauri v2 desktop app: a graphical port of the my-ai dashboard
-//! (webview renders frontend/), plus a KDE systray with quick launch actions.
-//! Dashboard data comes from `my-ai-dash --snapshot` (dash owns the probe logic);
-//! launch actions shell out to `my-ai <face>` in a terminal.
+//! my-ai-gui — Tauri v2 desktop app: a graphical port of the (now-discontinued)
+//! my-ai-dash TTY dashboard (webview renders frontend/), plus a KDE systray with
+//! quick launch actions. Dashboard data comes from `my-ai-dash --snapshot`; since
+//! my-ai-dash was removed, `snapshot` currently has no backing binary — the
+//! webview's status panel will fail to populate until this is reworked to source
+//! its own data. Launch actions shell out to `my-ai <face>` in a terminal.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
@@ -10,7 +12,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager};
 
-/// A binary installed next to this one (my-ai / my-ai-dash), else bare name on PATH.
+/// A binary installed next to this one, else bare name on PATH.
 fn sibling(name: &str) -> PathBuf {
     std::env::current_exe()
         .ok()
@@ -34,13 +36,6 @@ fn open_terminal(args: &[String]) {
         let _ = Command::new(t).arg("-e").arg(sibling("my-ai")).args(args).spawn();
     }
 }
-fn open_dash() {
-    let term = which("konsole").or_else(|| which("x-terminal-emulator")).or_else(|| which("xterm"));
-    if let Some(t) = term {
-        let _ = Command::new(t).arg("-e").arg(sibling("my-ai-dash")).spawn();
-    }
-}
-
 // ── webview commands (window.__TAURI__.core.invoke) ──────────────────────────
 #[tauri::command]
 fn snapshot() -> Result<serde_json::Value, String> {
@@ -105,7 +100,6 @@ fn handle_menu(app: &AppHandle, id: &str) {
         "sync" => {
             let _ = Command::new(sibling("my-ai")).arg("sync").spawn();
         }
-        "dash" => open_dash(),
         "restore" => open_terminal(&["remote".into(), "restore".into(), "5".into()]),
         "show" => {
             if let Some(w) = app.get_webview_window("main") {
@@ -129,11 +123,10 @@ fn main() {
             let claude = MenuItem::with_id(app, "claude", "Launch: claude (plain)", true, None::<&str>)?;
             let restore = MenuItem::with_id(app, "restore", "Restore last 5", true, None::<&str>)?;
             let sync = MenuItem::with_id(app, "sync", "Sync sessions now", true, None::<&str>)?;
-            let dash = MenuItem::with_id(app, "dash", "Open TTY dashboard", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(
                 app,
-                &[&usage, &show, &remote, &local, &claude, &restore, &sync, &dash, &quit],
+                &[&usage, &show, &remote, &local, &claude, &restore, &sync, &quit],
             )?;
 
             let icon = app.default_window_icon().cloned().expect("bundle icon required");
