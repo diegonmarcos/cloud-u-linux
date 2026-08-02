@@ -39,10 +39,16 @@ nix_dev() {
 # PNG so validation passes; a real render happens on a dev machine with imagemagick.
 icon() {
   mkdir -p src-tauri/icons
+  # `tauri::generate_context!` rejects any icon PNG that isn't 8-bit RGBA.
+  # ImageMagick's PNG coder auto-picks a colour type from image content —
+  # small/flat-looking output (esp. 32x32) can get quantized to a palette
+  # (type 3) instead, which built fine locally but panicked the proc macro
+  # in CI. `-define png:color-type=6` pins the coder to RGBA regardless of
+  # content, so this can't regress silently again.
   if command -v magick >/dev/null 2>&1 && [ -f icon.svg ]; then
-    magick -background none icon.svg -resize 256x256 src-tauri/icons/icon.png    2>/dev/null || true
-    magick -background none icon.svg -resize 128x128 src-tauri/icons/128x128.png 2>/dev/null || true
-    magick -background none icon.svg -resize 32x32   src-tauri/icons/32x32.png   2>/dev/null || true
+    magick -background none icon.svg -resize 256x256 -define png:color-type=6 src-tauri/icons/icon.png    2>/dev/null || true
+    magick -background none icon.svg -resize 128x128 -define png:color-type=6 src-tauri/icons/128x128.png 2>/dev/null || true
+    magick -background none icon.svg -resize 32x32   -define png:color-type=6 src-tauri/icons/32x32.png   2>/dev/null || true
   fi
   local png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
   local f

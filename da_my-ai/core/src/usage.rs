@@ -941,9 +941,13 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let f = dir.join("sess-a.jsonl");
 
+        // 5 minutes ago, not a fixed calendar date — a hardcoded literal here
+        // ages out of RETAIN_MS (24h) on whatever date it crosses that age,
+        // which is exactly the bug this test used to hit.
+        let entry_ts = rfc3339_from_ms(now_ms() - 5 * 60_000);
         let rec = |id: &str, inp: u64, out: u64| {
             format!(
-                r#"{{"type":"assistant","timestamp":"2026-08-01T10:00:00.000Z","requestId":"{id}","message":{{"id":"{id}","model":"claude-opus-5","usage":{{"input_tokens":{inp},"output_tokens":{out},"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}}}}"#
+                r#"{{"type":"assistant","timestamp":"{entry_ts}","requestId":"{id}","message":{{"id":"{id}","model":"claude-opus-5","usage":{{"input_tokens":{inp},"output_tokens":{out},"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}}}}"#
             )
         };
         let pricing = Pricing::load();
@@ -951,37 +955,37 @@ mod tests {
 
         fs::write(&f, format!("{}\n{}\n", rec("m1", 10, 1), rec("m2", 20, 2))).unwrap();
         s.tick(&dir, &pricing);
-        assert_eq!(s.sessions()["sess-a"].input, 30);
-        assert_eq!(s.sessions()["sess-a"].output, 3);
+        assert_eq!(sess(&s, "sess-a").input, 30);
+        assert_eq!(sess(&s, "sess-a").output, 3);
 
         // Idle tick: nothing appended, nothing may change.
         s.tick(&dir, &pricing);
-        assert_eq!(s.sessions()["sess-a"].input, 30, "idle tick double-counted");
+        assert_eq!(sess(&s, "sess-a").input, 30, "idle tick double-counted");
 
         // Append: only the new bytes are read, totals accumulate.
         let mut h = fs::OpenOptions::new().append(true).open(&f).unwrap();
         writeln!(h, "{}", rec("m3", 5, 4)).unwrap();
         s.tick(&dir, &pricing);
-        assert_eq!(s.sessions()["sess-a"].input, 35);
-        assert_eq!(s.sessions()["sess-a"].output, 7);
+        assert_eq!(sess(&s, "sess-a").input, 35);
+        assert_eq!(sess(&s, "sess-a").output, 7);
 
         // A partial line (still being written) is ignored...
         write!(h, "{}", &rec("m4", 100, 9)[..40]).unwrap();
         h.flush().unwrap();
         s.tick(&dir, &pricing);
-        assert_eq!(s.sessions()["sess-a"].input, 35, "counted a half-written line");
+        assert_eq!(sess(&s, "sess-a").input, 35, "counted a half-written line");
 
         // ...and counted once the rest of it, plus the newline, lands.
         write!(h, "{}\n", &rec("m4", 100, 9)[40..]).unwrap();
         h.flush().unwrap();
         s.tick(&dir, &pricing);
-        assert_eq!(s.sessions()["sess-a"].input, 135);
+        assert_eq!(sess(&s, "sess-a").input, 135);
 
         // A second session is tracked under its own file stem.
         fs::write(dir.join("sess-b.jsonl"), format!("{}\n", rec("n1", 7, 0))).unwrap();
         s.tick(&dir, &pricing);
-        assert_eq!(s.sessions()["sess-b"].input, 7);
-        assert_eq!(s.sessions()["sess-a"].input, 135, "sessions leaked into each other");
+        assert_eq!(sess(&s, "sess-b").input, 7);
+        assert_eq!(sess(&s, "sess-a").input, 135, "sessions leaked into each other");
 
         // The snapshot must expose those sessions by id.
         let snap: Value = serde_json::from_str(&s.snapshot_json(&pricing, now_ms())).unwrap();
@@ -999,7 +1003,7 @@ mod tests {
 
         // Whenever a block is active, a session's slice of it can never exceed
         // that session's all-time total — that inversion is the bug 5h-S had.
-        let entry_time = parse_rfc3339_ms("2026-08-01T10:00:00.000Z").unwrap();
+        let entry_time = parse_rfc3339_ms(&entry_ts).unwrap();
         let snap: Value =
             serde_json::from_str(&s.snapshot_json(&pricing, entry_time + 60_000)).unwrap();
         assert!(snap["block"].is_object(), "block should be active at entry time");
@@ -1097,11 +1101,14 @@ mod tests {
         fs::remove_dir_all(&dir).unwrap();
     }
 
-    // Minimal RFC3339-now for the boundedness test above — avoids pulling in
+    // Minimal RFC3339 formatter for any epoch-ms instant — avoids pulling in
     // chrono (this crate hand-parses RFC3339 already; see parse_rfc3339_ms /
-    // civil_from_days) just to format the current instant for one test.
-    fn chrono_now_rfc3339() -> String {
-        let ms = now_ms();
+    // civil_from_days) just to stamp fixtures with "now"-relative times. Used
+    // instead of hardcoded date literals so tests exercise RETAIN_MS behaviour
+    // rather than asserting today's date (a fixture timestamped for a fixed
+    // calendar day silently ages out of the retention window and starts
+    // failing on whatever date it crosses 24h old).
+    fn rfc3339_from_ms(ms: i64) -> String {
         let days = ms.div_euclid(86_400_000);
         let rem = ms.rem_euclid(86_400_000);
         let (y, m, d) = civil_from_days(days);
@@ -1110,5 +1117,56 @@ mod tests {
         let sec = (rem % 60_000) / 1000;
         let millis = rem % 1000;
         format!("{y:04}-{m:02}-{d:02}T{hour:02}:{min:02}:{sec:02}.{millis:03}Z")
+    }
+
+    fn chrono_now_rfc3339() -> String {
+        rfc3339_from_ms(now_ms())
+    }
+
+    /// Pins the retention behaviour itself, deliberately: a session whose last
+    /// activity is older than RETAIN_MS must be evicted on the next tick, one
+    /// inside the window must survive. Nothing asserted this directly before —
+    /// it only surfaced as a confusing failure in an unrelated test whose
+    /// fixture happened to age past the cutoff.
+    #[test]
+    fn retain_ms_evicts_stale_session_but_keeps_live_one() {
+        let dir = std::env::temp_dir().join(format!("my-ai-scan-retain-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let rec = |ts: &str, id: &str| {
+            format!(
+                r#"{{"type":"assistant","timestamp":"{ts}","requestId":"{id}","message":{{"id":"{id}","model":"claude-opus-5","usage":{{"input_tokens":1,"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}}}}"#
+            )
+        };
+
+        // Just outside the window (25h old) vs. comfortably inside it (1h old).
+        let stale_ts = rfc3339_from_ms(now_ms() - RETAIN_MS - 3_600_000);
+        let live_ts = rfc3339_from_ms(now_ms() - 3_600_000);
+        fs::write(dir.join("sess-stale.jsonl"), format!("{}\n", rec(&stale_ts, "s1"))).unwrap();
+        fs::write(dir.join("sess-live.jsonl"), format!("{}\n", rec(&live_ts, "s2"))).unwrap();
+
+        let pricing = Pricing::load();
+        let mut s = Scanner::new();
+        s.tick(&dir, &pricing);
+
+        assert!(
+            !s.sessions().contains_key("sess-stale"),
+            "session older than RETAIN_MS survived eviction: {:?}",
+            s.sessions().keys().collect::<Vec<_>>()
+        );
+        assert_eq!(sess(&s, "sess-live").input, 1, "session inside RETAIN_MS was evicted");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Explicit lookup with a message naming what's missing, rather than
+    /// `s.sessions()[id]` panicking with an unhelpful index-out-of-bounds-style
+    /// message when a session unexpectedly isn't there (e.g. evicted by
+    /// RETAIN_MS because a fixture timestamp aged out).
+    fn sess<'a>(s: &'a Scanner, id: &str) -> &'a SessionTotals {
+        s.sessions().get(id).unwrap_or_else(|| {
+            panic!("session {id:?} not found; known sessions: {:?}", s.sessions().keys().collect::<Vec<_>>())
+        })
     }
 }
