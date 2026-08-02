@@ -9,7 +9,9 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Bundled fallback pricing (src/data/pricing.json), used when the user has no
@@ -174,7 +176,15 @@ pub fn current_statusline(projects: &Path) -> Result<String> {
 #[derive(Debug, Clone)]
 pub struct UsageEntry {
     pub ts_ms: i64,
-    pub model: String,
+    /// `Rc<str>` instead of `String`: model and session are low-cardinality
+    /// (a handful of distinct models, a few hundred sessions) but every
+    /// retained entry (up to the 24h window) used to heap-allocate its own
+    /// copy of both strings. `Rc<str>` lets every entry that shares a value
+    /// share one allocation instead — see `Interner` below. `Rc` (not `Arc`)
+    /// because `Scanner` never crosses a thread boundary: it's created and
+    /// used entirely within one thread for its whole life (the tauri tray
+    /// spawns a dedicated thread and never shares the `Scanner` back out).
+    pub model: Rc<str>,
     pub input: u64,
     pub output: u64,
     pub cache_write: u64,
@@ -182,7 +192,7 @@ pub struct UsageEntry {
     /// Transcript file stem = Claude Code's session id. Carried per entry so the
     /// active 5h block can be split per session (the `5h-S` row) rather than only
     /// summed across all of them (`5h-T`).
-    pub session: String,
+    pub session: Rc<str>,
 }
 
 impl UsageEntry {
@@ -349,16 +359,16 @@ fn visit_jsonl(dir: &Path, f: &mut impl FnMut(&str)) {
     }
 }
 
-fn parse_line_in(v: &Value, session: &str) -> Option<(String, UsageEntry)> {
-    let (key, mut e) = parse_line(v)?;
-    e.session = session.to_string();
+fn parse_line_in(v: &Value, session: &str, interner: &mut Interner) -> Option<(String, UsageEntry)> {
+    let (key, mut e) = parse_line(v, interner)?;
+    e.session = interner.intern(session);
     Some((key, e))
 }
 
-fn parse_line(v: &Value) -> Option<(String, UsageEntry)> {
+fn parse_line(v: &Value, interner: &mut Interner) -> Option<(String, UsageEntry)> {
     let usage = v.get("message")?.get("usage")?;
     let ts_ms = parse_rfc3339_ms(v.get("timestamp")?.as_str()?)?;
-    let model = v.get("message")?.get("model").and_then(|m| m.as_str()).unwrap_or("unknown").to_string();
+    let model = interner.intern(v.get("message")?.get("model").and_then(|m| m.as_str()).unwrap_or("unknown"));
     let msg_id = v.get("message")?.get("id").and_then(|m| m.as_str()).unwrap_or("");
     let req_id = v.get("requestId").and_then(|r| r.as_str()).unwrap_or("");
     let key = format!("{msg_id}:{req_id}");
@@ -372,9 +382,28 @@ fn parse_line(v: &Value) -> Option<(String, UsageEntry)> {
             output: n("output_tokens"),
             cache_write: n("cache_creation_input_tokens"),
             cache_read: n("cache_read_input_tokens"),
-            session: String::new(),
+            session: interner.intern(""),
         },
     ))
+}
+
+/// Dedups repeated `model`/`session` strings to one allocation each. Backed by
+/// a `HashSet<Rc<str>>` rather than a `HashMap<String, Rc<str>>` so the lookup
+/// key and the stored value are the same allocation — no separate owned
+/// `String` kept just to index the table. `HashSet::get` accepts `&str`
+/// because `Rc<str>: Borrow<str>`.
+#[derive(Default)]
+struct Interner(HashSet<Rc<str>>);
+
+impl Interner {
+    fn intern(&mut self, s: &str) -> Rc<str> {
+        if let Some(existing) = self.0.get(s) {
+            return existing.clone();
+        }
+        let rc: Rc<str> = Rc::from(s);
+        self.0.insert(rc.clone());
+        rc
+    }
 }
 
 // ── incremental scanner (the daemon's engine) ────────────────────────────────
@@ -426,9 +455,33 @@ impl SessionTotals {
 #[derive(Default)]
 pub struct Scanner {
     offsets: BTreeMap<PathBuf, u64>,
-    seen: HashSet<String>,
+    /// Dedup set keyed by a 64-bit hash of `message.id:requestId`, not the raw
+    /// ~36-byte UUID-shaped string. At the 200_000-entry cap, storing owned
+    /// `String`s cost roughly a String header + heap allocation + hashset slot
+    /// per entry (~100 bytes each, ~20MB total) purely for dedup bookkeeping.
+    /// `DefaultHasher` (SipHash) is used instead of a randomized hasher
+    /// because it is deterministic across runs — a collision here can only
+    /// ever cause one duplicate-looking record to be erroneously skipped
+    /// (never corrupt data), and a 64-bit hash collision across 200k ids is
+    /// vanishingly unlikely (birthday bound ~200k^2 / 2^65), so this is an
+    /// acceptable, well-bounded tradeoff for the memory it saves.
+    seen: HashSet<u64>,
     sessions: BTreeMap<String, SessionTotals>,
     entries: Vec<UsageEntry>,
+    /// Shared table for `UsageEntry::model` / `UsageEntry::session` — see
+    /// `Interner`.
+    interner: Interner,
+}
+
+/// Deterministic (non-randomized) 64-bit hash of a dedup key. `DefaultHasher`
+/// is unseeded (fixed keys), unlike `RandomState`/`ahash` whose keys are
+/// randomized per-process — so, for a given compiler/stdlib, the same key
+/// hashes the same way on every run, which matters if `seen` is ever
+/// persisted across restarts.
+fn hash_key(key: &str) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    key.hash(&mut h);
+    h.finish()
 }
 
 impl Scanner {
@@ -498,8 +551,8 @@ impl Scanner {
                         }
                     }
                 }
-                let Some((key, entry)) = parse_line_in(&v, &sid) else { return };
-                if !self.seen.insert(key) {
+                let Some((key, entry)) = parse_line_in(&v, &sid, &mut self.interner) else { return };
+                if !self.seen.insert(hash_key(&key)) {
                     return;
                 }
                 // Cap `seen` DURING the loop, not just after it. A cold start
@@ -537,10 +590,29 @@ impl Scanner {
         // Files are processed one at a time above, so entries from different
         // files can interleave out of timestamp order even though each file's
         // own entries land in order — bucket_blocks needs them fully sorted.
-        // No second `retain()` needed here: nothing older than `cutoff` was
-        // ever pushed, and a tick this frequent (30s) can't age an entry past
-        // the window between the push above and this line.
+        // No second filter is needed to keep THIS tick's pushes in-window:
+        // nothing older than `cutoff` was ever pushed, and a tick this
+        // frequent (30s) can't age an entry past the window between the push
+        // above and this line.
         self.entries.sort_by_key(|e| e.ts_ms);
+        // Across ticks, though, entries pushed on earlier ticks do age past
+        // `cutoff` as time moves on, and nothing removed them — `entries` only
+        // ever grew for the life of the process. None of that history affects
+        // any output: `bucket_blocks` builds every block in `entries`, but
+        // only the ACTIVE (most recent) one is ever read (`statusline`,
+        // `snapshot_json`), so a block built from stale, already-closed
+        // history is computed and then never looked at. Dropping it here is
+        // therefore semantics-preserving and bounds `entries` to the RETAIN_MS
+        // window instead of "everything ever pushed since daemon start".
+        self.entries.retain(|e| e.ts_ms >= cutoff);
+        // A cold start can briefly inflate `entries`' capacity far past its
+        // steady-state length (e.g. transiently holding many near-cutoff
+        // entries before they're retained away above); shrink so that spike
+        // doesn't pin extra heap for the rest of the process's life. `entries`
+        // is small in steady state, so this is a cheap call every tick.
+        if self.entries.capacity() > self.entries.len() * 2 {
+            self.entries.shrink_to_fit();
+        }
         // `seen` is already bounded during the loop above (per-line, so it
         // never peaks with corpus size); this is just the steady-state trim
         // for the process lifetime between ticks.
@@ -595,7 +667,7 @@ impl Scanner {
             let (start, end) = (blocks[i].start_ms, blocks[i].end_ms());
             for e in self.entries.iter().filter(|e| e.ts_ms >= start && e.ts_ms < end) {
                 let p = pricing.price_for(&e.model);
-                let s = block_sessions.entry(e.session.clone()).or_default();
+                let s = block_sessions.entry(e.session.to_string()).or_default();
                 s.input += e.input;
                 s.output += e.output;
                 s.cache_read += e.cache_read;
@@ -725,11 +797,12 @@ fn collect_jsonl_paths(dir: &Path, out: &mut Vec<PathBuf>) {
 /// (recursively). Dedup key: `message.id:requestId`.
 pub fn collect_entries(root: &Path) -> Result<Vec<UsageEntry>> {
     let mut seen: HashSet<String> = HashSet::new();
+    let mut interner = Interner::default();
     let mut out = Vec::new();
     if root.exists() {
         visit_jsonl(root, &mut |line| {
             if let Ok(v) = serde_json::from_str::<Value>(line) {
-                if let Some((key, entry)) = parse_line(&v) {
+                if let Some((key, entry)) = parse_line(&v, &mut interner) {
                     if seen.insert(key) {
                         out.push(entry);
                     }
@@ -922,8 +995,9 @@ mod tests {
         let lines = [&a2_dup, &b2, &a1, &b1, &a2];
         let mut seen = HashSet::new();
         let mut entries = Vec::new();
+        let mut interner = Interner::default();
         for v in lines {
-            if let Some((key, entry)) = parse_line(v) {
+            if let Some((key, entry)) = parse_line(v, &mut interner) {
                 if seen.insert(key) {
                     entries.push(entry);
                 }
@@ -1262,5 +1336,37 @@ mod tests {
         s.sessions().get(id).unwrap_or_else(|| {
             panic!("session {id:?} not found; known sessions: {:?}", s.sessions().keys().collect::<Vec<_>>())
         })
+    }
+
+    /// The whole point of `Interner`: many entries repeating the same handful
+    /// of distinct model/session strings must share allocations rather than
+    /// each cloning their own copy. Asserts the interning table itself stays
+    /// bounded by the number of DISTINCT values inserted, not the number of
+    /// insertions — the property that actually saves memory. This doesn't
+    /// measure bytes directly, but a table whose size tracks distinct-value
+    /// count (not call count) is the mechanism the memory saving depends on.
+    #[test]
+    fn interner_dedups_repeated_strings_to_bounded_table_size() {
+        let mut interner = Interner::default();
+        let models = ["claude-opus-4-x", "claude-sonnet-4-x", "claude-haiku-4-x"];
+        let sessions = ["sess-a", "sess-b"];
+
+        // Many more insertions than distinct values.
+        for i in 0..10_000usize {
+            let model = interner.intern(models[i % models.len()]);
+            let session = interner.intern(sessions[i % sessions.len()]);
+            assert_eq!(model.as_ref(), models[i % models.len()]);
+            assert_eq!(session.as_ref(), sessions[i % sessions.len()]);
+        }
+
+        // Table holds exactly the distinct values seen, never one per call.
+        assert_eq!(interner.0.len(), models.len() + sessions.len());
+
+        // Interning the same string twice yields the SAME allocation (Rc
+        // pointer equality), which is what actually avoids the repeated
+        // heap allocs — not just equal contents.
+        let a = interner.intern("claude-opus-4-x");
+        let b = interner.intern("claude-opus-4-x");
+        assert!(Rc::ptr_eq(&a, &b), "interning the same string twice allocated twice");
     }
 }
