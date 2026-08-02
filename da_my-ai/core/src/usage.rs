@@ -448,7 +448,9 @@ impl Scanner {
     pub fn tick(&mut self, root: &Path, pricing: &Pricing) {
         let mut files = Vec::new();
         collect_jsonl_paths(root, &mut files);
+        let mut alive: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
         for path in files {
+            alive.insert(path.clone());
             let len = match fs::metadata(&path) {
                 Ok(m) => m.len(),
                 Err(_) => continue,
@@ -462,14 +464,18 @@ impl Scanner {
             if len == *off {
                 continue;
             }
-            let Some((text, consumed)) = read_from(&path, *off, len) else { continue };
-            *off += consumed;
+            let start_off = *off;
             let sid = Self::session_id_of(&path);
-            for line in text.lines() {
-                if line.trim().is_empty() {
-                    continue;
-                }
-                let Ok(v) = serde_json::from_str::<Value>(line) else { continue };
+            // Stream the appended range line-by-line (BufReader, ~8KB internal
+            // buffer) instead of reading it into one big String. The old
+            // read_from() buffered [off, len) whole AND `into_owned()`'d a copy
+            // of it — on a daemon's first tick, `off` is 0, so a single large
+            // transcript (a live session can be tens to hundreds of MB) was
+            // loaded into memory roughly twice over. That is the spike that hit
+            // the unit's 128M MemoryMax and got it oom-killed: 12s of CPU and a
+            // single peak, not a slow climb across many ticks.
+            let consumed = stream_tail(&path, start_off, len, |line| {
+                let Ok(v) = serde_json::from_str::<Value>(line) else { return };
                 // Idle timers first: they care about EVERY user/assistant record,
                 // including the ones with no usage{} for parse_line to find.
                 if let (Some(kind), Some(ts)) = (
@@ -484,9 +490,9 @@ impl Scanner {
                         }
                     }
                 }
-                let Some((key, entry)) = parse_line_in(&v, &sid) else { continue };
+                let Some((key, entry)) = parse_line_in(&v, &sid) else { return };
                 if !self.seen.insert(key) {
-                    continue;
+                    return;
                 }
                 let p = pricing.price_for(&entry.model);
                 let s = self.sessions.entry(sid.clone()).or_default();
@@ -499,6 +505,9 @@ impl Scanner {
                 s.cost_cache_read += (entry.cache_read as f64 / 1e6) * p.cache_read;
                 s.cost_cache_write += (entry.cache_write as f64 / 1e6) * p.cache_write;
                 self.entries.push(entry);
+            });
+            if let Some(c) = consumed {
+                *self.offsets.get_mut(&path).unwrap() = start_off + c;
             }
         }
         self.entries.sort_by_key(|e| e.ts_ms);
@@ -509,6 +518,18 @@ impl Scanner {
         if self.seen.len() > 200_000 {
             self.seen.clear();
         }
+        // `sessions` has no natural retention of its own — unlike `entries` it
+        // isn't a rolling window, it's an `.entry().or_default()` on every
+        // session id ever seen. A session that goes idle (transcript file
+        // untouched) would sit there forever. Bound it on the same RETAIN_MS
+        // clock `entries` uses: a session with no user/assistant record in the
+        // window is not going to show up in a `5h` row anyway.
+        self.sessions.retain(|_, s| s.last_user_ms.max(s.last_assistant_ms) >= cutoff);
+        // `offsets` grows one entry per transcript file ever seen. Projects get
+        // renamed/deleted (or transcripts pruned by Claude Code itself); a file
+        // that's gone from disk is never going to be tailed again, so drop it
+        // rather than carry a dead PathBuf key for the process lifetime.
+        self.offsets.retain(|p, _| alive.contains(p));
     }
 
     pub fn sessions(&self) -> &BTreeMap<String, SessionTotals> {
@@ -623,21 +644,40 @@ impl Scanner {
     }
 }
 
-/// Read `[off, len)` of `path`, truncated to the last complete line. The tail
-/// of a transcript can be a half-written record; dropping it (and not counting
-/// its bytes) means the next tick re-reads it whole.
-fn read_from(path: &Path, off: u64, len: u64) -> Option<(String, u64)> {
-    use std::io::{Read, Seek, SeekFrom};
+/// Stream `[off, len)` of `path` line-by-line, calling `on_line` for each
+/// complete (non-empty) line, and return how many bytes were consumed — or
+/// `None` if nothing but a half-written trailing line is available yet (left
+/// alone for the next tick to pick up whole).
+///
+/// This replaces a version that read the whole `[off, len)` range into one
+/// `Vec<u8>` and then `.into_owned()`'d a `String` copy of it — on a fresh
+/// daemon (`off` always 0) that is up to 2x a single transcript's size held
+/// live at once, same principle as the `jq -rs` (slurp) -> `jq -rn 'reduce
+/// inputs'` (streaming) rewrite the status line itself went through. A
+/// `BufReader` here keeps only one line resident at a time.
+fn stream_tail(path: &Path, off: u64, len: u64, mut on_line: impl FnMut(&str)) -> Option<u64> {
+    use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
     let mut f = fs::File::open(path).ok()?;
     f.seek(SeekFrom::Start(off)).ok()?;
-    let mut buf = vec![0u8; (len - off) as usize];
-    f.read_exact(&mut buf).ok()?;
-    let end = match buf.iter().rposition(|&b| b == b'\n') {
-        Some(i) => i + 1,
-        None => return None, // no complete line yet — leave the offset alone
-    };
-    buf.truncate(end);
-    Some((String::from_utf8_lossy(&buf).into_owned(), end as u64))
+    let mut reader = BufReader::new(f.take(len - off));
+    let mut consumed: u64 = 0;
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        let n = reader.read_until(b'\n', &mut buf).ok()? as u64;
+        if n == 0 {
+            break; // hit `len` (Take's limit) with nothing left to read
+        }
+        if buf.last() != Some(&b'\n') {
+            break; // half-written trailing line — don't count it, don't emit it
+        }
+        consumed += n;
+        let line = String::from_utf8_lossy(&buf[..buf.len() - 1]);
+        if !line.trim().is_empty() {
+            on_line(&line);
+        }
+    }
+    (consumed > 0).then_some(consumed)
 }
 
 fn collect_jsonl_paths(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -995,5 +1035,80 @@ mod tests {
         assert_eq!(strip_ansi(r"abc\033["), "abc");
         // A lone backslash is not an escape.
         assert_eq!(strip_ansi(r"a\b"), r"a\b");
+    }
+
+    /// `sessions`, `offsets` and `entries` must all stay bounded, not grow one
+    /// slot per session/file/entry ever observed. Feed the scanner many more
+    /// stale sessions than the retention window would ever keep live, plus a
+    /// couple of files that get deleted out from under it, and assert the
+    /// stale/dead entries are actually evicted rather than merely "small so
+    /// far" — a smoke test wouldn't catch a collection that grows but just
+    /// hasn't grown enough yet to notice.
+    #[test]
+    fn stale_sessions_and_dead_files_are_evicted_not_accumulated() {
+        let dir = std::env::temp_dir().join(format!("my-ai-scan-bound-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let rec = |ts: &str, id: &str| {
+            format!(
+                r#"{{"type":"assistant","timestamp":"{ts}","requestId":"{id}","message":{{"id":"{id}","model":"claude-opus-5","usage":{{"input_tokens":1,"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}}}}"#
+            )
+        };
+
+        // 300 sessions, each in its own file, all timestamped 30h in the past —
+        // well outside RETAIN_MS (24h). Far more than any real 5h-window use
+        // could ever keep alive, which is the point: boundedness must come from
+        // eviction, not from the test happening to stay under some threshold.
+        const STALE: usize = 300;
+        let stale_ts = "2026-07-01T00:00:00.000Z"; // fixed, ancient relative to now_ms()
+        for i in 0..STALE {
+            let sid = format!("stale-{i}");
+            fs::write(dir.join(format!("{sid}.jsonl")), format!("{}\n", rec(stale_ts, &sid))).unwrap();
+        }
+        // Two live sessions, timestamped now — must survive eviction.
+        let live_rec = |id: &str| {
+            format!(
+                r#"{{"type":"assistant","timestamp":"{}","requestId":"{id}","message":{{"id":"{id}","model":"claude-opus-5","usage":{{"input_tokens":1,"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}}}}"#,
+                chrono_now_rfc3339()
+            )
+        };
+        fs::write(dir.join("live-a.jsonl"), format!("{}\n", live_rec("live-a"))).unwrap();
+        fs::write(dir.join("live-b.jsonl"), format!("{}\n", live_rec("live-b"))).unwrap();
+
+        let pricing = Pricing::load();
+        let mut s = Scanner::new();
+        s.tick(&dir, &pricing);
+
+        // `entries` (RETAIN_MS window): only the 2 live entries remain.
+        assert_eq!(s.entries.len(), 2, "stale entries were not pruned by RETAIN_MS");
+        // `sessions`: the 300 stale sessions must be evicted, not retained
+        // forever just because they were once seen.
+        assert_eq!(s.sessions.len(), 2, "stale sessions were not evicted: {}", s.sessions.len());
+        assert!(s.sessions.contains_key("live-a") && s.sessions.contains_key("live-b"));
+
+        // Now delete every file (stale AND live) and tick again: `offsets` must
+        // drop the dead paths rather than carry ~302 dead PathBuf keys forever.
+        fs::remove_dir_all(&dir).unwrap();
+        fs::create_dir_all(&dir).unwrap();
+        s.tick(&dir, &pricing);
+        assert_eq!(s.offsets.len(), 0, "offsets kept entries for files no longer on disk");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    // Minimal RFC3339-now for the boundedness test above — avoids pulling in
+    // chrono (this crate hand-parses RFC3339 already; see parse_rfc3339_ms /
+    // civil_from_days) just to format the current instant for one test.
+    fn chrono_now_rfc3339() -> String {
+        let ms = now_ms();
+        let days = ms.div_euclid(86_400_000);
+        let rem = ms.rem_euclid(86_400_000);
+        let (y, m, d) = civil_from_days(days);
+        let hour = rem / 3_600_000;
+        let min = (rem % 3_600_000) / 60_000;
+        let sec = (rem % 60_000) / 1000;
+        let millis = rem % 1000;
+        format!("{y:04}-{m:02}-{d:02}T{hour:02}:{min:02}:{sec:02}.{millis:03}Z")
     }
 }
