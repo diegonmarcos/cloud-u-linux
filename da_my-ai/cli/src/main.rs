@@ -18,7 +18,7 @@ const HELP: &str = include_str!("../../src/data/help.txt");
 /// PATH; there is no standalone `my-ai-dash` command). `--help`/`-h`/no-args/
 /// `dash` all land here; `my-ai h`/`help` prints the static HELP text instead.
 fn launch_dash() -> Result<()> {
-    let bin = core::store_dir().join("my-ai-dash");
+    let bin = core::dash_bin();
     if !bin.exists() {
         eprintln!("my-ai-dash not installed yet — run `my-ai h` for static help, or `./build.sh fetch` to install the TUI.");
         print!("{HELP}");
@@ -107,9 +107,10 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
         }
     }
 
-    // Face: local | remote | goose (default remote). `goose` = plain bypass.
+    // Face: local | remote | goose | remote-tmux_<vm> (default remote). `goose` = plain bypass.
     let mut mode = "remote";
     let mut plain = false;
+    let mut remote_tmux_vm: Option<String> = None;
     match args.first().map(|s| s.as_str()) {
         Some("goose") => {
             mode = "goose";
@@ -117,11 +118,19 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
             args.remove(0);
         }
         Some("local") => {
+            if core::is_termux() {
+                anyhow::bail!("local face requires docker (not available in Termux) — use remote or remote-tmux_<vm> instead");
+            }
             mode = "local";
             args.remove(0);
         }
         Some("remote") => {
             mode = "remote";
+            args.remove(0);
+        }
+        Some(s) if s.starts_with("remote-tmux_") => {
+            remote_tmux_vm = Some(s["remote-tmux_".len()..].to_string());
+            mode = "remote-tmux";
             args.remove(0);
         }
         _ => {}
@@ -206,6 +215,12 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
         }
     }
     let rest: Vec<String> = args[i.min(args.len())..].to_vec();
+
+    // remote-tmux_<vm>: one SSH connection to the VM, tmux handles multiplexing there.
+    if let Some(ref vm) = remote_tmux_vm {
+        let fresh = rest.first().map(|s| s.as_str()) == Some("fresh");
+        return do_remote_tmux(vm, ep, fresh);
+    }
 
     // Resume tabs (from a restore fan-out) attach to the running proxy; they must
     // never manage the container.
@@ -911,6 +926,47 @@ fn usage_statusline() -> Result<()> {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+/// SSH to a VM and multiplex sessions inside a tmux session there.
+/// One TCP connection from the phone; tmux protects sessions from network drops.
+/// Default (fresh=false): attach to existing "my-ai" session (or create with agent in window 0).
+/// Fresh (fresh=true):    attach or create, then always open a new window with the agent.
+fn do_remote_tmux(vm: &str, ep: &core::Endpoints, fresh: bool) -> Result<()> {
+    let ip = ep
+        .mesh
+        .get(vm)
+        .ok_or_else(|| anyhow!("remote-tmux: unknown VM '{vm}' (known: {:?})", ep.mesh.keys().collect::<Vec<_>>()))?;
+
+    let session = "my-ai";
+
+    // Collect current plugin env to forward into the remote agent command.
+    let mut env_parts: Vec<String> = Vec::new();
+    for var in &["PONYTAIL_DEFAULT_MODE", "RTK_ENABLED", "CAVEMAN_ENABLED"] {
+        if let Ok(v) = std::env::var(var) {
+            env_parts.push(format!("{var}={v}"));
+        }
+    }
+    let env_prefix = if env_parts.is_empty() {
+        String::new()
+    } else {
+        format!("{} ", env_parts.join(" "))
+    };
+
+    let agent_cmd = format!("{env_prefix}claude-superset remote ponytail full");
+
+    // \\; in Rust = \; in the string = literal ; passed to tmux by the remote shell,
+    // where tmux uses ; as a multi-command separator.
+    let ssh_cmd = if fresh {
+        format!("tmux new-session -A -s {session} \\; new-window '{agent_cmd}'")
+    } else {
+        format!("tmux new-session -A -s {session} '{agent_cmd}'")
+    };
+
+    eprintln!("[my-ai] remote-tmux → {ip} (1 SSH, tmux session '{session}')");
+    let err = Command::new("ssh").args(["-t", ip, &ssh_cmd]).exec();
+    Err(anyhow!("ssh exec: {err}"))
+}
+
 fn probe(url: &str) -> bool {
     let u = format!("{}/readyz", url.trim_end_matches('/'));
     ureq::get(&u)

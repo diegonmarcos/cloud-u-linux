@@ -1,5 +1,6 @@
 //! Dashboard interactive state + row/focus model + launch-arg composer.
 //! Port of the `st` / buildRows / selArgs logic in claude-superset-tui.mjs.
+use std::collections::BTreeMap;
 
 pub const PONY: [&str; 3] = ["lite", "full", "ultra"];
 pub const PRESETS_COUNT: [u64; 6] = [1, 3, 5, 10, 20, 50];
@@ -57,7 +58,7 @@ fn row(kind: &'static str, grp: &'static str, val: &'static str, key: &'static s
     Row { kind, grp, val, key, label: label.into(), note }
 }
 
-pub fn build_rows(st: &St) -> Vec<Row> {
+pub fn build_rows(st: &St, mesh: &BTreeMap<String, String>, is_termux: bool) -> Vec<Row> {
     let mut r = Vec::new();
     r.push(row("sec", "", "", "", "AGENT", ""));
     r.push(row("radio", "agent", "goose", "", "goose", "Block goose → my-ai-api (OpenRouter)"));
@@ -67,8 +68,16 @@ pub fn build_rows(st: &St) -> Vec<Row> {
     r.push(row("radio", "agent", "claude-superset", "", "claude-superset", "full wrapper: face select + Headroom/RTK/Caveman/Ponytail + restore (default)"));
     r.push(row("sec", "", "", "", "FACE", ""));
     r.push(row("radio", "face", "remote", "", "remote", "WG compression proxy"));
-    r.push(row("radio", "face", "local", "", "local", "container on THIS host"));
+    if !is_termux {
+        r.push(row("radio", "face", "local", "", "local", "container on THIS host"));
+    }
     r.push(row("radio", "face", "claude", "", "claude", "plain claude (restore still works)"));
+    for vm in mesh.keys() {
+        let face = format!("remote-tmux_{vm}");
+        // ponytail: Box::leak — one small string per VM, lives for process lifetime (TUI session)
+        let val: &'static str = Box::leak(face.clone().into_boxed_str());
+        r.push(Row { kind: "radio", grp: "face", val, key: "", label: face, note: "1 SSH conn, tmux session on the VM" });
+    }
     if st.face != "claude" {
         r.push(row("sec", "", "", "", "PLUGINS", ""));
         r.push(row("check", "", "", "headroom", "Headroom", "compression proxy"));

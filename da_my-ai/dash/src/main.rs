@@ -77,7 +77,7 @@ fn run_loop(
     loop {
         let snapshot = data.lock().unwrap().clone();
         let refreshing = snapshot.values().any(|s| matches!(s, Slot::Pending));
-        let rows = build_rows(st);
+        let rows = build_rows(st, &ep.mesh, my_ai_core::is_termux());
         let fl = focusable(&rows);
         if *focus >= fl.len() {
             *focus = fl.len().saturating_sub(1);
@@ -97,6 +97,7 @@ fn run_loop(
             last_launch: last_launch.as_str(),
             focus: *focus,
             num_buf: num_buf.as_str(),
+            is_termux: my_ai_core::is_termux(),
         };
         let lines = render::build_lines(&cx);
         term.draw(|f| f.render_widget(Paragraph::new(lines), f.area()))?;

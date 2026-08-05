@@ -26,6 +26,12 @@
           imagemagick jq gh
         ];
       in {
+        # Pre-built binary fetched from GH Release — consumed by bb_flakes_termux
+        # and ba_flakes_desktop as a flake input instead of the bash script stubs.
+        # Hashes are maintained in nix/hashes.json; updated by ship-my-ai-app.yml.
+        packages.default = pkgs.callPackage ./nix/my-ai.nix {};
+        packages.my-ai   = pkgs.callPackage ./nix/my-ai.nix {};
+
         devShells.default = pkgs.mkShell {
           inherit buildInputs nativeBuildInputs;
           # Set as derivation env vars (not shellHook) so they are ALWAYS present

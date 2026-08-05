@@ -63,6 +63,7 @@ pub struct Ctx<'a> {
     pub last_launch: &'a str,
     pub focus: usize,
     pub num_buf: &'a str,
+    pub is_termux: bool,
 }
 
 impl<'a> Ctx<'a> {
@@ -171,7 +172,7 @@ fn progress(cx: &Ctx) -> (usize, usize) {
 }
 
 fn page_compose(cx: &Ctx, l: &mut Vec<Line<'static>>) {
-    let rows = build_rows(cx.st);
+    let rows = build_rows(cx.st, cx.mesh, cx.is_termux);
     let fl = focusable(&rows);
     let foc_idx = fl.get(cx.focus.min(fl.len().saturating_sub(1))).copied().unwrap_or(usize::MAX);
     l.push(Line::from(""));

@@ -3,7 +3,7 @@ Headroom compression proxy (universal: KDE / TTY / Termux).
 
 USAGE
   my-ai [--agent claude-superset|goose|claude-cli|claude-cli-ghost|hermes]
-        [remote|local|goose] [headroom on|off] [rtk on|off] [caveman on|off]
+        [remote|remote-tmux_<vm>|local|goose] [headroom on|off] [rtk on|off] [caveman on|off]
         [claude <profile>] [ponytail on|off|lite|full|ultra]
         [fresh|sync|restore …|restore-hours …|list …|list-hours …] [agent args…]
 
@@ -58,6 +58,13 @@ AGENTS (--agent, default: claude-superset / MY_AI_AGENT env)
 FACES (default: remote)
   remote                Route the agent through the my-ai-api router on
                         oci-apps over WireGuard.
+  remote-tmux_<vm>      SSH to <vm> once (e.g. remote-tmux_oci-apps) and run
+                        the agent inside a tmux session there. Phone RAM: ~5-15MB
+                        vs ~50-75MB for 5 raw SSH tabs. Network drops don't kill
+                        your sessions — tmux keeps them alive on the server.
+                        Default: attach to existing "my-ai" session (reconnect),
+                        or create it with the agent in window 0 if new.
+                        fresh: always open a new agent window in the session.
   local                 Run the same my-ai-api container on THIS host (docker
                         compose, 127.0.0.1 only). `local down`/`local stop`
                         tears it down. (Desktop only — no docker in Termux/TTY.)
@@ -146,3 +153,5 @@ EXAMPLES
   my-ai --model openai/gpt-4o           # override model (OpenRouter slug)
   my-ai goose                           # bypass face — plain exec, no my-ai-api hop
   my-ai sync                            # push local sessions to the hub now
+  my-ai remote-tmux_oci-apps           # SSH once to oci-apps, attach/create tmux session
+  my-ai remote-tmux_oci-apps fresh     # + open a new claude window in that session

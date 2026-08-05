@@ -313,6 +313,21 @@ impl Hub {
     }
 }
 
+/// True when running inside Termux on Android. Used to skip desktop-only
+/// features: local docker face, systray, usage daemon auto-start.
+pub fn is_termux() -> bool {
+    std::env::var_os("TERMUX_VERSION").is_some()
+}
+
+/// Path to the my-ai-dash internal binary. Override with MY_AI_DASH_BIN for
+/// nix packaging (the wrapper sets it to $out/libexec/my-ai/my-ai-dash).
+pub fn dash_bin() -> PathBuf {
+    if let Ok(p) = std::env::var("MY_AI_DASH_BIN") {
+        return PathBuf::from(p);
+    }
+    store_dir().join("my-ai-dash")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
