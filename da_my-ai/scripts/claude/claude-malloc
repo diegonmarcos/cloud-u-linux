@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Max-isolation: tight malloc arenas + dedicated TMPDIR.
+export MALLOC_ARENA_MAX=2
+export CLAUDE_TMP="$HOME/tmp/claude"
+mkdir -p "$CLAUDE_TMP"
+export TMPDIR="$CLAUDE_TMP"
+
+# Sweep stale orphans from previous Android-OOM-killed sessions
+# before launching, so node/MCP zombies don't pile up over time.
+command -v claude-orphan-sweep >/dev/null 2>&1 \
+  && claude-orphan-sweep >/dev/null 2>&1 || true
+
+_bin="$HOME/.nix-profile/bin/claude"
+if [ -x "$_bin" ]; then
+  # Process supervision (countermeasure to lmkd / parent-shell exits):
+  #   setpriv --pdeathsig TERM : if THIS wrapper dies (any signal
+  #                              except SIGKILL), the kernel SIGTERMs
+  #                              claude directly. Claude runs in the
+  #                              foreground terminal pgroup (no -g, no
+  #                              &, no trap), so the interactive TUI
+  #                              keeps the controlling terminal —
+  #                              Ctrl-C, job control, etc.
+  #
+  # tini is DELIBERATELY NOT USED here. nix-on-droid runs the whole
+  # rootfs under proot, whose ptrace/seccomp layer returns ENOSYS for
+  # tini's reaper waitpid(-1, WNOHANG). tini treats any wait errno
+  # other than ECHILD as fatal, so it aborts with
+  #   [FATAL tini] Error while waiting for pids: 'Function not implemented'
+  # and takes claude down with it (the crash this fix resolves).
+  # proot is already the subreaper, so zombie reaping is handled;
+  # stray claude/node/MCP children that outlive a hard kill are mopped
+  # up by the claude-orphan-sweep call above (PPID=1 + session-group
+  # kill) at the next launch.
+  #
+  # SIGKILL on this wrapper is uncatchable (Android lmkd hard kill);
+  # the orphan-sweep likewise covers those survivors.
+  setpriv --pdeathsig TERM -- "$_bin" "$@"
+  _rc=$?
+  case "$_rc" in
+    126|127|137|139) ;;   # exec/signal failure → rescue
+    *) exit "$_rc" ;;
+  esac
+fi
+echo "[claude-malloc] native exec failed — trying rescue chain..." >&2
+exec sh "$HOME/git/tools/5-infos/claude-rescue/claude-rescue.sh" "$@"

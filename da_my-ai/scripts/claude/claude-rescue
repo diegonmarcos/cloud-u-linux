@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# claude-rescue: delegates to tools/5-infos/claude-rescue/
+# (12-fallback chain). The wrapper is intentionally
+# thin so the rescue logic has ONE home.
+exec sh "$HOME/git/tools/5-infos/claude-rescue/claude-rescue.sh" "$@"

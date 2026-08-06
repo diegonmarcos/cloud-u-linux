@@ -1,5 +1,6 @@
 { lib, stdenv, fetchurl, autoPatchelfHook, makeWrapper, gcc-unwrapped, libgcc
-, jq, curl, tmux, git, coreutils, findutils, nodejs, bash }:
+, jq, curl, tmux, git, coreutils, findutils, nodejs, bash
+, util-linux, gawk }:
 let
   hashes  = builtins.fromJSON (builtins.readFile ./hashes.json);
   archMap = { "x86_64-linux" = "x86_64"; "aarch64-linux" = "aarch64"; };
@@ -48,6 +49,31 @@ stdenv.mkDerivation {
     patchShebangs $out/share/claude-superset/claude-superset
     makeWrapper $out/share/claude-superset/claude-superset $out/bin/claude-superset \
       --prefix PATH : ${lib.makeBinPath [ jq nodejs curl tmux git coreutils findutils bash ]}
+
+    # claude wrappers — pure scripts from da_my-ai/scripts/claude/
+    for _name in claude-malloc claude-termux claude-orphan-sweep claude-rescue; do
+      mkdir -p $out/share/claude
+      cp ${../scripts/claude}/$_name $out/share/claude/$_name
+      chmod +x $out/share/claude/$_name
+      patchShebangs $out/share/claude/$_name
+    done
+    for _name in claude-malloc claude-termux claude-orphan-sweep; do
+      makeWrapper $out/share/claude/$_name $out/bin/$_name \
+        --prefix PATH : ${lib.makeBinPath [ util-linux gawk coreutils findutils bash ]}
+    done
+    # claude-rescue just delegates — no extra tools needed on PATH
+    makeWrapper $out/share/claude/claude-rescue $out/bin/claude-rescue \
+      --prefix PATH : ${lib.makeBinPath [ bash ]}
+
+    # goose wrappers — pure scripts from da_my-ai/scripts/goose/
+    for _name in goose-malloc goose-orphan-sweep; do
+      mkdir -p $out/share/goose
+      cp ${../scripts/goose}/$_name $out/share/goose/$_name
+      chmod +x $out/share/goose/$_name
+      patchShebangs $out/share/goose/$_name
+      makeWrapper $out/share/goose/$_name $out/bin/$_name \
+        --prefix PATH : ${lib.makeBinPath [ util-linux gawk coreutils findutils bash jq ]}
+    done
   '';
 
   meta = with lib; {
