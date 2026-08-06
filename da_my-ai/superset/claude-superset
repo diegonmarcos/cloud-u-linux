@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+# claude-superset — route the local Claude Code CLI through the
+# claude-superset-api Headroom proxy (token compression) over WireGuard, with a
+# health-check fallback to direct Anthropic when the proxy is unreachable.
+#
+# PURE SCRIPT — single source of truth lives here in da_my-ai/superset/. It is
+# NOT inlined in any flake: the flakes (termux + desktop) install this file +
+# its sibling assets onto PATH and rely on the runtime PATH for its tools
+# (node, curl, jq, tmux, konsole, git, iputils, coreutils). Config is read at
+# runtime from claude-superset.json (next to this script, or $CAS_CONFIG).
+#
+#   claude-superset [remote] …   → route through the oci-apps proxy over WG (default)
+#   claude-superset local  …     → run the same container on THIS host (desktop only)
+#   claude-superset claude …     → bypass everything, plain claude
+#   claude-superset --help|-h|h|t|--tui → interactive status dashboard (TUI)
+#   claude-superset help         → static usage + live status text
+#   claude-superset setup …      → install `claude` without npm
+#   claude-superset sync | restore[-hours] | list[-hours] … → session engine
+set -u
+
+# ── Resolve our own dir (assets + default config live beside us) ──────────────
+HERE="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
+CAS_CONFIG="${CAS_CONFIG:-$HERE/claude-superset.json}"
+
+# Runtime platform detection — Termux/Android has no docker/konsole; remote-only.
+is_termux() { case "${PREFIX:-}" in *com.termux*) return 0 ;; esac; return 1; }
+
+# Launcher: Termux hands off to claude-malloc (Android OOM/supervision wrapper)
+# when present; every other platform runs plain `claude`.
+LAUNCH="claude"
+if is_termux && command -v claude-malloc >/dev/null 2>&1; then LAUNCH="claude-malloc"; fi
+
+# Config reader: `cfg .a.b.c` → value or empty. Missing keys degrade gracefully
+# (e.g. termux config has no `.local`, so the local face is simply unavailable).
+cfg() { jq -r "$1 // empty" "$CAS_CONFIG" 2>/dev/null; }
+cfg_json() { jq -c "$1 // {}" "$CAS_CONFIG" 2>/dev/null; }
+
+# ── Flags: mode / model / effort (parsed first) ───────────────────────────────
+CC_EXTRA_FLAGS=""
+while :; do
+  case "${1:-}" in
+    --auto)        CC_EXTRA_FLAGS="--dangerously-skip-permissions"; shift ;;
+    --plan)        shift ;;
+    --interactive) shift ;;
+    --model)       shift; [ -n "${1:-}" ] && export ANTHROPIC_MODEL="$1"; shift ;;
+    --effort)      shift; export CLAUDE_EFFORT="${1:-high}"; shift ;;
+    *) break ;;
+  esac
+done
+
+# ── help: plain-text usage + live status ──────────────────────────────────────
+if [ "${1:-}" = "help" ]; then
+  cat "$HERE/claude-superset-help.txt"
+  printf '\nMODEL ACTIVE\n  ANTHROPIC_MODEL=%s  CLAUDE_EFFORT=%s\n' \
+    "${ANTHROPIC_MODEL:-<unset>}" "${CLAUDE_EFFORT:-<unset>}"
+  printf '\nAGENTS\n'
+  _ag_dir="$HOME/.claude/agents"; _ag_c=0
+  if [ -d "$_ag_dir" ]; then
+    for _f in "$_ag_dir"/*.md; do
+      [ -f "$_f" ] || continue
+      _n="${_f##*/}"; _n="${_n%.md}"
+      case "$_n" in README*|readme*) continue ;; esac
+      printf '  %s\n' "$_n"; _ag_c=$((_ag_c+1))
+    done
+    [ "$_ag_c" -eq 0 ] && printf '  (none configured)\n'
+  else
+    printf '  (no agents dir)\n'
+  fi
+  printf '\nSTATUS LINE\n  '
+  bash "$HOME/.claude/claude-plugins-status.sh" --format plain 2>/dev/null || true
+  printf '\n'
+  _pdir="$HOME/.claude/projects"
+  printf '\nSESSIONS (last 48h — unique projects)\n'
+  if [ -d "$_pdir" ]; then
+    find "$_pdir" -name "*.jsonl" -mmin -2880 2>/dev/null \
+      | while IFS= read -r _f; do _dir="${_f%/*}"; printf '%s\n' "${_dir##*/}"; done \
+      | sort -u | head -20 \
+      | while IFS= read -r _n; do printf '  %s\n' "$_n"; done
+  fi
+  printf '\nSESSIONS (last 5 by time)\n'
+  if [ -d "$_pdir" ]; then
+    _files=$(find "$_pdir" -name "*.jsonl" 2>/dev/null | tr '\n' ' ')
+    if [ -n "$_files" ]; then
+      ls -t $_files 2>/dev/null | head -5 \
+        | while IFS= read -r _f; do
+            _id="${_f##*/}"; _id="${_id%.jsonl}"
+            _dir="${_f%/*}"; _proj="${_dir##*/}"
+            printf '  %s  %s\n' "$_id" "$_proj"
+          done
+    fi
+  fi
+  exit 0
+fi
+
+# ── setup: ensure `claude` is installed WITHOUT npm ───────────────────────────
+if [ "${1:-}" = "setup" ]; then
+  shift
+  export CAS_SETUP_URL="$(cfg .setup.installer_url)";  [ -n "$CAS_SETUP_URL" ]  || export CAS_SETUP_URL="https://claude.ai/install.sh"
+  export CAS_SETUP_CHANNEL="$(cfg .setup.channel)";    [ -n "$CAS_SETUP_CHANNEL" ] || export CAS_SETUP_CHANNEL="stable"
+  export CAS_SETUP_PKG="$(cfg .setup.rescue_pkg)";     [ -n "$CAS_SETUP_PKG" ]  || export CAS_SETUP_PKG="@anthropic-ai/claude-code"
+  exec bash "$HERE/claude-superset-setup.sh" "$@"
+fi
+
+# ── --help / -h / h / t / --tui: interactive status dashboard (TUI) ───────────
+case "${1:-}" in
+  --help|-h|h|t|--tui)
+    export CAS_PROXY="$(cfg .proxy)" CAS_API="$(cfg .api)" CAS_OLLAMA="$(cfg .ollama)"
+    export CAS_DASHBOARD="$(cfg .dashboard)" CAS_LAUNCH="$LAUNCH"
+    export CAS_COMPRESS="${CAS_DASHBOARD%/dashboard}"
+    export CAS_ANTHROPIC="$(cfg .anthropic)"
+    export CAS_MCP_C3_INFRA="$(cfg .mcps.c3_infra)"
+    export CAS_MCP_C3_SVC="$(cfg .mcps.c3_svc)"
+    export CAS_MCP_MATTERMOST="$(cfg .mcps.mattermost)"
+    export CAS_MCP_MAIL="$(cfg .mcps.mail)"
+    export CAS_MCP_GWS="$(cfg .mcps.gws)"
+    export CAS_MCP_GP="$(cfg .mcps.gp)"
+    export CAS_PLUGINS_SCRIPT="$HOME/.claude/claude-plugins-status.sh"
+    export CAS_MESH="$(cfg_json .mesh)"
+    export CAS_PUBLIC="$(cfg_json .public)"
+    export CAS_IMAGE="$(cfg .image)"
+    export CAS_PING="ping" CAS_DF="df" CAS_GIT="git"
+    exec node "$HERE/claude-superset-tui.mjs"
+    ;;
+esac
+
+# ── Face: local | remote | claude (default: remote) ──────────────────────────
+# `local` runs the same container on THIS host (desktop only); `remote` is the
+# oci-apps proxy over WG; `claude` bypasses everything and runs a plain claude.
+MODE="remote"; PLAIN=0
+case "${1:-}" in
+  claude)  MODE="claude"; PLAIN=1; shift ;;
+  local)
+    if is_termux; then
+      echo "[claude-superset] local face requires docker (not available in Termux) — use remote" >&2
+      exit 2
+    fi
+    MODE="local"; shift ;;
+  remote)  MODE="remote"; shift ;;
+esac
+export CLAUDE_SUPERSET_MODE="$MODE"
+
+# ── Plugin toggles (any order, before the session action) ─────────────────────
+[ "$MODE" = "claude" ] || { export RTK_ENABLED=1 CAVEMAN_ENABLED=1; }
+HEADROOM="on"
+while :; do
+  case "${1:-}" in
+    headroom) HEADROOM="${2:-on}"; shift 2 || shift ;;
+    ponytail)
+      case "${2:-on}" in
+        on)              export PONYTAIL_DEFAULT_MODE="full" ;;
+        off)             export PONYTAIL_DEFAULT_MODE="off" ;;
+        lite|full|ultra) export PONYTAIL_DEFAULT_MODE="${2}" ;;
+        *) echo "[claude-superset] ponytail: on|off|lite|full|ultra" >&2; exit 2 ;;
+      esac
+      shift 2 || shift ;;
+    rtk)     case "${2:-on}" in on) export RTK_ENABLED=1 ;; off) unset RTK_ENABLED ;; *) echo "[claude-superset] rtk: on|off" >&2; exit 2 ;; esac; shift 2 || shift ;;
+    caveman) case "${2:-on}" in on) export CAVEMAN_ENABLED=1 ;; off) unset CAVEMAN_ENABLED ;; *) echo "[claude-superset] caveman: on|off" >&2; exit 2 ;; esac; shift 2 || shift ;;
+    *) break ;;
+  esac
+done
+
+# ── Session engine env (data-driven; device id = hostname unless config overrides) ─
+export CAS_API="$(cfg .api)" CAS_SELF="claude-superset" CAS_FACE="$MODE"
+# ${VAR-default}: a pre-set (even empty) CAS_KONSOLE/CAS_TMUX survives — lets
+# tests disable tab-spawning without the wrapper clobbering it.
+if ! is_termux; then export CAS_KONSOLE="${CAS_KONSOLE-konsole}"; fi
+export CAS_TMUX="${CAS_TMUX-tmux}"
+_dev="$(cfg .device)"; [ -n "$_dev" ] && export CAS_DEVICE="$_dev"
+CAS_DEVICE="${CAS_DEVICE:-}"   # empty => engine falls back to os.hostname()
+ENGINE=(node "$HERE/claude-superset-restore.mjs")
+KEEP="$(cfg .sync_keep)"; [ -n "$KEEP" ] || KEEP=20
+
+# Resume tabs (spawned by a restore fan-out) carry `--resume` — attach, don't manage.
+case " $* " in *" --resume "*) IS_RESUME=1 ;; *) IS_RESUME=0 ;; esac
+
+# ── local face: one docker container on THIS host (desktop only) ──────────────
+if [ "$MODE" = "local" ] && [ "$HEADROOM" = "on" ] && [ "$IS_RESUME" = "0" ]; then
+  _lc="${TMPDIR:-/tmp}/claude-superset-local.yaml"
+  _cn="$(cfg .local.container_name)"
+  # Render the compose file from config (was a nix writeText; now runtime jq).
+  jq -n --argjson lo "$(cfg_json .local)" '{
+    services: { "claude-superset-api": {
+      image: $lo.image, container_name: $lo.container_name, pull_policy: "always", init: true,
+      ports: [
+        "127.0.0.1:\($lo.ports.app):\($lo.ports.app)",
+        "127.0.0.1:\($lo.ports.ollama):\($lo.ports.ollama)",
+        "127.0.0.1:\($lo.ports.headroom):\($lo.ports.headroom)",
+        "127.0.0.1:\($lo.ports.proxy):\($lo.ports.proxy)"
+      ],
+      environment: {
+        HOME: "/home/appuser",
+        BRIDGE_PORT: ($lo.ports.app|tostring), BRIDGE_BIND: "0.0.0.0",
+        BRIDGE_OLLAMA_PORT: ($lo.ports.ollama|tostring), BRIDGE_OLLAMA_BIND: "0.0.0.0",
+        BRIDGE_DEFAULT_MODEL: $lo.model, BRIDGE_MAX_CONCURRENCY: ($lo.max_concurrency|tostring),
+        BRIDGE_CALL_TIMEOUT_MS: ($lo.call_timeout_ms|tostring),
+        HEADROOM_ENABLED: "1", HEADROOM_HOST: "0.0.0.0", HEADROOM_BIND: "0.0.0.0",
+        HEADROOM_PORT: ($lo.ports.headroom|tostring), HEADROOM_SAVINGS_PROFILE: $lo.savings_profile,
+        HEADROOM_MIN_TOKENS: ($lo.min_tokens_to_compress|tostring),
+        HEADROOM_PROXY_ENABLED: "1", HEADROOM_PROXY_PORT: ($lo.ports.proxy|tostring),
+        HEADROOM_PROXY_BIND: "0.0.0.0", HEADROOM_PROXY_BACKEND: "anthropic",
+        HEADROOM_WORKSPACE_DIR: "/home/appuser/.headroom"
+      },
+      volumes: [ "\($lo.volume):/home/appuser" ]
+    }},
+    volumes: { ($lo.volume): { name: $lo.volume } }
+  }' > "$_lc"
+  case "${1:-}" in
+    down|stop) exec docker compose -p claude-superset-local -f "$_lc" down ;;
+  esac
+  echo "[claude-superset] local — ensuring the ONE container is up ($_cn)" >&2
+  docker compose -p claude-superset-local -f "$_lc" up -d || {
+    echo "[claude-superset] docker compose up failed — is dockerd running?" >&2; exit 1; }
+  for _ in $(seq 1 45); do
+    curl -fsS --max-time 2 "$(cfg .local.proxy)/readyz" >/dev/null 2>&1 && break
+    sleep 2
+  done
+fi
+
+# ── Session action (default: fresh = passthrough to claude) ───────────────────
+case "${1:-}" in
+  sync) exec "${ENGINE[@]}" sync "$CAS_DEVICE" "$KEEP" ;;
+  restore|restore-hours|list|list-hours)
+    verb="$1"; sel=count; case "$verb" in *-hours) sel=hours ;; esac; shift
+    devsel="local"; a="${1:-}"; b="${2:-}"
+    case "$a" in
+      ""|*[!0-9]*) devsel="$a"; val="$b" ;;
+      *)           val="$a" ;;
+    esac
+    case "$val" in ""|*[!0-9]*)
+      echo "[claude-superset] $verb needs a positive number" >&2; exit 2 ;;
+    esac
+    case "$verb" in
+      list*) exec "${ENGINE[@]}" list "$devsel" "$sel" "$val" ;;
+      *)     exec "${ENGINE[@]}" launch "$MODE" "$devsel" "$sel" "$val" ;;
+    esac ;;
+  fresh) shift ;;
+esac
+
+# ── Plain `claude` face: no proxy, no plugins, no auto-sync ────────────────────
+if [ "$PLAIN" = "1" ]; then
+  exec "$LAUNCH" $CC_EXTRA_FLAGS "$@"
+fi
+
+# ── Wire ANTHROPIC_BASE_URL by a SHORT probe ──────────────────────────────────
+if [ "$HEADROOM" = "on" ]; then
+  if [ "$MODE" = "local" ]; then URL="$(cfg .local.proxy)"; else URL="${CLAUDE_SUPERSET_URL:-$(cfg .proxy)}"; fi
+  if curl -fsS --max-time 2 "${URL%/}/readyz" >/dev/null 2>&1; then
+    export ANTHROPIC_BASE_URL="$URL"
+    echo "[claude-superset] via $MODE proxy → $URL (Headroom compression ON)" >&2
+  else
+    [ "$MODE" = "local" ] && echo "[claude-superset] local proxy not ready — first run: docker exec -it $(cfg .local.container_name) claude" >&2
+    echo "[claude-superset] proxy unreachable ($URL) — direct to Anthropic, no compression" >&2
+  fi
+else
+  echo "[claude-superset] Headroom OFF — direct to Anthropic (no compression)" >&2
+fi
+
+# ── Auto-sync recent sessions to the hub (best-effort, background) ────────────
+# Skipped for resume tabs and read-only queries (they fork a full Node engine
+# for nothing — the hot-path cost that took the desktop down on 2026-07-31).
+case " $* " in
+  *" --resume "*|*" usage "*|*" --version "*|*" -v "*|*" --help "*|*" -h "*) : ;;
+  *) ( "${ENGINE[@]}" sync "$CAS_DEVICE" "$KEEP" >/dev/null 2>&1 & ) ;;
+esac
+
+# ── Plugin status line (data-driven; mirrors the statusline PL[...] segment) ───
+pl=$(bash "$HOME/.claude/claude-plugins-status.sh" --format plain 2>/dev/null)
+[ -n "$pl" ] && echo "[claude-superset] plugins: $pl" >&2
+exec "$LAUNCH" $CC_EXTRA_FLAGS "$@"
