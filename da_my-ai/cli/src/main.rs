@@ -42,10 +42,10 @@ fn main() -> Result<()> {
             println!("my-ai {}", core::version());
             Ok(())
         }
-        // --help / -h / dash → the live TUI dashboard. It's an internal
-        // engine (my-ai-dash in $STORE, never on PATH) execed from here —
-        // there is no standalone `my-ai-dash` command.
-        Some("--help" | "-h" | "dash") => launch_dash(),
+        // --help / -h / dash / t / --tui → the live TUI dashboard. It's an
+        // internal engine (my-ai-dash in $STORE, never on PATH) execed from
+        // here — there is no standalone `my-ai-dash` command.
+        Some("--help" | "-h" | "dash" | "t" | "--tui") => launch_dash(),
         // No args → straight into a fresh claude-superset session, remote
         // face, every plugin explicitly on. The dashboard is opt-in via
         // --help/-h/dash, not the default.
