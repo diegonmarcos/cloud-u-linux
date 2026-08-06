@@ -1,4 +1,5 @@
-{ lib, stdenv, fetchurl, autoPatchelfHook, makeWrapper, gcc-unwrapped, libgcc }:
+{ lib, stdenv, fetchurl, autoPatchelfHook, makeWrapper, gcc-unwrapped, libgcc
+, jq, curl, tmux, git, coreutils, findutils, nodejs, bash }:
 let
   hashes  = builtins.fromJSON (builtins.readFile ./hashes.json);
   archMap = { "x86_64-linux" = "x86_64"; "aarch64-linux" = "aarch64"; };
@@ -36,6 +37,17 @@ stdenv.mkDerivation {
     # MY_AI_DASH_BIN lets core::dash_bin() find the internal binary from the nix store.
     wrapProgram $out/bin/my-ai \
       --set MY_AI_DASH_BIN "$out/libexec/my-ai/my-ai-dash"
+
+    # claude-superset is an ASSET OF my-ai — the pure wrapper script + its engine
+    # assets ship INSIDE this package (single source: da_my-ai/superset/). my-ai
+    # is responsible for installing it; the flakes only pull my-ai, never the
+    # wrapper. The Rust binary's default agent finds it via `which claude-superset`.
+    mkdir -p $out/share/claude-superset
+    cp -r ${../superset}/. $out/share/claude-superset/
+    chmod +x $out/share/claude-superset/claude-superset
+    patchShebangs $out/share/claude-superset/claude-superset
+    makeWrapper $out/share/claude-superset/claude-superset $out/bin/claude-superset \
+      --prefix PATH : ${lib.makeBinPath [ jq nodejs curl tmux git coreutils findutils bash ]}
   '';
 
   meta = with lib; {
