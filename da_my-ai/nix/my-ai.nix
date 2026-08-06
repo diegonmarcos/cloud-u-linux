@@ -39,11 +39,11 @@ stdenv.mkDerivation {
       --set MY_AI_DASH_BIN "$out/libexec/my-ai/my-ai-dash"
 
     # claude-superset is an ASSET OF my-ai — the pure wrapper script + its engine
-    # assets ship INSIDE this package (single source: da_my-ai/superset/). my-ai
+    # assets ship INSIDE this package (single source: da_my-ai/scripts/claude-superset/). my-ai
     # is responsible for installing it; the flakes only pull my-ai, never the
     # wrapper. The Rust binary's default agent finds it via `which claude-superset`.
     mkdir -p $out/share/claude-superset
-    cp -r ${../superset}/. $out/share/claude-superset/
+    cp -r ${../scripts/claude-superset}/. $out/share/claude-superset/
     chmod +x $out/share/claude-superset/claude-superset
     patchShebangs $out/share/claude-superset/claude-superset
     makeWrapper $out/share/claude-superset/claude-superset $out/bin/claude-superset \
