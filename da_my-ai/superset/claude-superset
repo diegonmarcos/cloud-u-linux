@@ -104,22 +104,10 @@ fi
 # ── --help / -h / h / t / --tui: interactive status dashboard (TUI) ───────────
 case "${1:-}" in
   --help|-h|h|t|--tui)
-    export CAS_PROXY="$(cfg .proxy)" CAS_API="$(cfg .api)" CAS_OLLAMA="$(cfg .ollama)"
-    export CAS_DASHBOARD="$(cfg .dashboard)" CAS_LAUNCH="$LAUNCH"
-    export CAS_COMPRESS="${CAS_DASHBOARD%/dashboard}"
-    export CAS_ANTHROPIC="$(cfg .anthropic)"
-    export CAS_MCP_C3_INFRA="$(cfg .mcps.c3_infra)"
-    export CAS_MCP_C3_SVC="$(cfg .mcps.c3_svc)"
-    export CAS_MCP_MATTERMOST="$(cfg .mcps.mattermost)"
-    export CAS_MCP_MAIL="$(cfg .mcps.mail)"
-    export CAS_MCP_GWS="$(cfg .mcps.gws)"
-    export CAS_MCP_GP="$(cfg .mcps.gp)"
-    export CAS_PLUGINS_SCRIPT="$HOME/.claude/claude-plugins-status.sh"
-    export CAS_MESH="$(cfg_json .mesh)"
-    export CAS_PUBLIC="$(cfg_json .public)"
-    export CAS_IMAGE="$(cfg .image)"
-    export CAS_PING="ping" CAS_DF="df" CAS_GIT="git"
-    exec node "$HERE/claude-superset-tui.mjs"
+    # The TUI is my-ai-dash (the Rust dashboard) — the ONE my-ai TUI, same as
+    # `my-ai --help`. Hand off to it; my-ai owns the dash + its config. (The old
+    # node claude-superset-tui.mjs is retired.)
+    exec my-ai dash
     ;;
 esac
 

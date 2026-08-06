@@ -133,6 +133,14 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
             mode = "remote-tmux";
             args.remove(0);
         }
+        // Friendly alias: remote-<vm>-tmux  (e.g. `my-ai remote-oci-apps-tmux`)
+        // == remote-tmux_<vm> — a persistent claude session in tmux on that VM.
+        Some(s) if s.starts_with("remote-") && s.ends_with("-tmux") => {
+            let vm = &s["remote-".len()..s.len() - "-tmux".len()];
+            remote_tmux_vm = Some(vm.to_string());
+            mode = "remote-tmux";
+            args.remove(0);
+        }
         _ => {}
     }
     std::env::set_var("CLAUDE_SUPERSET_MODE", mode);
