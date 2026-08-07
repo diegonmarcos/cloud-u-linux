@@ -143,6 +143,10 @@ OTHER
                                    former live TTY dashboard, is discontinued.)
   help                             Same as --help.
   --version                        Print version.
+  ant [args…]                     Thin passthrough — exec the `ant` CLI
+                                   (Anthropic Developer Platform) verbatim.
+  gemini [args…]                  Thin passthrough — exec the `gemini` CLI.
+  antigravity [args…]             Thin passthrough — exec Google Antigravity.
 
 EXAMPLES
   my-ai                                 # help text

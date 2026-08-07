@@ -28,6 +28,12 @@ fn launch_dash() -> Result<()> {
     Err(anyhow!("failed to launch my-ai-dash: {err}"))
 }
 
+/// Exec `bin` (must be on PATH) with `passthrough_args`, replacing this process.
+fn exec_passthrough(bin: &str, passthrough_args: &[String]) -> Result<()> {
+    let err = Command::new(bin).args(passthrough_args).exec();
+    Err(anyhow!("failed to launch {bin}: {err}"))
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     // Install embedded scripts to ~/.local/bin on every launch (content-compare
@@ -66,6 +72,13 @@ fn main() -> Result<()> {
             println!("synced {} scripts to ~/.local/bin", written.len());
             Ok(())
         }
+        // Thin hub passthroughs — exec the underlying tool's own binary with
+        // the rest of argv. No wrapping/health/dashboard integration, just a
+        // single entry point so `my-ai <tool>` works for every AI tool on the
+        // desktop instead of only Claude.
+        Some("ant") => exec_passthrough("ant", &args[1..]),
+        Some("gemini") => exec_passthrough("gemini", &args[1..]),
+        Some("antigravity") => exec_passthrough("antigravity", &args[1..]),
         _ => route(args, &ep),
     }
 }
