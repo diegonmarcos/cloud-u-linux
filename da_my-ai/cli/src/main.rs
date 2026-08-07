@@ -30,6 +30,9 @@ fn launch_dash() -> Result<()> {
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // Install embedded scripts to ~/.local/bin on every launch (content-compare
+    // skip makes this a cheap no-op when nothing changed).
+    let _ = core::scripts_assets::install_to_local_bin();
     let ep = core::endpoints()?;
 
     match args.first().map(|s| s.as_str()) {
@@ -58,6 +61,11 @@ fn main() -> Result<()> {
         ),
         Some("setup") => setup(&args[1..], &ep),
         Some("usage") => usage_cmd(&args[1..]),
+        Some("sync-scripts") => {
+            let written = core::scripts_assets::install_to_local_bin()?;
+            println!("synced {} scripts to ~/.local/bin", written.len());
+            Ok(())
+        }
         _ => route(args, &ep),
     }
 }
