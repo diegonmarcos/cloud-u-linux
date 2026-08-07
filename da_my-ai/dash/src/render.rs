@@ -1,5 +1,7 @@
 //! Render — build the single-screen dashboard as styled ratatui Lines.
-//! Faithful port of the mjs render()/pageCompose/pageNetwork/pageSessions/pageSystem.
+//! Faithful port of the mjs render()/pageCompose/pageNetwork/pageSessions/pageSystem,
+//! regrouped into 4 mega-sections (COMPOSE/SESSIONS/AI STACK/MESH) via mega_head(),
+//! each still built from the original sub-section page_* helpers.
 use crate::collect::{parse_df, parse_repo, Slot, REPOS};
 use crate::offline::{ago, Cfg, Hook, Mcp, Plugin, Sessions};
 use crate::state::{build_rows, focusable, sel_args, St, PONY};
@@ -105,6 +107,24 @@ fn sec_head(title: &str, right: &str) -> Line<'static> {
     Line::from(spans)
 }
 
+/// Mega-section banner: bolder/wider than sec_head, marks top-level groups
+/// (COMPOSE / SESSIONS / AI STACK / MESH) so hierarchy reads as
+/// mega-section > sub-section (sec_head) > row.
+fn mega_head(title: &str) -> Vec<Line<'static>> {
+    let bar = "#".repeat(W + 2);
+    let label = format!(" {title} ");
+    let fill = (W + 2).saturating_sub(label.len());
+    let lead = fill / 2;
+    let trail = fill - lead;
+    let mid = format!("{}{}{}", "#".repeat(lead), label, "#".repeat(trail));
+    vec![
+        Line::from(""),
+        Line::from(boldc(format!("  {bar}"), Yellow)),
+        Line::from(boldc(format!("  {mid}"), Yellow)),
+        Line::from(boldc(format!("  {bar}"), Yellow)),
+    ]
+}
+
 pub fn build_lines(cx: &Ctx) -> Vec<Line<'static>> {
     let mut l: Vec<Line> = Vec::new();
     let bar = format!("  +{}+", "-".repeat(W));
@@ -130,10 +150,17 @@ pub fn build_lines(cx: &Ctx) -> Vec<Line<'static>> {
         l.push(Line::from(sp(format!("   [launched in new window: {}]  TUI stays open", cx.last_launch), Green)));
     }
 
+    l.extend(mega_head("COMPOSE"));
     page_compose(cx, &mut l);
-    page_network(cx, &mut l);
+
+    l.extend(mega_head("SESSIONS"));
     page_sessions(cx, &mut l);
-    page_system(cx, &mut l);
+
+    l.extend(mega_head("AI STACK"));
+    page_stack(cx, &mut l);
+
+    l.extend(mega_head("MESH"));
+    page_mesh(cx, &mut l);
 
     l.push(Line::from(""));
     l.push(sec_head("KEYS + LEGEND", ""));
@@ -243,6 +270,24 @@ fn page_compose(cx: &Ctx, l: &mut Vec<Line<'static>>) {
         }
         l.push(Line::from(spans));
     }
+
+    // MCP servers (kept in COMPOSE so they're visible with the rest of the composer)
+    l.push(Line::from(""));
+    l.push(sec_head(&format!("MCP servers ({})", cx.mcps.len()), ""));
+    for chunk in cx.mcps.chunks(3) {
+        let mut row = vec![raw("   ")];
+        for m in chunk {
+            row.push(sp(pad_e(&m.name, 15), Magenta));
+            row.push(raw(" "));
+            if m.kind == "http" {
+                row.extend(dm(cx.get(&format!("mcp:{}", m.name)), cx.spinch()));
+            } else {
+                row.extend(dm(&Slot::Stdio, cx.spinch()));
+            }
+            row.push(raw("  "));
+        }
+        l.push(Line::from(row));
+    }
 }
 
 fn state_val<'b>(st: &'b St, grp: &str) -> &'b str {
@@ -269,7 +314,9 @@ fn kv(k: &str, mut spans: Vec<Span<'static>>) -> Line<'static> {
     Line::from(out)
 }
 
-fn page_network(cx: &Ctx, l: &mut Vec<Line<'static>>) {
+/// AI STACK mega-section: FACES/services health, container, tokens,
+/// image-arches, plus HOST/GIT REPOS/CLAUDE (local-machine-stack details).
+fn page_stack(cx: &Ctx, l: &mut Vec<Line<'static>>) {
     l.push(Line::from(""));
     l.push(sec_head("FACES", ""));
     let labels = ["proxy", "api", "ollama", "compr", "direct"];
@@ -343,6 +390,13 @@ fn page_network(cx: &Ctx, l: &mut Vec<Line<'static>>) {
     }
     l.push(kv("image", img));
 
+    // HOST (disk/mem/load) + GIT REPOS + CLAUDE (model/plugins/skills/hooks)
+    page_system(cx, l);
+}
+
+/// MESH mega-section: wireguard peers + public edge — everything about the
+/// peer/network mesh.
+fn page_mesh(cx: &Ctx, l: &mut Vec<Line<'static>>) {
     // mesh
     l.push(Line::from(""));
     l.push(sec_head("MESH (wg)", ""));
@@ -364,24 +418,6 @@ fn page_network(cx: &Ctx, l: &mut Vec<Line<'static>>) {
         pubs.push(raw("  "));
     }
     l.push(Line::from(pubs));
-
-    // MCP servers
-    l.push(Line::from(""));
-    l.push(sec_head(&format!("MCP servers ({})", cx.mcps.len()), ""));
-    for chunk in cx.mcps.chunks(3) {
-        let mut row = vec![raw("   ")];
-        for m in chunk {
-            row.push(sp(pad_e(&m.name, 15), Magenta));
-            row.push(raw(" "));
-            if m.kind == "http" {
-                row.extend(dm(cx.get(&format!("mcp:{}", m.name)), cx.spinch()));
-            } else {
-                row.extend(dm(&Slot::Stdio, cx.spinch()));
-            }
-            row.push(raw("  "));
-        }
-        l.push(Line::from(row));
-    }
 }
 
 fn page_sessions(cx: &Ctx, l: &mut Vec<Line<'static>>) {
