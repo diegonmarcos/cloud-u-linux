@@ -100,7 +100,14 @@ fn run_loop(
             is_termux: my_ai_core::is_termux(),
         };
         let lines = render::build_lines(&cx);
-        term.draw(|f| f.render_widget(Paragraph::new(lines), f.area()))?;
+        let total = lines.len();
+        let ratio = if fl.is_empty() { 0.0 } else { *focus as f32 / fl.len().max(1) as f32 };
+        term.draw(|f| {
+            let area = f.area();
+            let max_scroll = total.saturating_sub(area.height as usize) as f32;
+            let scroll = (ratio * max_scroll).round() as u16;
+            f.render_widget(Paragraph::new(lines).scroll((scroll, 0)), area)
+        })?;
 
         if event::poll(Duration::from_millis(120))? {
             if let Event::Key(k) = event::read()? {
