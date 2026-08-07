@@ -236,7 +236,11 @@ ExecStart=$wrapper
 # stayed down). Restart unconditionally so a stale snapshot is never silent.
 Restart=always
 RestartSec=30
-MemoryMax=128M
+# No MemoryMax (2026-08-07): a static byte cap kills this unit's own normal
+# subprocesses (ld-linux, jq, JITWorker at startup — not a leak) the moment
+# they legitimately cross it, regardless of real system pressure. Stays in
+# the default slice, governed only by PSI (freeze-guard / systemd-oomd) like
+# every other unit. Nice/CPUWeight still keep it low-priority under contention.
 Nice=19
 CPUWeight=20
 
