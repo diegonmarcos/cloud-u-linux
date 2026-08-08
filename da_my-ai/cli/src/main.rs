@@ -960,28 +960,49 @@ fn usage_statusline() -> Result<()> {
 /// One TCP connection from the phone; tmux protects sessions from network drops.
 /// Default (fresh=false): attach to existing "my-ai" session (or create with agent in window 0).
 /// Fresh (fresh=true):    attach or create, then always open a new window with the agent.
+///
+/// Target design: SSH to `<login>@<ip>` (the VM's host login user, e.g. `ubuntu` on
+/// oci-apps — NOT the phone's local `nix-on-droid`, which is why a bare-IP ssh got
+/// `nix-on-droid@10.0.0.6: Permission denied`), then run `claude` (Anthropic Claude
+/// Code CLI) INSIDE the my-ai-api container via `docker exec`. The container carries
+/// the Anthropic shim on localhost:3217 (ANTHROPIC_BASE_URL), so `claude` there needs
+/// no real Anthropic key — my-ai-api injects the upstream (OpenRouter / claude-superset-api).
+/// tmux runs on the host and wraps the `docker exec`, so a network drop never kills the
+/// container-side session.
 fn do_remote_tmux(vm: &str, ep: &core::Endpoints, fresh: bool) -> Result<()> {
     let ip = ep
         .mesh
         .get(vm)
         .ok_or_else(|| anyhow!("remote-tmux: unknown VM '{vm}' (known: {:?})", ep.mesh.keys().collect::<Vec<_>>()))?;
 
-    let session = "my-ai";
+    // The host login user for the target VM. mesh values are bare IPs, and neither
+    // ~/.ssh/config's `Host *` nor the bare IP carry a `User`, so ssh would otherwise
+    // default to the phone's local login ($USER = nix-on-droid) and fail publickey.
+    // Overridable via MY_AI_REMOTE_USER for VMs whose login isn't `ubuntu`.
+    let user = std::env::var("MY_AI_REMOTE_USER").unwrap_or_else(|_| "ubuntu".into());
+    let target = format!("{user}@{ip}");
 
-    // Collect current plugin env to forward into the remote agent command.
-    let mut env_parts: Vec<String> = Vec::new();
+    let session = "my-ai";
+    let container = std::env::var("MY_AI_REMOTE_CONTAINER").unwrap_or_else(|_| "my-ai-api".into());
+
+    // Collect current plugin env to forward into the remote agent command. These are
+    // consumed by my-ai-api's plugin pipeline (RTK/Caveman/Ponytail), passed through
+    // `docker exec -e`.
+    let mut exec_env: Vec<String> = Vec::new();
     for var in &["PONYTAIL_DEFAULT_MODE", "RTK_ENABLED", "CAVEMAN_ENABLED"] {
         if let Ok(v) = std::env::var(var) {
-            env_parts.push(format!("{var}={v}"));
+            exec_env.push("-e".into());
+            exec_env.push(format!("{var}={v}"));
         }
     }
-    let env_prefix = if env_parts.is_empty() {
-        String::new()
-    } else {
-        format!("{} ", env_parts.join(" "))
-    };
+    let env_flags = if exec_env.is_empty() { String::new() } else { format!("{} ", exec_env.join(" ")) };
 
-    let agent_cmd = format!("{env_prefix}claude-superset remote ponytail full");
+    // `claude` inside the container, pointed at the container-local my-ai-api Anthropic
+    // shim (127.0.0.1:3217). ANTHROPIC_API_KEY is a placeholder — my-ai-api injects the
+    // real upstream key, so no Anthropic credential ever leaves the box.
+    let agent_cmd = format!(
+        "docker exec -it {env_flags}-e ANTHROPIC_BASE_URL=http://127.0.0.1:3217 -e ANTHROPIC_API_KEY=my-ai-api-injects-key {container} claude"
+    );
 
     // \\; in Rust = \; in the string = literal ; passed to tmux by the remote shell,
     // where tmux uses ; as a multi-command separator.
@@ -991,8 +1012,8 @@ fn do_remote_tmux(vm: &str, ep: &core::Endpoints, fresh: bool) -> Result<()> {
         format!("tmux new-session -A -s {session} '{agent_cmd}'")
     };
 
-    eprintln!("[my-ai] remote-tmux → {ip} (1 SSH, tmux session '{session}')");
-    let err = Command::new("ssh").args(["-t", ip, &ssh_cmd]).exec();
+    eprintln!("[my-ai] remote-tmux → {target} (1 SSH, tmux session '{session}', docker exec {container} claude)");
+    let err = Command::new("ssh").args(["-t", &target, &ssh_cmd]).exec();
     Err(anyhow!("ssh exec: {err}"))
 }
 
