@@ -1,0 +1,1103 @@
+{
+  "_comment": "SINGLE SOURCE OF TRUTH for this plugin's hook rules. Consumed by hook-engine.sh (enforce), gen-hooks-doc.sh (docs), test-hooks.sh (fixtures). NEVER hand-edit deployed copy — edit here + build.sh switch. Owns the core engine: SessionStart principles injects + PreToolUse:Bash guard (allow|deny|warn) + PostToolUse nudge. Three independent axes: level (allow|deny|warn|nudge|inject) = reinforcement strength; category = protected asset/invariant; reversibility = blast radius.",
+  "meta": {
+    "version": 2,
+    "nudge_threshold": 5,
+    "nudge_count_tools": [
+      "Read",
+      "Grep",
+      "Glob"
+    ],
+    "nudge_reset_prefix": "mcp__cloud-cgc"
+  },
+  "rules": [
+    {
+      "id": "inject-principles-compact-sessionstart",
+      "level": "inject",
+      "category": "read-only",
+      "tiers": [
+        "SessionStart"
+      ],
+      "fragment": "hooks-fragments/principles-compact.md",
+      "reason": "Compact SessionStart summary (~950B) replacing 7 separate long fragments (~9.5KB combined: reference/core-principles/fire-rules/stack-philosophy/pre-action-checklist/forbidden-patterns/dead-shell-recovery). Originals left intact on disk for on-demand reading; see 'Full reference' line in the compact fragment."
+    },
+    {
+      "id": "allow-npm-readonly",
+      "level": "allow",
+      "category": "read-only",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "^npm\\s+(root|config|prefix|ls|list|ll|la|view|info|show|search|help|explain|doctor|audit|outdated|fund|pack|ping|whoami|token|profile|access|bugs|repo|completion|explore|-v|--version|-h|--help)(\\s|$)",
+        "ci": false
+      },
+      "reason": "read-only npm introspection — always allowed",
+      "tests": {
+        "allow": [
+          "npm ls",
+          "npm view react",
+          "npm --version"
+        ],
+        "deny": []
+      }
+    },
+    {
+      "id": "allow-nix-readonly",
+      "level": "allow",
+      "category": "read-only",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "^nix\\s+(eval|show-derivation|path-info|log|why-depends|store|hash|doctor|registry|--version|--help|-h)(\\s|$)",
+        "ci": false
+      },
+      "reason": "read-only nix introspection — always allowed",
+      "tests": {
+        "allow": [
+          "nix eval .#foo",
+          "nix store gc --version"
+        ],
+        "deny": []
+      }
+    },
+    {
+      "id": "allow-nix-flake-readonly",
+      "level": "allow",
+      "category": "read-only",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "^nix\\s+flake\\s+(show|check|info|metadata)(\\s|$)",
+        "ci": false
+      },
+      "reason": "read-only nix flake introspection — always allowed",
+      "tests": {
+        "allow": [
+          "nix flake show",
+          "nix flake metadata"
+        ],
+        "deny": []
+      }
+    },
+    {
+      "id": "allow-nix-profile-list",
+      "level": "allow",
+      "category": "read-only",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "^nix\\s+profile\\s+list(\\s|$)",
+        "ci": false
+      },
+      "reason": "read-only nix profile list — always allowed",
+      "tests": {
+        "allow": [
+          "nix profile list"
+        ],
+        "deny": []
+      }
+    },
+    {
+      "id": "allow-docker-readonly",
+      "level": "allow",
+      "category": "read-only",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "^docker\\s+(ps|images|logs|inspect|top|stats|diff|port|version|info|events|history|search|-v|--version|-h|--help)(\\s|$)",
+        "ci": false
+      },
+      "reason": "read-only docker introspection — always allowed",
+      "tests": {
+        "allow": [
+          "docker ps",
+          "docker logs web",
+          "docker images"
+        ],
+        "deny": []
+      }
+    },
+    {
+      "id": "allow-docker-net-vol-readonly",
+      "level": "allow",
+      "category": "read-only",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "^docker\\s+(network|volume)\\s+(ls|inspect)(\\s|$)",
+        "ci": false
+      },
+      "reason": "read-only docker network/volume introspection — always allowed",
+      "tests": {
+        "allow": [
+          "docker volume ls",
+          "docker network inspect bridge"
+        ],
+        "deny": []
+      }
+    },
+    {
+      "id": "allow-pip-readonly",
+      "level": "allow",
+      "category": "read-only",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "^pip3?\\s+(list|show|freeze|check|config|--version|-V|--help|-h)(\\s|$)",
+        "ci": false
+      },
+      "reason": "read-only pip introspection — always allowed",
+      "tests": {
+        "allow": [
+          "pip list",
+          "pip3 show flask"
+        ],
+        "deny": []
+      }
+    },
+    {
+      "id": "git-add-force",
+      "level": "deny",
+      "category": "secrets",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|[;&|])\\s*git\\s+(-[Cc]\\s+\\S+\\s+)?add\\b[^;&|]*\\s(-[A-Za-z]*f\\b|--force\\b)",
+        "ci": false
+      },
+      "reason": "git add -f/--force bypasses gitignore — can stage decrypted secrets, private keys, sensitive/",
+      "alt": "plain 'git add <path>'; if gitignore blocks a file, FIX gitignore — never force",
+      "tests": {
+        "deny": [
+          "git add -f x.env",
+          "git add x.env -f",
+          "git add -A -f",
+          "git add -Af",
+          "git add --force x",
+          "git -C /repo add secret.env -f"
+        ],
+        "allow": [
+          "git add normalfile.txt",
+          "git add -A",
+          "git commit -m 'note: never git add -f here'"
+        ]
+      }
+    },
+    {
+      "id": "docker-compose-down-volumes",
+      "level": "deny",
+      "category": "data-loss",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "docker(-compose|\\s+compose)\\b[^;&|]*\\sdown\\b[^;&|]*\\s(-v\\b|--volumes\\b)",
+        "ci": true
+      },
+      "reason": "docker compose down -v wipes ALL named volumes (databases, state) — irreversible",
+      "alt": "docker compose down (without -v) or build.sh compose",
+      "tests": {
+        "deny": [
+          "docker compose down -v",
+          "docker compose -f x.yml down -v",
+          "docker compose -p proj down --volumes"
+        ],
+        "allow": [
+          "docker compose down",
+          "docker compose up -d"
+        ]
+      }
+    },
+    {
+      "id": "docker-volume-rm-prune",
+      "level": "deny",
+      "category": "data-loss",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "docker\\s+volume\\s+(rm|prune)\\b",
+        "ci": true
+      },
+      "reason": "docker volume rm/prune permanently deletes named volumes — irreversible",
+      "alt": "manual cleanup only after explicit user confirmation; inspect with 'docker volume ls' first",
+      "tests": {
+        "deny": [
+          "docker volume rm db",
+          "docker volume prune"
+        ],
+        "allow": [
+          "docker volume ls",
+          "docker volume inspect db"
+        ]
+      }
+    },
+    {
+      "id": "docker-system-prune-volumes",
+      "level": "deny",
+      "category": "data-loss",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "docker\\s+system\\s+prune\\s+.*--volumes\\b",
+        "ci": true
+      },
+      "reason": "docker system prune --volumes wipes everything including databases",
+      "alt": "targeted cleanup; inspect with 'docker system df' first",
+      "tests": {
+        "deny": [
+          "docker system prune -a --volumes"
+        ],
+        "allow": [
+          "docker system df",
+          "docker system prune"
+        ]
+      }
+    },
+    {
+      "id": "nix-env-install",
+      "level": "deny",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*nix-env\\s+(-i|--install|-iA)\\b",
+        "ci": false
+      },
+      "reason": "nix-env -i is imperative package management — pollutes the user profile and breaks declarative reproducibility",
+      "alt": "add the package to flake.nix (home.packages or environment.systemPackages) + build.sh switch",
+      "tests": {
+        "deny": [
+          "nix-env -i hello",
+          "nix-env -iA nixpkgs.hello",
+          "nix-env --install ripgrep"
+        ],
+        "allow": [
+          "nix-env -q",
+          "nix-env --list-generations"
+        ]
+      }
+    },
+    {
+      "id": "secret-write-redirect",
+      "level": "deny",
+      "category": "secrets",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|[;&|])\\s*(echo|printf)\\b[^|;]*>>?\\s*[^|;]*((^|/)\\.env([[:space:];|&]|$)|(^|/)\\.secrets([[:space:];|&]|$)|secrets\\.ya?ml([[:space:];|&]|$))",
+        "ci": false
+      },
+      "reason": "imperative write (echo/printf >) to .secrets/.env/secrets.yaml bypasses sops",
+      "alt": "edit src/secrets.yaml + build.sh secrets",
+      "tests": {
+        "deny": [
+          "echo FOO=bar > app/.env",
+          "printf 'x' >> dist/.secrets"
+        ],
+        "allow": [
+          "echo hello > notes.txt",
+          "echo FOO=bar > .secrets-hash"
+        ]
+      }
+    },
+    {
+      "id": "secret-tee",
+      "level": "deny",
+      "category": "secrets",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|[;&|])\\s*tee\\b[^|;]*\\s+[^|;]*((^|/)\\.env([[:space:];|&]|$)|(^|/)\\.secrets([[:space:];|&]|$)|secrets\\.ya?ml([[:space:];|&]|$))",
+        "ci": false
+      },
+      "reason": "tee writing to .secrets/.env/secrets.yaml bypasses sops",
+      "alt": "edit src/secrets.yaml + build.sh secrets",
+      "tests": {
+        "deny": [
+          "tee app/.env",
+          "tee -a dist/.secrets"
+        ],
+        "allow": [
+          "tee notes.txt",
+          "tee .secrets-hash-new"
+        ]
+      }
+    },
+    {
+      "id": "git-add-secret",
+      "level": "deny",
+      "category": "secrets",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|[;&|])\\s*git\\s+(-[Cc]\\s+\\S+\\s+)?add\\b[^;|&]*(\\.(env|key|pem|age|p12|pfx)([[:space:];|&]|$)|(^|/)\\.secrets([[:space:];|&]|$)|secrets\\.ya?ml([[:space:];|&]|$))",
+        "ci": false
+      },
+      "handler": "check_git_add_secret",
+      "reason": "git add of secret-shaped path — public-repo exposure risk",
+      "alt": "sops-encrypt secrets.yaml first; raw key material lives only in ~/git/vault",
+      "tests": {
+        "deny": [],
+        "allow": [
+          "git add config.pem",
+          "git add .env",
+          "git add -A",
+          "git add src/main.rs"
+        ]
+      }
+    },
+    {
+      "id": "warn-rsync-delete",
+      "level": "warn",
+      "category": "data-loss",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "rsync\\s+.*--delete",
+        "ci": true
+      },
+      "reason": "rsync --delete removes remote files not in source",
+      "alt": "build.sh deploy",
+      "tests": {
+        "deny": [
+          "rsync -a --delete src/ host:/dst/"
+        ],
+        "allow": [
+          "rsync -a src/ host:/dst/"
+        ]
+      }
+    },
+    {
+      "id": "warn-npm-install",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*npm\\s+install(\\s|$)",
+        "ci": false
+      },
+      "reason": "npm install bypasses declarative build system",
+      "alt": "build.sh deps (or build.sh build)",
+      "tests": {
+        "deny": [
+          "npm install lodash"
+        ],
+        "allow": [
+          "npm ls"
+        ]
+      }
+    },
+    {
+      "id": "warn-npm-ci",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*npm\\s+ci(\\s|$)",
+        "ci": false
+      },
+      "reason": "npm ci bypasses declarative build system",
+      "alt": "build.sh deps",
+      "tests": {
+        "deny": [
+          "npm ci"
+        ],
+        "allow": [
+          "npm config get"
+        ]
+      }
+    },
+    {
+      "id": "warn-npm-run",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*npm\\s+run(\\s|$)",
+        "ci": false
+      },
+      "reason": "npm run bypasses declarative build system",
+      "alt": "build.sh build (or build.sh dev)",
+      "tests": {
+        "deny": [
+          "npm run build"
+        ],
+        "allow": [
+          "npm root"
+        ]
+      }
+    },
+    {
+      "id": "warn-npm-start",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*npm\\s+start(\\s|$)",
+        "ci": false
+      },
+      "reason": "npm start bypasses declarative build system",
+      "alt": "build.sh dev",
+      "tests": {
+        "deny": [
+          "npm start"
+        ],
+        "allow": [
+          "npm prefix"
+        ]
+      }
+    },
+    {
+      "id": "warn-npm-test",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*npm\\s+test(\\s|$)",
+        "ci": false
+      },
+      "reason": "npm test bypasses declarative build system",
+      "alt": "build.sh test",
+      "tests": {
+        "deny": [
+          "npm test"
+        ],
+        "allow": [
+          "npm audit"
+        ]
+      }
+    },
+    {
+      "id": "warn-npx",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*npx\\s",
+        "ci": false
+      },
+      "reason": "npx bypasses declarative build system",
+      "alt": "build.sh build (esbuild/tsc/etc are run by the engine)",
+      "tests": {
+        "deny": [
+          "npx tsc"
+        ],
+        "allow": [
+          "echo npx-is-fine-as-text"
+        ]
+      }
+    },
+    {
+      "id": "warn-yarn",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*yarn(\\s|$)",
+        "ci": false
+      },
+      "reason": "yarn bypasses declarative build system",
+      "alt": "build.sh deps/build",
+      "tests": {
+        "deny": [
+          "yarn install"
+        ],
+        "allow": [
+          "echo yarnball"
+        ]
+      }
+    },
+    {
+      "id": "warn-pnpm",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*pnpm(\\s|$)",
+        "ci": false
+      },
+      "reason": "pnpm bypasses declarative build system",
+      "alt": "build.sh deps/build",
+      "tests": {
+        "deny": [
+          "pnpm i"
+        ],
+        "allow": [
+          "echo pnpmx"
+        ]
+      }
+    },
+    {
+      "id": "warn-nix-build",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*nix\\s+build(\\s|$)",
+        "ci": false
+      },
+      "reason": "raw nix build bypasses the engine",
+      "alt": "build.sh build",
+      "tests": {
+        "deny": [
+          "nix build .#pkg"
+        ],
+        "allow": [
+          "nix eval .#x"
+        ]
+      }
+    },
+    {
+      "id": "warn-nix-run",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*nix\\s+run(\\s|$)",
+        "ci": false
+      },
+      "reason": "raw nix run bypasses the engine",
+      "alt": "build.sh build",
+      "tests": {
+        "deny": [
+          "nix run .#x"
+        ],
+        "allow": [
+          "nix log"
+        ]
+      }
+    },
+    {
+      "id": "warn-nixos-rebuild",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*nixos-rebuild(\\s|$)",
+        "ci": false
+      },
+      "reason": "raw nixos-rebuild bypasses the engine",
+      "alt": "build.sh switch",
+      "tests": {
+        "deny": [
+          "nixos-rebuild switch"
+        ],
+        "allow": [
+          "echo nixos-rebuild-word"
+        ]
+      }
+    },
+    {
+      "id": "warn-home-manager",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*home-manager\\s+(switch|build)(\\s|$)",
+        "ci": false
+      },
+      "reason": "raw home-manager switch/build bypasses the engine",
+      "alt": "build.sh switch",
+      "tests": {
+        "deny": [
+          "home-manager switch"
+        ],
+        "allow": [
+          "home-manager generations"
+        ]
+      }
+    },
+    {
+      "id": "warn-apt-install",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*apt(-get)?\\s+install(\\s|$)",
+        "ci": false
+      },
+      "reason": "apt install is imperative — Nix flake declarative only",
+      "alt": "add to flake.nix",
+      "tests": {
+        "deny": [
+          "apt install vim",
+          "apt-get install vim"
+        ],
+        "allow": [
+          "apt list"
+        ]
+      }
+    },
+    {
+      "id": "warn-brew-install",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*brew\\s+install(\\s|$)",
+        "ci": false
+      },
+      "reason": "brew install is imperative",
+      "alt": "add to flake.nix",
+      "tests": {
+        "deny": [
+          "brew install jq"
+        ],
+        "allow": [
+          "brew list"
+        ]
+      }
+    },
+    {
+      "id": "warn-pip-install",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*pip3?\\s+install(\\s|$)",
+        "ci": false
+      },
+      "reason": "pip install is imperative",
+      "alt": "add to flake.nix or use nix-shell",
+      "tests": {
+        "deny": [
+          "pip install flask",
+          "pip3 install flask"
+        ],
+        "allow": [
+          "pip list"
+        ]
+      }
+    },
+    {
+      "id": "warn-conda-install",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*conda\\s+install(\\s|$)",
+        "ci": false
+      },
+      "reason": "conda install is imperative",
+      "alt": "add to flake.nix",
+      "tests": {
+        "deny": [
+          "conda install numpy"
+        ],
+        "allow": [
+          "conda list"
+        ]
+      }
+    },
+    {
+      "id": "warn-docker-compose-up",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*docker\\s+compose\\s+up(\\s|$)",
+        "ci": false
+      },
+      "reason": "docker compose up bypasses declarative deploy",
+      "alt": "build.sh compose (or build.sh ship)",
+      "tests": {
+        "deny": [
+          "docker compose up -d"
+        ],
+        "allow": [
+          "docker compose config"
+        ]
+      }
+    },
+    {
+      "id": "warn-docker-compose-up-legacy",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*docker-compose\\s+up(\\s|$)",
+        "ci": false
+      },
+      "reason": "docker-compose up bypasses declarative deploy",
+      "alt": "build.sh compose",
+      "tests": {
+        "deny": [
+          "docker-compose up -d"
+        ],
+        "allow": [
+          "docker-compose config"
+        ]
+      }
+    },
+    {
+      "id": "warn-docker-compose-down",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*docker\\s+compose\\s+down(\\s|$)",
+        "ci": false
+      },
+      "reason": "docker compose down bypasses declarative deploy",
+      "alt": "build.sh compose",
+      "tests": {
+        "deny": [
+          "docker compose down"
+        ],
+        "allow": [
+          "docker compose ps"
+        ]
+      }
+    },
+    {
+      "id": "warn-docker-exec",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*docker\\s+exec(\\s|$)",
+        "ci": false
+      },
+      "reason": "docker exec is imperative — never modify running containers",
+      "alt": "docker logs for read-only inspection",
+      "tests": {
+        "deny": [
+          "docker exec -it web sh"
+        ],
+        "allow": [
+          "docker logs web"
+        ]
+      }
+    },
+    {
+      "id": "warn-which",
+      "level": "warn",
+      "category": "shell-safety",
+      "reversibility": "advisory",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*which\\s",
+        "ci": false
+      },
+      "reason": "'which' doesn't exist on Termux/Nix",
+      "alt": "command -v",
+      "tests": {
+        "deny": [
+          "which jq"
+        ],
+        "allow": [
+          "command -v jq"
+        ]
+      }
+    },
+    {
+      "id": "warn-cd-git-mv",
+      "level": "warn",
+      "category": "shell-safety",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "cd\\s+[^[:space:];]+\\s*&&\\s*git\\s+mv",
+        "ci": false
+      },
+      "reason": "'cd dir && git mv' kills the shell if CWD is moved",
+      "alt": "git -C /absolute/path mv ...",
+      "tests": {
+        "deny": [
+          "cd sub && git mv a b"
+        ],
+        "allow": [
+          "git -C /abs mv a b"
+        ]
+      }
+    },
+    {
+      "id": "warn-cd-rm-rf",
+      "level": "warn",
+      "category": "shell-safety",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "cd\\s+[^[:space:];]+\\s*&&\\s*rm\\s+-rf",
+        "ci": false
+      },
+      "reason": "'cd dir && rm -rf' kills the shell if CWD is deleted",
+      "alt": "rm -rf /absolute/path (use absolute paths)",
+      "tests": {
+        "deny": [
+          "cd sub && rm -rf x"
+        ],
+        "allow": [
+          "rm -rf /abs/x"
+        ]
+      }
+    },
+    {
+      "id": "warn-ssh-write-redirect",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "ssh\\s+\\S+\\s+.*\\b(echo|sed|tee|cat|printf)\\s.*>>?",
+        "ci": false
+      },
+      "reason": "SSH write-redirect on a VM is imperative — declarative stack expects edit-source + build.sh ship",
+      "alt": "edit source in git repo (src/) + build.sh ship",
+      "tests": {
+        "deny": [
+          "ssh oci-apps 'echo x > /etc/foo'"
+        ],
+        "allow": [
+          "ssh oci-apps 'docker ps'"
+        ]
+      }
+    },
+    {
+      "id": "warn-ssh-sysctl",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "ssh\\s+\\S+\\s+.*\\bsysctl\\s+-w",
+        "ci": false
+      },
+      "reason": "SSH sysctl -w is imperative",
+      "alt": "add to nix config + build.sh ship",
+      "tests": {
+        "deny": [
+          "ssh gcp-proxy 'sysctl -w net.ipv4.ip_forward=1'"
+        ],
+        "allow": [
+          "ssh gcp-proxy 'sysctl net.ipv4.ip_forward'"
+        ]
+      }
+    },
+    {
+      "id": "warn-ssh-docker-exec",
+      "level": "warn",
+      "category": "declarative-state",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "ssh\\s+\\S+\\s+.*\\bdocker\\s+exec",
+        "ci": false
+      },
+      "reason": "docker exec on remote VMs is forbidden",
+      "alt": "docker logs via SSH for read-only inspection",
+      "tests": {
+        "deny": [
+          "ssh oci-apps 'docker exec web sh'"
+        ],
+        "allow": [
+          "ssh oci-apps 'docker logs web'"
+        ]
+      }
+    },
+    {
+      "id": "warn-sops-decrypt",
+      "level": "warn",
+      "category": "secrets",
+      "reversibility": "advisory",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*sops\\s+(-d|--decrypt)\\b",
+        "ci": false
+      },
+      "reason": "manual sops decrypt bypasses the engine",
+      "alt": "build.sh secrets",
+      "tests": {
+        "deny": [
+          "sops -d src/secrets.yaml"
+        ],
+        "allow": [
+          "sops --version"
+        ]
+      }
+    },
+    {
+      "id": "warn-sops-decrypt-inplace",
+      "level": "warn",
+      "category": "secrets",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "\\bsops\\s+(-d|--decrypt)\\s+(\\S+\\s+)*-i\\b|\\bsops\\s+-d\\s+-i\\b|\\bsops\\s+-i\\s+-d\\b",
+        "ci": false
+      },
+      "reason": "sops -d -i leaves secrets.yaml plaintext on disk — easy accidental git add",
+      "alt": "decrypt to stdout (sops -d file | …) or use build.sh secrets",
+      "tests": {
+        "deny": [
+          "sops -d -i src/secrets.yaml"
+        ],
+        "allow": [
+          "sops -e src/secrets.yaml"
+        ]
+      }
+    },
+    {
+      "id": "warn-ssh-secret-redirect",
+      "level": "warn",
+      "category": "secrets",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "ssh\\s+\\S+.*\\.(secrets|env)\\b.*>",
+        "ci": false
+      },
+      "reason": "SSH write-redirect into a VM secret file bypasses sops",
+      "alt": "src/secrets.yaml on host + build.sh ship",
+      "tests": {
+        "deny": [
+          "ssh oci-apps 'cat x > /opt/app/.env'"
+        ],
+        "allow": [
+          "ssh oci-apps 'ls'"
+        ]
+      }
+    },
+    {
+      "id": "warn-docker-e-literal",
+      "level": "warn",
+      "category": "secrets",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "docker\\s+(run|exec)\\s+.*-e\\s+[A-Z_]+=[A-Za-z0-9+/=._-]{16,}",
+        "ci": false
+      },
+      "reason": "docker -e with literal credential value — leaks via shell history + ps",
+      "alt": "--env-file dist/.secrets (or compose env_file:)",
+      "tests": {
+        "deny": [
+          "docker run -e API_KEY=abcdef0123456789xyz img"
+        ],
+        "allow": [
+          "docker run -e DEBUG=1 img"
+        ]
+      }
+    },
+    {
+      "id": "warn-curl-auth-literal",
+      "level": "warn",
+      "category": "secrets",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "curl\\s+.*-H\\s+[\"'](Authorization|X-API-Key|X-Auth-Token):\\s*(Bearer\\s+)?[A-Za-z0-9+/=._-]{16,}",
+        "ci": false
+      },
+      "reason": "curl with literal token in Authorization header — leaks via history + transcript",
+      "alt": "use $TOKEN sourced from dist/.secrets",
+      "tests": {
+        "deny": [
+          "curl -H \"Authorization: Bearer abcdef0123456789xyz\" https://x"
+        ],
+        "allow": [
+          "curl -H \"Authorization: Bearer $TOKEN\" https://x"
+        ]
+      }
+    },
+    {
+      "id": "warn-export-literal",
+      "level": "warn",
+      "category": "secrets",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&)\\s*export\\s+[A-Z][A-Z0-9_]*=[A-Za-z0-9+/=._-]{20,}",
+        "ci": false
+      },
+      "reason": "export with long literal value looks like a hardcoded credential",
+      "alt": "source dist/.secrets instead",
+      "tests": {
+        "deny": [
+          "export API_TOKEN=abcdefghij0123456789xyz"
+        ],
+        "allow": [
+          "export DEBUG=1"
+        ]
+      }
+    },
+    {
+      "id": "warn-cat-secret",
+      "level": "warn",
+      "category": "secrets",
+      "reversibility": "irreversible",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|\\s|;|&&|\\|)\\s*(cat|less|bat|head|tail)\\s+[^|;]*(\\.secrets\\b|/\\.env\\b|\\.key\\b|\\.pem\\b|\\.age\\b)",
+        "ci": false
+      },
+      "reason": "printing secret file to terminal leaks credentials into transcript/cache",
+      "alt": "sops --extract for one key, or pipe into a process: source dist/.secrets",
+      "tests": {
+        "deny": [
+          "cat dist/.secrets",
+          "head config.pem"
+        ],
+        "allow": [
+          "cat README.md"
+        ]
+      }
+    },
+    {
+      "id": "graph-nudge",
+      "level": "nudge",
+      "category": "arch-guessing",
+      "reversibility": "advisory",
+      "event": "PostToolUse",
+      "handler": "graph_nudge",
+      "reason": "consecutive file reads/searches with no cloud-cgc-mcp query — use octocode_graphrag/search before reasoning about architecture",
+      "alt": "octocode_graphrag / octocode_search / knowledge_* / c3_*",
+      "tests": {
+        "deny": [],
+        "allow": []
+      }
+    },
+    {
+      "id": "git-branch-create",
+      "level": "deny",
+      "category": "workflow",
+      "reversibility": "recoverable",
+      "event": "PreToolUse:Bash",
+      "match": {
+        "pattern": "(^|[;&|])\\s*git\\s+(-[Cc]\\s+\\S+\\s+)?(checkout\\s+-b\\b|switch\\s+-[cC]\\b|branch\\s+[^-[:space:];&|]|worktree\\s+add\\b)",
+        "ci": false
+      },
+      "reason": "BRANCHES ARE FORBIDDEN — this repo works ONLY on main (direct commit + push; GHA deploys on push). Never create or switch to a branch.",
+      "alt": "stay on main: edit, commit, and push directly. No branches, no PRs.",
+      "tests": {
+        "deny": [
+          "git checkout -b feature",
+          "git switch -c wip",
+          "git branch newthing",
+          "git worktree add ../wt x"
+        ],
+        "allow": [
+          "git branch",
+          "git branch --format=%(refname:short)",
+          "git branch -d old",
+          "git branch -D old",
+          "git checkout main",
+          "git switch main",
+          "git checkout -- file.txt"
+        ]
+      }
+    }
+  ]
+}

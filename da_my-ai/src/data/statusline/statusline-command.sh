@@ -103,11 +103,9 @@ model_name=$(echo "$model_id" | sed -E 's/^claude-//; s/-([0-9]{8})$//')
 # current_ctx = total input in the live window (new + cache-write + cache-read).
 ctx_window_size=${ctx_window:-200000}
 current_ctx=${ctx_input:-0}
-settings_json="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
-if [ -f "$settings_json" ] && command -v jq >/dev/null 2>&1; then
-    compact_win=$(jq -r '.autoCompactWindow // empty' "$settings_json" 2>/dev/null)
-fi
-[ -z "$compact_win" ] || [ "$compact_win" = "null" ] && compact_win=$((ctx_window_size * 95 / 100))
+# (autoCompactWindow jq lookup removed 2026-08-08 — the key exists in no
+# settings.json here; it was one guaranteed-useless jq fork per render.)
+compact_win=$((ctx_window_size * 95 / 100))
 if [ "$current_ctx" -gt 0 ] && [ "$compact_win" -gt 0 ]; then
     ctx_percent=$((current_ctx * 100 / compact_win))
 else
@@ -125,8 +123,14 @@ else
 fi
 
 # === Context Reset Detection ===
-ctx_state_file="/tmp/statusline_ctx_state_$(echo "$transcript_path" | md5sum | cut -c1-8).dat"
-ctx_reset_file="/tmp/statusline_ctx_reset_$(echo "$transcript_path" | md5sum | cut -c1-8).dat"
+# TMP: Termux has no writable /tmp — hardcoded /tmp made every cache write
+# fail silently, so the multi-MB transcript was re-parsed EVERY 5s render
+# (2026-08-08 audit). th: one md5 of the transcript path, reused by all
+# cache names below (was computed 4x per render).
+TMP="${TMPDIR:-/tmp}"
+th=$(printf '%s' "$transcript_path" | md5sum | cut -c1-8)
+ctx_state_file="$TMP/statusline_ctx_state_${th}.dat"
+ctx_reset_file="$TMP/statusline_ctx_reset_${th}.dat"
 
 now_epoch=$(date +%s)
 # fmt_age: seconds -> compact live string that ticks every refreshInterval.
@@ -135,7 +139,7 @@ fmt_age() { local s=${1:-0}; [ "$s" -lt 0 ] && s=0
     elif [ "$s" -lt 3600 ]; then echo "$((s/60))m"
     else echo "$((s/3600))h$(((s%3600)/60))m"; fi; }
 prev_ctx=0; prev_exceeds="false"; prev_epoch=$now_epoch
-[ -f "$ctx_state_file" ] && read prev_ctx prev_exceeds prev_epoch < "$ctx_state_file" 2>/dev/null
+[ -f "$ctx_state_file" ] && read -r prev_ctx prev_exceeds prev_epoch < "$ctx_state_file" 2>/dev/null
 [ -z "$prev_ctx" ] && prev_ctx=0
 [ -z "$prev_exceeds" ] && prev_exceeds="false"
 [ -z "$prev_epoch" ] && prev_epoch=$now_epoch
@@ -146,7 +150,11 @@ if [ "$prev_ctx" -gt 50000 ] && [ "$current_ctx" -gt 0 ]; then
 fi
 [ "$prev_exceeds" = "true" ] && [ "$exceeds_200k" = "false" ] && ctx_reset_detected="true"
 
-[ "$ctx_reset_detected" = "true" ] && echo "$(date -Iseconds) $prev_ctx $current_ctx" >> "$ctx_reset_file"
+if [ "$ctx_reset_detected" = "true" ]; then
+    echo "$(date -Iseconds) $prev_ctx $current_ctx" >> "$ctx_reset_file"
+    # cap: only tail -1 is ever read; keep the last 20 lines
+    tail -20 "$ctx_reset_file" > "$ctx_reset_file.t" 2>/dev/null && mv "$ctx_reset_file.t" "$ctx_reset_file"
+fi
 # "last cache hit" = last render where the context changed (= last API response).
 # Idle re-renders keep the same epoch, so the minutes-since grows while you sit.
 if [ "$current_ctx" != "$prev_ctx" ]; then last_epoch=$now_epoch; else last_epoch=$prev_epoch; fi
@@ -173,7 +181,7 @@ sid="${session_id:-}"
 # `assistant` record. The daemon tracks both timestamps (epoch ms); the age is
 # just a subtraction here, so the timers still tick every refreshInterval.
 # Cached against transcript size so an idle render is a stat, not a jq call.
-age_cache="/tmp/statusline_age_$(echo "$transcript_path" | md5sum | cut -c1-8).dat"
+age_cache="$TMP/statusline_age_${th}.dat"
 prompt_age="?"; action_age="?"
 if [ -f "$transcript_path" ]; then
     tsize=$(stat -c %s "$transcript_path" 2>/dev/null || echo 0)
@@ -242,12 +250,8 @@ mcp_configured=0
 [ -f "${cwd}/.mcp.json" ] && { n=$(jq '.mcpServers // {} | keys | length' "${cwd}/.mcp.json" 2>/dev/null); [ -n "$n" ] && mcp_configured=$((mcp_configured + n)); }
 [ "$mcp_configured" -gt 0 ] && mcp_color="32" || mcp_color="90"
 
-# Subagent (.md) count — user (~/.claude/agents) + plugin-provided agent defs.
-# Mirrors the MCP count above (README.md is the dir's index, not an agent).
-agents_configured=$(find "$HOME/.claude/agents" -maxdepth 1 -name '*.md' ! -name 'README.md' 2>/dev/null | wc -l)
-n=$(find "$HOME/.claude/plugins/cache" -path '*/agents/*.md' 2>/dev/null | wc -l)
-agents_configured=$((agents_configured + n))
-[ "$agents_configured" -gt 0 ] && agents_color="32" || agents_color="90"
+# (agents count removed 2026-08-08 — it was DEAD CODE: neither variable was
+# ever rendered, and it recursively walked the plugin cache 12x/minute.)
 
 # Per-MCP online/offline icons (lazy 15-min cache), Full/Lean context-profile
 # indicator, and PL[ Skl[...] Rul[...] Sys[...] ] — Skl/Sys from the plugins
@@ -281,7 +285,7 @@ fi
 plugins_seg="PL[ ${skl_seg}${skl_seg:+ }${rul_seg}${rul_seg:+ }${sys_seg} ]"
 
 # user@host (date removed from LINE 1 per 2026-06-25 layout change)
-user_host="$(whoami)@$(hostname -s)"
+user_host="$(whoami)@$(hostname -s 2>/dev/null || echo phone)"
 
 # Format token count (K/M)
 fmt_tok() {
@@ -309,7 +313,7 @@ get_color() {
 # `git status -b --porcelain=v1` one-forker (see git history).
 git_repo=""; git_branch=""
 if command -v git >/dev/null 2>&1; then
-    git_cache="/tmp/statusline_git_$(printf '%s' "$cwd" | md5sum | cut -c1-8).cache"
+    git_cache="$TMP/statusline_git_$(printf '%s' "$cwd" | md5sum | cut -c1-8).cache"
     git_cache_age=$(( $(date +%s) - $(stat -c %Y "$git_cache" 2>/dev/null || echo 0) ))
     if [ -f "$git_cache" ] && [ "$git_cache_age" -lt 10 ]; then
         IFS='|' read -r git_repo git_branch < "$git_cache" 2>/dev/null
@@ -325,14 +329,21 @@ if command -v git >/dev/null 2>&1; then
 fi
 
 # === Async system metrics — all slow commands run in parallel ===
-_async="/tmp/statusline_async_$$"
+_async="$TMP/statusline_async_$$"
 mkdir -p "$_async"
+# clean up even when the render is killed mid-flight (routine on a phone) —
+# a new PID each 5s otherwise litters one dir per killed render.
+trap 'rm -rf "$_async"' EXIT
 
 # RAM + Disk (instant)
-mem_info=$(free | grep Mem)
+mem_info=$(free 2>/dev/null | grep Mem)
 mem_total=$(echo "$mem_info" | awk '{print $2}')
 mem_used=$(echo "$mem_info" | awk '{print $3}')
-mem_percent=$(awk "BEGIN {printf \"%.0f\", ($mem_used/$mem_total)*100}")
+if [ -n "$mem_total" ] && [ "$mem_total" -gt 0 ] 2>/dev/null; then
+    mem_percent=$(awk "BEGIN {printf \"%.0f\", ($mem_used/$mem_total)*100}")
+else
+    mem_percent=0
+fi
 
 if [ -d "/data/data/com.termux.nix" ]; then
     disk_percent=$(df /data | tail -n 1 | awk '{print $5}' | sed 's/%//')

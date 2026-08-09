@@ -1,0 +1,4 @@
+{
+  "description": "Scaffold — no hooks wired yet. Reserved for future sub-agent / Task-tool orchestration principles. See scripts/hooks-rules.json _status.",
+  "hooks": {}
+}

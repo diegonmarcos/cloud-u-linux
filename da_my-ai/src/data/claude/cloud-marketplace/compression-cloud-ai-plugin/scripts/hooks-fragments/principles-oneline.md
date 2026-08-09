@@ -1,0 +1,1 @@
+**PRINCIPLES** (full set loaded at SessionStart): declarative + data-driven + reproducible; fix the engine, never hack/bypass; secrets via sops only; ASK don't assume; use cloud-cgc-mcp before reasoning about architecture; work on `main` only.

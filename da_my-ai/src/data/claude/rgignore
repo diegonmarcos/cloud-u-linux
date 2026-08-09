@@ -1,0 +1,17 @@
+# Claude Code file indexer uses ripgrep — exclude heavy/irrelevant dirs
+.claude/projects/
+.claude/debug/
+.claude/todos/
+.claude/tasks/
+.claude/telemetry/
+.claude/file-history/
+.claude/session-env/
+.claude/shell-snapshots/
+.claude/backups/
+.nix-profile/
+.nix-defexpr/
+.local/
+.cache/
+.npm/
+node_modules/
+/nix/

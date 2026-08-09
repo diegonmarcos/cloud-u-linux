@@ -1,0 +1,39 @@
+{
+  "name": "cloud-marketplace",
+  "owner": {
+    "name": "Diego Nepomuceno Marcos"
+  },
+  "description": "Local marketplace — Diego's declarative Claude Code plugins (cloud principles, split 2026-07-30 into 4 focused plugins, + ponytail), source-of-truth in ~/git/unix.",
+  "plugins": [
+    {
+      "name": "hooks-stack-framework-principles-cloud-ai-plugin",
+      "source": "./hooks-stack-framework-principles-cloud-ai-plugin",
+      "description": "Core engine: CORE PRINCIPLES + FIRE rules + repo reference injected at SessionStart, plus PreToolUse:Bash guard (allow/deny/warn) and PostToolUse nudge. Replaces static CLAUDE.md."
+    },
+    {
+      "name": "compression-cloud-ai-plugin",
+      "source": "./compression-cloud-ai-plugin",
+      "description": "Steady-state context compression: per-turn/per-bash one-line principles pointer instead of re-injecting the full set every turn."
+    },
+    {
+      "name": "memory-system-cloud-ai-plugin",
+      "source": "./memory-system-cloud-ai-plugin",
+      "description": "Memory structure rule: MEMORY.md is an index, not a preload bundle — entries live in type subfolders, loaded on demand only."
+    },
+    {
+      "name": "sub-agents-cloud-ai-plugin",
+      "source": "./sub-agents-cloud-ai-plugin",
+      "description": "Scaffold — reserved for future sub-agent / Task-tool orchestration principles. No active rules yet."
+    },
+    {
+      "name": "skill-claude-api-plugin",
+      "source": "./skill-claude-api-plugin",
+      "description": "Claude API / Anthropic SDK skill, delivered as a plugin (no loose ~/.claude/skills)."
+    },
+    {
+      "name": "ponytail",
+      "source": "./ponytail",
+      "description": "Lazy-senior-dev mode: forces the simplest solution that works (YAGNI, stdlib-first)."
+    }
+  ]
+}

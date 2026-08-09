@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "defaultMode": "auto"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash $HOME/.claude/statusline-command.sh"
+  },
+  "env": {
+    "ENABLE_TOOL_SEARCH": "true",
+    "AUTHELIA_OIDC_CLIENT_ID": "claude-admin",
+    "AUTHELIA_TOKEN_URL": "https://auth.diegonmarcos.com/api/oidc/token"
+  },
+  "alwaysThinkingEnabled": true,
+  "enabledPlugins": {
+    "hooks-stack-framework-principles-cloud-ai-plugin@cloud-marketplace": true,
+    "compression-cloud-ai-plugin@cloud-marketplace": true,
+    "memory-system-cloud-ai-plugin@cloud-marketplace": true,
+    "sub-agents-cloud-ai-plugin@cloud-marketplace": true,
+    "skill-claude-api-plugin@cloud-marketplace": true,
+    "ponytail@cloud-marketplace": true
+  }
+}
