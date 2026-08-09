@@ -8,11 +8,5 @@
     "frontend-design@claude-plugins-official": true,
     "ralph-loop@claude-plugins-official": true
   },
-  "env": {
-    "NODE_PATH": "/home/diego/.node_modules/node_modules",
-    "GIT_BASE": "/home/diego/git",
-    "AUTHELIA_OIDC_CREDENTIALS_DIR": "/home/diego/git/vault/A0_keys/providers/authelia/signed-bearer_jwt/credentials",
-    "AUTHELIA_OIDC_TOKENS_DIR": "/home/diego/git/vault/A0_keys/providers/authelia/signed-bearer_jwt/tokens"
-  },
   "tui": "fullscreen"
 }

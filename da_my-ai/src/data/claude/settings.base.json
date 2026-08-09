@@ -4,12 +4,16 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "bash $HOME/.claude/statusline-command.sh"
+    "command": "bash @HOME@/.claude/statusline-command.sh"
   },
   "env": {
     "ENABLE_TOOL_SEARCH": "true",
     "AUTHELIA_OIDC_CLIENT_ID": "claude-admin",
-    "AUTHELIA_TOKEN_URL": "https://auth.diegonmarcos.com/api/oidc/token"
+    "AUTHELIA_TOKEN_URL": "https://auth.diegonmarcos.com/api/oidc/token",
+    "GIT_BASE": "@HOME@/git",
+    "NODE_PATH": "@HOME@/.node_modules/node_modules",
+    "AUTHELIA_OIDC_CREDENTIALS_DIR": "@HOME@/git/vault/A0_keys/providers/authelia/signed-bearer_jwt/credentials",
+    "AUTHELIA_OIDC_TOKENS_DIR": "@HOME@/git/vault/A0_keys/providers/authelia/signed-bearer_jwt/tokens"
   },
   "alwaysThinkingEnabled": true,
   "enabledPlugins": {

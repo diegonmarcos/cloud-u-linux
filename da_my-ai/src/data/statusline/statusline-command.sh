@@ -220,17 +220,27 @@ fi
 #   .block               all projects  inside the 5h window -> LINE 4b (5h-T)
 sum_in=0; sum_out=0; sum_cread=0; sum_cwrite=0
 b_in=0; b_out=0; b_cread=0; b_cwrite=0; has_bs=0
+# has_sess gates LINE 4a the same way has_bs gates 4c. Without it that row was
+# the ONE daemon-backed line that printed unconditionally, so anywhere the daemon
+# does not run — termux, where there is no my-ai daemon at all — it painted a full
+# All-S row of Σ0($0.00) zeros every render. All three usage rows now share one
+# rule: no daemon data, no row. This is deliberately keyed on the DATA, not on
+# "am I termux": a desktop with the daemon stopped is the same situation, and the
+# rows come back by themselves once it publishes again.
+has_sess=0
 if [ -s "$usage_json" ] && command -v jq >/dev/null 2>&1; then
-    read -r sum_in sum_out sum_cread sum_cwrite b_in b_out b_cread b_cwrite has_bs < <(
+    read -r sum_in sum_out sum_cread sum_cwrite b_in b_out b_cread b_cwrite has_bs has_sess < <(
         jq -r --arg id "$sid" '
             (.sessions[$id]       // {}) as $s |
             (.block_sessions[$id] // {}) as $b |
             [ ($s.input//0), ($s.output//0), ($s.cache_read//0), ($s.cache_write//0),
               ($b.input//0), ($b.output//0), ($b.cache_read//0), ($b.cache_write//0),
-              (if (.block_sessions[$id]) then 1 else 0 end) ] | @tsv' \
+              (if (.block_sessions[$id]) then 1 else 0 end),
+              (if (.sessions[$id])       then 1 else 0 end) ] | @tsv' \
             "$usage_json" 2>/dev/null)
     [ -z "${sum_in:-}" ] && { sum_in=0; sum_out=0; sum_cread=0; sum_cwrite=0; }
     [ -z "${has_bs:-}" ] && has_bs=0
+    [ -z "${has_sess:-}" ] && has_sess=0
 fi
 
 # Cost color
@@ -549,13 +559,18 @@ OUT+="\n"
 # it sits at a fixed left position instead of at the end of a variable-width
 # list. Labels are padded to 5 chars (All-S / 05h-T / 05h-S) so the brackets and
 # the totals line up vertically.
-OUT+="\033[37m|\033[0m All-S \033[37m[\033[0m"
-OUT+=" \033[1m\033[${cost_color}mΣ${sum_fmt}(\$${d_tot})\033[0m"
-OUT+=" \033[36mNew:${new_fmt}(\$${d_in})\033[0m"
-OUT+=" \033[33mCchW:${cwrite_fmt}(\$${d_cwrite})\033[0m"
-OUT+=" \033[34mCchR:${cread_fmt}(\$${d_cread})\033[0m"
-OUT+=" \033[36mOut:${out_fmt}(\$${d_out})\033[0m"
-OUT+=" \033[37m]\033[0m\n"
+#
+# Omitted when the daemon published nothing for this session (see has_sess) —
+# same self-omitting contract as the 5h-T / 5h-S rows below.
+if [ "${has_sess:-0}" = "1" ]; then
+    OUT+="\033[37m|\033[0m All-S \033[37m[\033[0m"
+    OUT+=" \033[1m\033[${cost_color}mΣ${sum_fmt}(\$${d_tot})\033[0m"
+    OUT+=" \033[36mNew:${new_fmt}(\$${d_in})\033[0m"
+    OUT+=" \033[33mCchW:${cwrite_fmt}(\$${d_cwrite})\033[0m"
+    OUT+=" \033[34mCchR:${cread_fmt}(\$${d_cread})\033[0m"
+    OUT+=" \033[36mOut:${out_fmt}(\$${d_out})\033[0m"
+    OUT+=" \033[37m]\033[0m\n"
+fi
 
 # LINE 4b — 5h billing-window token/cost breakdown, ccusage-backed (see
 # claude-usage-status.sh). Companion to LINE 4's per-SESSION breakdown, same

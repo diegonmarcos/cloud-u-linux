@@ -66,5 +66,29 @@
         # `nix develop -c` does not reliably apply the shellHook / mkShell env vars.
         runtimeLibPath = pkgs.lib.makeLibraryPath buildInputs;
         pkgConfigPath = pkgs.lib.makeSearchPathOutput "dev" "lib/pkgconfig" buildInputs;
-      });
+      }) // {
+        # ── Claude Code assets — my-ai owns these, the flakes only deploy them ──
+        #
+        # Ownership is split by WHO CAN CHANGE A FILE AT RUNTIME:
+        #
+        #   statusline family (src/data/statusline)  →  embedded in the BINARY
+        #     (core/src/statusline_assets.rs) and written by the daemon at startup.
+        #     A flake must never declare those: home.file lays a second copy on top,
+        #     which is how the deployed status line sat 141 lines stale for 8 days.
+        #
+        #   everything here                          →  exposed as a flake output
+        #     because it is inert config the flakes must place in ~/.claude anyway.
+        #     Shipping it through the binary would mean a GH release per asset edit.
+        #
+        # Plain files, identical on every machine, so this sits OUTSIDE
+        # eachDefaultSystem — consumers use "${my-ai.claudeAssets}/agents", with no
+        # system suffix.
+        #
+        # settings.base.json carries @HOME@ placeholders; the consuming flake
+        # substitutes config.home.homeDirectory and merges the per-platform overlay
+        # with lib.recursiveUpdate. Verified: base ⊕ overlay reproduces each
+        # machine's previous settings.json (desktop byte-identical; termux differs
+        # only in statusLine.command, where the literal $HOME is now pre-expanded).
+        claudeAssets = ./src/data/claude;
+      };
 }
