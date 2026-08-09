@@ -18,6 +18,7 @@ pub struct Mcp {
     pub name: String,
     pub kind: String, // http | stdio
     pub url: Option<String>,
+    pub command: Option<String>, // local stdio launch line, e.g. "npx -y foo"
 }
 pub fn load_mcps() -> Vec<Mcp> {
     let j = read_json(&home().join(".mcp.json"))
@@ -33,10 +34,50 @@ pub fn load_mcps() -> Vec<Mcp> {
                 .and_then(|t| t.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| if url.is_some() { "http".into() } else { "stdio".into() });
-            out.push(Mcp { name: name.clone(), kind, url });
+            let command = v.get("command").and_then(|c| c.as_str()).map(|cmd| {
+                let args = v
+                    .get("args")
+                    .and_then(|a| a.as_array())
+                    .map(|a| a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join(" "))
+                    .filter(|s| !s.is_empty());
+                match args {
+                    Some(args) => format!("{cmd} {args}"),
+                    None => cmd.to_string(),
+                }
+            });
+            out.push(Mcp { name: name.clone(), kind, url, command });
         }
     }
     out
+}
+
+/// Bundled default set of selectable claude startup flags (src/data/claude/claude-flags.json).
+const DEFAULT_CLAUDE_FLAGS_JSON: &str = include_str!("../../src/data/claude/claude-flags.json");
+
+pub struct ClaudeFlag {
+    pub key: String,
+    pub flag: String,
+    pub note: String,
+    pub default: bool,
+}
+/// Data-driven CLAUDE FLAGS rows — no hardcoded flag list in Rust. Bundled at
+/// build time so the dashboard never depends on the data file existing on disk.
+pub fn load_claude_flags() -> Vec<ClaudeFlag> {
+    let j: Value = serde_json::from_str(DEFAULT_CLAUDE_FLAGS_JSON).expect("bundled claude-flags.json must parse");
+    j.get("flags")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|f| {
+            Some(ClaudeFlag {
+                key: f.get("key")?.as_str()?.to_string(),
+                flag: f.get("flag")?.as_str()?.to_string(),
+                note: f.get("note").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                default: f.get("default").and_then(|v| v.as_bool()).unwrap_or(false),
+            })
+        })
+        .collect()
 }
 
 pub struct Plugin {

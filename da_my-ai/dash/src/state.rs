@@ -27,6 +27,9 @@ pub struct St {
     pub caveman: bool,
     pub restore: String, // off | count | hours
     pub restore_n: u64,
+    pub claude_flags: BTreeMap<String, bool>, // claude-flags.json key -> on
+    pub statusline: bool,                     // claude statusline
+    pub mcp_on: BTreeMap<String, bool>,       // mcp name -> auto-enable (missing = on)
 }
 
 impl Default for St {
@@ -41,7 +44,21 @@ impl Default for St {
             caveman: true,
             restore: "off".into(),
             restore_n: 5,
+            // Filled from claude-flags.json defaults at startup (see main.rs).
+            claude_flags: BTreeMap::new(),
+            statusline: true,
+            // Empty = every MCP starts enabled; mcp_is_on() treats "missing" as on.
+            mcp_on: BTreeMap::new(),
         }
+    }
+}
+
+impl St {
+    pub fn flag_on(&self, key: &str) -> bool {
+        self.claude_flags.get(key).copied().unwrap_or(false)
+    }
+    pub fn mcp_is_on(&self, name: &str) -> bool {
+        self.mcp_on.get(name).copied().unwrap_or(true)
     }
 }
 
@@ -58,7 +75,13 @@ fn row(kind: &'static str, grp: &'static str, val: &'static str, key: &'static s
     Row { kind, grp, val, key, label: label.into(), note }
 }
 
-pub fn build_rows(st: &St, mesh: &BTreeMap<String, String>, is_termux: bool) -> Vec<Row> {
+pub fn build_rows(
+    st: &St,
+    mesh: &BTreeMap<String, String>,
+    is_termux: bool,
+    mcps: &[crate::offline::Mcp],
+    flags: &[crate::offline::ClaudeFlag],
+) -> Vec<Row> {
     let mut r = Vec::new();
     r.push(row("sec", "", "", "", "AGENT", ""));
     r.push(row("radio", "agent", "goose", "", "goose", "Block goose → my-ai-api (OpenRouter)"));
@@ -85,6 +108,27 @@ pub fn build_rows(st: &St, mesh: &BTreeMap<String, String>, is_termux: bool) -> 
         r.push(row("check", "", "", "rtk", "RTK", "strip CLI/test noise pre-Headroom"));
         r.push(row("check", "", "", "caveman", "Caveman", "linguistic compression"));
     }
+    let is_claude = st.agent.starts_with("claude");
+    if is_claude {
+        r.push(row("sec", "", "", "", "CLAUDE FLAGS", ""));
+        for f in flags {
+            // ponytail: Box::leak — data-driven flags come from claude-flags.json,
+            // so the &'static str keys/notes don't exist until runtime; leaking
+            // is fine, they live for the TUI's process lifetime same as VM faces above.
+            let key: &'static str = Box::leak(f.key.clone().into_boxed_str());
+            let note: &'static str = Box::leak(f.note.clone().into_boxed_str());
+            r.push(Row { kind: "check", grp: "", val: "", key, label: f.flag.clone(), note });
+        }
+        r.push(row("sec", "", "", "", "CLAUDE STATUSLINE", ""));
+        r.push(row("check", "", "", "statusline", "statusline", "segments in claude prompt"));
+    }
+    r.push(row("sec", "", "", "", "MCP", ""));
+    for m in mcps {
+        let key: &'static str = Box::leak(format!("mcp:{}", m.name).into_boxed_str());
+        let note_s = m.url.clone().or_else(|| m.command.clone()).unwrap_or_else(|| "stdio".to_string());
+        let note: &'static str = Box::leak(note_s.into_boxed_str());
+        r.push(Row { kind: "check", grp: "", val: "", key, label: m.name.clone(), note });
+    }
     r.push(row("sec", "", "", "", "RESTORE", ""));
     r.push(row("radio", "restore", "off", "", "off", "fresh session"));
     r.push(row("radio", "restore", "count", "", "count", "last N sessions"));
@@ -108,7 +152,7 @@ pub fn focusable(rows: &[Row]) -> Vec<usize> {
 }
 
 /// The launch command args (the token stream passed to `my-ai`).
-pub fn sel_args(st: &St) -> Vec<String> {
+pub fn sel_args(st: &St, mcps: &[crate::offline::Mcp], flags: &[crate::offline::ClaudeFlag]) -> Vec<String> {
     let n = st.restore_n.max(1).to_string();
     debug_assert!(AGENTS.contains(&st.agent.as_str()), "invalid agent: {}", st.agent);
     let mut a = vec!["--agent".into(), st.agent.clone(), st.face.clone()];
@@ -127,6 +171,20 @@ pub fn sel_args(st: &St) -> Vec<String> {
             a.push("caveman".into());
             a.push("off".into());
         }
+    }
+    if st.agent.starts_with("claude") {
+        for f in flags {
+            if st.flag_on(&f.key) {
+                a.push(f.flag.clone());
+            }
+        }
+    }
+    a.push("statusline".into());
+    a.push(if st.statusline { "on".into() } else { "off".into() });
+    if !mcps.is_empty() && mcps.iter().any(|m| !st.mcp_is_on(&m.name)) {
+        let enabled: Vec<&str> = mcps.iter().filter(|m| st.mcp_is_on(&m.name)).map(|m| m.name.as_str()).collect();
+        a.push("--mcp-enable".into());
+        a.push(enabled.join(","));
     }
     match st.restore.as_str() {
         "count" => {

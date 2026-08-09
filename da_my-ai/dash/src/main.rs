@@ -30,6 +30,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     let mcps = offline::load_mcps();
+    let flags = offline::load_claude_flags();
     let plugins = offline::load_plugins();
     let hooks = offline::load_hooks();
     let sessions = offline::load_sessions();
@@ -37,13 +38,15 @@ fn main() -> anyhow::Result<()> {
 
     // Not a TTY → print the composed command and exit (mirrors the mjs guard).
     if !std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-        let st = St::default();
-        println!("my-ai-dash needs a terminal. Would launch: my-ai {}", sel_args(&st).join(" "));
+        let mut st = St::default();
+        seed_flag_defaults(&mut st, &flags);
+        println!("my-ai-dash needs a terminal. Would launch: my-ai {}", sel_args(&st, &mcps, &flags).join(" "));
         return Ok(());
     }
 
     let data: Shared = Arc::new(Mutex::new(BTreeMap::new()));
     let mut st = St::default();
+    seed_flag_defaults(&mut st, &flags);
     let mut focus = 0usize;
     let mut num_buf = String::new();
     let mut spin = 0usize;
@@ -51,11 +54,19 @@ fn main() -> anyhow::Result<()> {
 
     let mut term = ratatui::init();
     let res = run_loop(
-        &mut term, &ep, &mcps, &plugins, &hooks, &sessions, &cfg, &data, &mut st, &mut focus,
+        &mut term, &ep, &mcps, &flags, &plugins, &hooks, &sessions, &cfg, &data, &mut st, &mut focus,
         &mut num_buf, &mut spin, &mut last_launch,
     );
     ratatui::restore();
     res
+}
+
+/// Seed St.claude_flags from claude-flags.json's `default` field so freshly
+/// loaded flags render checked/unchecked per the data file instead of always off.
+fn seed_flag_defaults(st: &mut St, flags: &[offline::ClaudeFlag]) {
+    for f in flags {
+        st.claude_flags.insert(f.key.clone(), f.default);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -63,6 +74,7 @@ fn run_loop(
     term: &mut ratatui::DefaultTerminal,
     ep: &my_ai_core::Endpoints,
     mcps: &[offline::Mcp],
+    flags: &[offline::ClaudeFlag],
     plugins: &[offline::Plugin],
     hooks: &[offline::Hook],
     sessions: &offline::Sessions,
@@ -77,7 +89,7 @@ fn run_loop(
     loop {
         let snapshot = data.lock().unwrap().clone();
         let refreshing = snapshot.values().any(|s| matches!(s, Slot::Pending));
-        let rows = build_rows(st, &ep.mesh, my_ai_core::is_termux());
+        let rows = build_rows(st, &ep.mesh, my_ai_core::is_termux(), mcps, flags);
         let fl = focusable(&rows);
         if *focus >= fl.len() {
             *focus = fl.len().saturating_sub(1);
@@ -85,6 +97,7 @@ fn run_loop(
         let cx = render::Ctx {
             st: &*st,
             mcps,
+            flags,
             plugins,
             hooks,
             sessions,
@@ -121,7 +134,7 @@ fn run_loop(
                     KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => return Ok(()),
                     KeyCode::Char('r') => refresh(ep, mcps, data),
                     KeyCode::Char('l') => {
-                        if launch(term, st, last_launch) {
+                        if launch(term, st, mcps, flags, last_launch) {
                             return Ok(());
                         }
                     }
@@ -156,7 +169,7 @@ fn run_loop(
                                 match row.key {
                                     "refresh" => refresh(ep, mcps, data),
                                     "launch" => {
-                                        if launch(term, st, last_launch) {
+                                        if launch(term, st, mcps, flags, last_launch) {
                                             return Ok(());
                                         }
                                     }
@@ -206,7 +219,17 @@ fn activate(st: &mut St, row: &state::Row) {
             "headroom" => st.headroom = !st.headroom,
             "rtk" => st.rtk = !st.rtk,
             "caveman" => st.caveman = !st.caveman,
-            _ => {}
+            "statusline" => st.statusline = !st.statusline,
+            k if k.starts_with("mcp:") => {
+                let name = &k[4..];
+                let cur = st.mcp_is_on(name);
+                st.mcp_on.insert(name.to_string(), !cur);
+            }
+            // Data-driven claude-flags.json keys — flip the on/off map entry.
+            k => {
+                let cur = st.flag_on(k);
+                st.claude_flags.insert(k.to_string(), !cur);
+            }
         },
         "checklevel" => st.ponytail = !st.ponytail,
         _ => {}
@@ -250,8 +273,8 @@ fn adjust(st: &mut St, rows: &[state::Row], foc: Option<usize>, dir: i64, num_bu
 }
 
 /// Launch the composed command. Returns true if the TUI should exit (TTY hand-over).
-fn launch(_term: &mut ratatui::DefaultTerminal, st: &St, last_launch: &mut String) -> bool {
-    let args = sel_args(st);
+fn launch(_term: &mut ratatui::DefaultTerminal, st: &St, mcps: &[offline::Mcp], flags: &[offline::ClaudeFlag], last_launch: &mut String) -> bool {
+    let args = sel_args(st, mcps, flags);
     let is_restore = args.iter().any(|a| a == "restore" || a == "restore-hours");
     let self_cmd = std::env::var("CAS_SELF").unwrap_or_else(|_| "my-ai".into());
     let konsole = std::env::var("CAS_KONSOLE").ok().filter(|s| !s.is_empty()).or_else(|| which("konsole"));

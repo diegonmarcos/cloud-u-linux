@@ -3,7 +3,7 @@
 //! regrouped into 4 mega-sections (COMPOSE/SESSIONS/AI STACK/MESH) via mega_head(),
 //! each still built from the original sub-section page_* helpers.
 use crate::collect::{parse_df, parse_repo, Slot, REPOS};
-use crate::offline::{ago, Cfg, Hook, Mcp, Plugin, Sessions};
+use crate::offline::{ago, Cfg, ClaudeFlag, Hook, Mcp, Plugin, Sessions};
 use crate::state::{build_rows, focusable, sel_args, St, PONY};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -53,6 +53,7 @@ fn num_body(v: &serde_json::Value, k: &str) -> String {
 pub struct Ctx<'a> {
     pub st: &'a St,
     pub mcps: &'a [Mcp],
+    pub flags: &'a [ClaudeFlag],
     pub plugins: &'a [Plugin],
     pub hooks: &'a [Hook],
     pub sessions: &'a Sessions,
@@ -138,7 +139,7 @@ pub fn build_lines(cx: &Ctx) -> Vec<Line<'static>> {
 
     // composed-command line
     let self_cmd = std::env::var("CAS_SELF").unwrap_or_else(|_| "my-ai".into());
-    let mut cmd_spans = vec![sp("   > ", Green), sp(format!("{self_cmd} {}", sel_args(cx.st).join(" ")), Cyan)];
+    let mut cmd_spans = vec![sp("   > ", Green), sp(format!("{self_cmd} {}", sel_args(cx.st, cx.mcps, cx.flags).join(" ")), Cyan)];
     if cx.refreshing {
         let pr = progress(cx);
         cmd_spans.push(sp(format!("   {} probing {}/{}", cx.spinch(), pr.0, pr.1), Yellow));
@@ -199,7 +200,7 @@ fn progress(cx: &Ctx) -> (usize, usize) {
 }
 
 fn page_compose(cx: &Ctx, l: &mut Vec<Line<'static>>) {
-    let rows = build_rows(cx.st, cx.mesh, cx.is_termux);
+    let rows = build_rows(cx.st, cx.mesh, cx.is_termux, cx.mcps, cx.flags);
     let fl = focusable(&rows);
     let foc_idx = fl.get(cx.focus.min(fl.len().saturating_sub(1))).copied().unwrap_or(usize::MAX);
     l.push(Line::from(""));
@@ -231,6 +232,18 @@ fn page_compose(cx: &Ctx, l: &mut Vec<Line<'static>>) {
                 spans.push(if on { sp("[x] ", Green) } else { dim("[ ] ") });
                 spans.push(hl(pad_e(&row.label, 8)));
                 spans.push(dim(format!(" {}", row.note)));
+                // MCP rows carry their own live status dot (was a separate
+                // read-only "MCP servers" block below COMPOSE; folded in here
+                // so enabling/disabling and health share one row).
+                if let Some(name) = row.key.strip_prefix("mcp:") {
+                    spans.push(raw("  "));
+                    let is_http = cx.mcps.iter().find(|m| m.name == name).map(|m| m.kind == "http").unwrap_or(false);
+                    if is_http {
+                        spans.extend(dm(cx.get(row.key), cx.spinch()));
+                    } else {
+                        spans.extend(dm(&Slot::Stdio, cx.spinch()));
+                    }
+                }
             }
             "checklevel" => {
                 let on = cx.st.ponytail;
@@ -270,24 +283,6 @@ fn page_compose(cx: &Ctx, l: &mut Vec<Line<'static>>) {
         }
         l.push(Line::from(spans));
     }
-
-    // MCP servers (kept in COMPOSE so they're visible with the rest of the composer)
-    l.push(Line::from(""));
-    l.push(sec_head(&format!("MCP servers ({})", cx.mcps.len()), ""));
-    for chunk in cx.mcps.chunks(3) {
-        let mut row = vec![raw("   ")];
-        for m in chunk {
-            row.push(sp(pad_e(&m.name, 15), Magenta));
-            row.push(raw(" "));
-            if m.kind == "http" {
-                row.extend(dm(cx.get(&format!("mcp:{}", m.name)), cx.spinch()));
-            } else {
-                row.extend(dm(&Slot::Stdio, cx.spinch()));
-            }
-            row.push(raw("  "));
-        }
-        l.push(Line::from(row));
-    }
 }
 
 fn state_val<'b>(st: &'b St, grp: &str) -> &'b str {
@@ -304,7 +299,11 @@ fn state_bool(st: &St, key: &str) -> bool {
         "rtk" => st.rtk,
         "caveman" => st.caveman,
         "ponytail" => st.ponytail,
-        _ => false,
+        "statusline" => st.statusline,
+        _ if key.starts_with("mcp:") => st.mcp_is_on(&key[4..]),
+        // Data-driven claude-flags.json keys land here; flag_on() defaults to
+        // false for anything not in claude_flags, same as the old fallback.
+        _ => st.flag_on(key),
     }
 }
 
