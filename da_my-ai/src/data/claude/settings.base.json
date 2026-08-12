@@ -1,6 +1,15 @@
 {
   "permissions": {
-    "defaultMode": "auto"
+    "defaultMode": "auto",
+    "_deny_comment": "Read on image files is denied so base64 images never enter a session transcript. 2026-08-12: session 1ec8fac3 (31MB, 16k lines) would not compact — it stalled at 95% every attempt. Five of its entries were base64 images from Read, four of them 1.0-1.3MB each. Compaction re-sends the WHOLE conversation to be summarised, and an image is atomic: unlike text it cannot be truncated or dropped, so every retry re-transmits it. There is no way to strip them at compact time either — PreCompact can only BLOCK or allow compaction (see 2.1.212 changelog), it cannot rewrite the transcript. So the only lever is keeping them out of the transcript in the first place. NOTE this is a real tradeoff: Claude can no longer LOOK at screenshots/diagrams, which is genuinely useful for UI work. Drop the relevant line to re-enable, or run that session with --permission-mode bypassPermissions.",
+    "deny": [
+      "Read(**/*.png)",
+      "Read(**/*.jpg)",
+      "Read(**/*.jpeg)",
+      "Read(**/*.gif)",
+      "Read(**/*.webp)",
+      "Read(**/*.bmp)"
+    ]
   },
   "statusLine": {
     "type": "command",
