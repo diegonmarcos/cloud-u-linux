@@ -11,6 +11,15 @@
       "Read(**/*.bmp)"
     ]
   },
+  "_extraKnownMarketplaces_comment": "Registers the cloud-marketplace plugin dir. 2026-08-12: this existed ONLY in the runtime ~/.claude/settings.json and was declared nowhere, so every switch wiped it — home.activation.claudeSettings rebuilds the file from source and preserves exactly one runtime key (effortLevel). The value is fully derivable (@HOME@/.claude/cloud-marketplace, deployed by this same module), so it belongs in the declaration rather than depending on Claude Code re-registering it after each rebuild.",
+  "extraKnownMarketplaces": {
+    "cloud-marketplace": {
+      "source": {
+        "source": "directory",
+        "path": "@HOME@/.claude/cloud-marketplace"
+      }
+    }
+  },
   "statusLine": {
     "type": "command",
     "command": "bash @HOME@/.claude/statusline-command.sh"
