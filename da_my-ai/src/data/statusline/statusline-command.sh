@@ -84,7 +84,8 @@ eval "$(echo "$input" | jq -r '
     @sh "effort_level=\(.effort.level // empty)",
     @sh "session_name=\(.session_name // empty)",
     @sh "rl_5h=\(.rate_limits.five_hour.used_percentage // empty)",
-    @sh "rl_7d=\(.rate_limits.seven_day.used_percentage // empty)"
+    @sh "rl_7d=\(.rate_limits.seven_day.used_percentage // empty)",
+    @sh "rl_7d_reset=\(.rate_limits.seven_day.resets_at // empty)"
 ')"
 
 # Fallback session ID from transcript path
@@ -534,7 +535,18 @@ if [ -n "$rl_5h" ] || [ -n "$rl_7d" ]; then
     rl_5h_disp="${rl_5h%.*}"; [ -z "$rl_5h_disp" ] && rl_5h_disp="N/A"
     rl_7d_disp="${rl_7d%.*}"; [ -z "$rl_7d_disp" ] && rl_7d_disp="N/A"
     OUT+=" \033[$(get_color "$rl_5h_disp")m5h:${rl_5h_disp}%\033[0m"
-    OUT+=" \033[$(get_color "$rl_7d_disp")m7d:${rl_7d_disp}%\033[0m"
+    # 7-day reset countdown, straight from Claude Code's own rate_limits.seven_day.resets_at
+    # (ISO 8601) — there's no 7-day equivalent of the 5h block tracker below, and this field
+    # is already authoritative, so computing our own estimate would just be a redundant guess.
+    rl_7d_reset_disp=""
+    if [ -n "$rl_7d_reset" ]; then
+        rl_7d_reset_epoch=$(date -d "$rl_7d_reset" +%s 2>/dev/null)
+        if [ -n "$rl_7d_reset_epoch" ]; then
+            rl_7d_secs=$(( rl_7d_reset_epoch - now_epoch )); [ "$rl_7d_secs" -lt 0 ] && rl_7d_secs=0
+            rl_7d_reset_disp="$((rl_7d_secs/86400))d $((rl_7d_secs%86400/3600))h"
+        fi
+    fi
+    OUT+=" \033[$(get_color "$rl_7d_disp")m7d:${rl_7d_disp}%\033[0m\033[90m${rl_7d_reset_disp:+(${rl_7d_reset_disp})}\033[0m"
 fi
 # Block 2: cache hit % + idle ages
 OUT+=" \033[37m│\033[0m"
