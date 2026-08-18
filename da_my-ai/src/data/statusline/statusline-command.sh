@@ -219,8 +219,8 @@ fi
 #   .sessions[$id]       all-time totals for this session  -> LINE 4 block 3
 #   .block_sessions[$id] THIS session inside the 5h window -> LINE 4c (5h-S)
 #   .block               all projects  inside the 5h window -> LINE 4b (5h-T)
-#   .day_sessions[$id]   THIS session inside the UTC day    -> LINE 4e (Day-S)
-#   .day                 all projects  inside the UTC day   -> LINE 4d (Day-T)
+#   .day_sessions[$id]   THIS session inside the local day  -> LINE 4e (Day-S)
+#   .day                 all projects  inside the local day -> LINE 4d (Day-T)
 sum_in=0; sum_out=0; sum_cread=0; sum_cwrite=0
 b_in=0; b_out=0; b_cread=0; b_cwrite=0; has_bs=0
 dt_in=0; dt_out=0; dt_cread=0; dt_cwrite=0; day_reset_ms=0; has_day=0
@@ -639,7 +639,7 @@ fi
 
 # LINE 4d — Day-T: same fields as 05h-T, but windowed to the current UTC
 # calendar day instead of the rolling 5h block. Reset is a fixed boundary
-# (next UTC midnight), computed here from `.day.reset_at_ms` the same way the
+# (next LOCAL midnight), computed here from `.day.reset_at_ms` the same way the
 # 7-day rate-limit row above computes its countdown from an epoch — not a
 # pre-rendered Rust string, so no space-in-@tsv parsing hazard.
 if [ "${has_day:-0}" = "1" ]; then
@@ -663,7 +663,7 @@ if [ "${has_day:-0}" = "1" ]; then
     OUT+=" \033[37m]\033[0m \033[37m│\033[0m \033[90mReset:${day_reset_disp}\033[0m\n"
 fi
 
-# LINE 4e — Day-S: same as 05h-S, windowed to the current UTC day. Omitted
+# LINE 4e — Day-S: same as 05h-S, windowed to the current local day. Omitted
 # when this session has no usage inside today's window.
 if [ "${has_day_sess:-0}" = "1" ]; then
     ds_cache=$(( d_cread_tok + d_cwrite_tok ))
