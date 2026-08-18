@@ -536,11 +536,18 @@ if [ -n "$rl_5h" ] || [ -n "$rl_7d" ]; then
     rl_7d_disp="${rl_7d%.*}"; [ -z "$rl_7d_disp" ] && rl_7d_disp="N/A"
     OUT+=" \033[$(get_color "$rl_5h_disp")m5h:${rl_5h_disp}%\033[0m"
     # 7-day reset countdown, straight from Claude Code's own rate_limits.seven_day.resets_at
-    # (ISO 8601) — there's no 7-day equivalent of the 5h block tracker below, and this field
+    # — there's no 7-day equivalent of the 5h block tracker below, and this field
     # is already authoritative, so computing our own estimate would just be a redundant guess.
+    # The field is a BARE EPOCH INTEGER in the real payload (e.g. 1787072400); `date -d`
+    # on that errors (epochs need a @ prefix), which silently ate the timer on every
+    # render since this row shipped. Handle the epoch directly and keep `date -d` only
+    # as the fallback for an ISO-8601 string, should the payload format ever change.
     rl_7d_reset_disp=""
     if [ -n "$rl_7d_reset" ]; then
-        rl_7d_reset_epoch=$(date -d "$rl_7d_reset" +%s 2>/dev/null)
+        case "$rl_7d_reset" in
+            *[!0-9]*) rl_7d_reset_epoch=$(date -d "$rl_7d_reset" +%s 2>/dev/null) ;;
+            *)        rl_7d_reset_epoch=$rl_7d_reset ;;
+        esac
         if [ -n "$rl_7d_reset_epoch" ]; then
             rl_7d_secs=$(( rl_7d_reset_epoch - now_epoch )); [ "$rl_7d_secs" -lt 0 ] && rl_7d_secs=0
             rl_7d_reset_disp="$((rl_7d_secs/86400))d $((rl_7d_secs%86400/3600))h"
