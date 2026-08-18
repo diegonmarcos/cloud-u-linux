@@ -207,6 +207,40 @@ fn route(mut args: Vec<String>, ep: &core::Endpoints) -> Result<()> {
                 }
                 i += 2;
             }
+            // ── tokens my-ai-dash emits (see dash sel_args) ──────────────────
+            // These MUST be consumed here rather than falling through. This
+            // loop stops at the first token it doesn't recognise and hands the
+            // remainder to `rest`, where only rest[0] is matched for the
+            // session action — so an unrecognised `statusline on` parked
+            // `restore N` at rest[2], no action matched, and EVERY restore
+            // launched from the dashboard silently became a plain fresh
+            // session instead. The dash emits `statusline on|off`
+            // unconditionally, so restore-from-dash never worked.
+            "statusline" => {
+                match args.get(i + 1).map(|s| s.as_str()) {
+                    Some(v @ ("on" | "off")) => {
+                        std::env::set_var("MY_AI_STATUSLINE", v);
+                        i += 2;
+                    }
+                    // Bare `statusline` means on; don't eat the next token,
+                    // which could be the session action.
+                    _ => {
+                        std::env::set_var("MY_AI_STATUSLINE", "on");
+                        i += 1;
+                    }
+                }
+            }
+            "--mcp-enable" => match args.get(i + 1) {
+                Some(list) => {
+                    std::env::set_var("MY_AI_MCP_ENABLE", list);
+                    i += 2;
+                }
+                None => i += 1,
+            },
+            // Claude context flags from claude-flags.json. The flag block above
+            // strips these when they lead, but the dash appends them AFTER the
+            // plugin toggles, so they reach this loop too.
+            "--auto" | "--plan" | "--interactive" => i += 1,
             "caveman" => {
                 match args.get(i + 1).map(|s| s.as_str()).unwrap_or("on") {
                     "on" => std::env::set_var("CAVEMAN_ENABLED", "1"),

@@ -126,7 +126,19 @@ fn mega_head(title: &str) -> Vec<Line<'static>> {
     ]
 }
 
-pub fn build_lines(cx: &Ctx) -> Vec<Line<'static>> {
+/// Rendered lines plus the line index the focused row landed on.
+///
+/// The caller needs the LINE index, not the focusable-row index: only a subset
+/// of lines are focusable rows (headers, blanks and read-only blocks sit
+/// between them), so the two counts differ and scrolling by the row index
+/// moves the viewport at the wrong rate.
+pub struct Rendered {
+    pub lines: Vec<Line<'static>>,
+    pub focus_line: Option<usize>,
+}
+
+pub fn build_lines(cx: &Ctx) -> Rendered {
+    let mut focus_line: Option<usize> = None;
     let mut l: Vec<Line> = Vec::new();
     let bar = format!("  +{}+", "-".repeat(W));
     l.push(Line::from(boldc(bar.clone(), Cyan)));
@@ -152,7 +164,7 @@ pub fn build_lines(cx: &Ctx) -> Vec<Line<'static>> {
     }
 
     l.extend(mega_head("COMPOSE"));
-    page_compose(cx, &mut l);
+    focus_line = page_compose(cx, &mut l);
 
     l.extend(mega_head("SESSIONS"));
     page_sessions(cx, &mut l);
@@ -184,7 +196,7 @@ pub fn build_lines(cx: &Ctx) -> Vec<Line<'static>> {
         sp("stdio", Blue),
         dim("=local-process MCP"),
     ]));
-    l
+    Rendered { lines: l, focus_line }
 }
 
 fn progress(cx: &Ctx) -> (usize, usize) {
@@ -199,7 +211,9 @@ fn progress(cx: &Ctx) -> (usize, usize) {
     (done, total)
 }
 
-fn page_compose(cx: &Ctx, l: &mut Vec<Line<'static>>) {
+/// Returns the line index the focused row was rendered at, if any.
+fn page_compose(cx: &Ctx, l: &mut Vec<Line<'static>>) -> Option<usize> {
+    let mut focus_line = None;
     let rows = build_rows(cx.st, cx.mesh, cx.is_termux, cx.mcps, cx.flags);
     let fl = focusable(&rows);
     let foc_idx = fl.get(cx.focus.min(fl.len().saturating_sub(1))).copied().unwrap_or(usize::MAX);
@@ -281,8 +295,12 @@ fn page_compose(cx: &Ctx, l: &mut Vec<Line<'static>>) {
             }
             _ => {}
         }
+        if foc {
+            focus_line = Some(l.len());
+        }
         l.push(Line::from(spans));
     }
+    focus_line
 }
 
 fn state_val<'b>(st: &'b St, grp: &str) -> &'b str {

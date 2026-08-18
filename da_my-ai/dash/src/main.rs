@@ -51,11 +51,14 @@ fn main() -> anyhow::Result<()> {
     let mut num_buf = String::new();
     let mut spin = 0usize;
     let mut last_launch = String::new();
+    // Sticky viewport offset: persists across redraws so the view only moves
+    // when the cursor would otherwise leave it.
+    let mut scroll = 0usize;
 
     let mut term = ratatui::init();
     let res = run_loop(
         &mut term, &ep, &mcps, &flags, &plugins, &hooks, &sessions, &cfg, &data, &mut st, &mut focus,
-        &mut num_buf, &mut spin, &mut last_launch,
+        &mut num_buf, &mut spin, &mut last_launch, &mut scroll,
     );
     ratatui::restore();
     res
@@ -85,6 +88,7 @@ fn run_loop(
     num_buf: &mut String,
     spin: &mut usize,
     last_launch: &mut String,
+    scroll: &mut usize,
 ) -> anyhow::Result<()> {
     loop {
         let snapshot = data.lock().unwrap().clone();
@@ -112,14 +116,32 @@ fn run_loop(
             num_buf: num_buf.as_str(),
             is_termux: my_ai_core::is_termux(),
         };
-        let lines = render::build_lines(&cx);
-        let total = lines.len();
-        let ratio = if fl.is_empty() { 0.0 } else { *focus as f32 / fl.len().max(1) as f32 };
+        let rendered = render::build_lines(&cx);
+        let total = rendered.lines.len();
+        let focus_line = rendered.focus_line;
+        // Scroll ONLY to keep the focused row on screen — never proportionally.
+        //
+        // This used to map the focus index onto the scroll range
+        // (`focus/fl.len() * max_scroll`), which moved the viewport on EVERY
+        // keypress by max_scroll/fl.len() lines. Focusable rows are a subset of
+        // rendered lines, so that step is usually >1 line: the screen slid
+        // faster than the selector and scrolled the selection out of view.
+        // Now the offset is sticky and only shifts when the cursor would leave
+        // the viewport — the terminal-standard behaviour.
         term.draw(|f| {
             let area = f.area();
-            let max_scroll = total.saturating_sub(area.height as usize) as f32;
-            let scroll = (ratio * max_scroll).round() as u16;
-            f.render_widget(Paragraph::new(lines).scroll((scroll, 0)), area)
+            let h = area.height as usize;
+            let max_scroll = total.saturating_sub(h);
+            if let Some(fl_line) = focus_line {
+                if fl_line < *scroll {
+                    *scroll = fl_line; // cursor above the viewport: pull up to it
+                } else if h > 0 && fl_line >= *scroll + h {
+                    *scroll = fl_line + 1 - h; // below: reveal just that row
+                }
+            }
+            // A resize (or shrinking content) can leave the offset past the end.
+            *scroll = (*scroll).min(max_scroll);
+            f.render_widget(Paragraph::new(rendered.lines).scroll((*scroll as u16, 0)), area)
         })?;
 
         if event::poll(Duration::from_millis(120))? {
