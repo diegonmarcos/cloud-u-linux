@@ -219,44 +219,29 @@ fi
 #   .sessions[$id]       all-time totals for this session  -> LINE 4 block 3
 #   .block_sessions[$id] THIS session inside the 5h window -> LINE 4c (5h-S)
 #   .block               all projects  inside the 5h window -> LINE 4b (5h-T)
-#   .day_sessions[$id]   THIS session inside the local day  -> LINE 4e (Day-S)
-#   .day                 all projects  inside the local day -> LINE 4d (Day-T)
 sum_in=0; sum_out=0; sum_cread=0; sum_cwrite=0
 b_in=0; b_out=0; b_cread=0; b_cwrite=0; has_bs=0
-dt_in=0; dt_out=0; dt_cread=0; dt_cwrite=0; day_reset_ms=0; has_day=0
-d_in_tok=0; d_out_tok=0; d_cread_tok=0; d_cwrite_tok=0; has_day_sess=0
-# has_sess gates LINE 4a the same way has_bs gates 4c (and has_day/has_day_sess
-# gate 4d/4e). Without it that row was the ONE daemon-backed line that printed
-# unconditionally, so anywhere the daemon does not run — termux, where there is
-# no my-ai daemon at all — it painted a full All-S row of Σ0($0.00) zeros every
-# render. Every usage row shares one rule: no daemon data, no row. This is
-# deliberately keyed on the DATA, not on "am I termux": a desktop with the
-# daemon stopped is the same situation, and the rows come back by themselves
-# once it publishes again.
+# has_sess gates LINE 4a the same way has_bs gates 4c. Without it that row was
+# the ONE daemon-backed line that printed unconditionally, so anywhere the daemon
+# does not run — termux, where there is no my-ai daemon at all — it painted a full
+# All-S row of Σ0($0.00) zeros every render. All three usage rows now share one
+# rule: no daemon data, no row. This is deliberately keyed on the DATA, not on
+# "am I termux": a desktop with the daemon stopped is the same situation, and the
+# rows come back by themselves once it publishes again.
 has_sess=0
 if [ -s "$usage_json" ] && command -v jq >/dev/null 2>&1; then
-    read -r sum_in sum_out sum_cread sum_cwrite b_in b_out b_cread b_cwrite has_bs has_sess \
-        dt_in dt_out dt_cread dt_cwrite day_reset_ms has_day \
-        d_in_tok d_out_tok d_cread_tok d_cwrite_tok has_day_sess < <(
+    read -r sum_in sum_out sum_cread sum_cwrite b_in b_out b_cread b_cwrite has_bs has_sess < <(
         jq -r --arg id "$sid" '
             (.sessions[$id]       // {}) as $s |
             (.block_sessions[$id] // {}) as $b |
-            (.day                 // {}) as $dt |
-            (.day_sessions[$id]   // {}) as $ds |
             [ ($s.input//0), ($s.output//0), ($s.cache_read//0), ($s.cache_write//0),
               ($b.input//0), ($b.output//0), ($b.cache_read//0), ($b.cache_write//0),
               (if (.block_sessions[$id]) then 1 else 0 end),
-              (if (.sessions[$id])       then 1 else 0 end),
-              ($dt.input//0), ($dt.output//0), ($dt.cache_read//0), ($dt.cache_write//0),
-              ($dt.reset_at_ms//0), (if (.day) then 1 else 0 end),
-              ($ds.input//0), ($ds.output//0), ($ds.cache_read//0), ($ds.cache_write//0),
-              (if (.day_sessions[$id]) then 1 else 0 end) ] | @tsv' \
+              (if (.sessions[$id])       then 1 else 0 end) ] | @tsv' \
             "$usage_json" 2>/dev/null)
     [ -z "${sum_in:-}" ] && { sum_in=0; sum_out=0; sum_cread=0; sum_cwrite=0; }
     [ -z "${has_bs:-}" ] && has_bs=0
     [ -z "${has_sess:-}" ] && has_sess=0
-    [ -z "${has_day:-}" ] && has_day=0
-    [ -z "${has_day_sess:-}" ] && has_day_sess=0
 fi
 
 # Cost color
@@ -634,50 +619,6 @@ if [ "${has_bs:-0}" = "1" ]; then
     OUT+=" \033[33mCchW:$(fmt_tok "$b_cwrite")(\$${s_cwrite})\033[0m"
     OUT+=" \033[34mCchR:$(fmt_tok "$b_cread")(\$${s_cread})\033[0m"
     OUT+=" \033[36mOut:$(fmt_tok "$b_out")(\$${s_out})\033[0m"
-    OUT+=" \033[37m]\033[0m\n"
-fi
-
-# LINE 4d — Day-T: same fields as 05h-T, but windowed to the current UTC
-# calendar day instead of the rolling 5h block. Reset is a fixed boundary
-# (next LOCAL midnight), computed here from `.day.reset_at_ms` the same way the
-# 7-day rate-limit row above computes its countdown from an epoch — not a
-# pre-rendered Rust string, so no space-in-@tsv parsing hazard.
-if [ "${has_day:-0}" = "1" ]; then
-    dt_cache=$(( dt_cread + dt_cwrite ))
-    dt_total=$(( dt_in + dt_cache + dt_out ))
-    read t_in t_out t_cwrite t_cread t_tot < <(LC_NUMERIC=C awk \
-        -v n="$dt_in" -v o="$dt_out" -v cr="$dt_cread" -v cw="$dt_cwrite" \
-        -v pi="$p_in" -v po="$p_out" -v pcr="$p_cr" -v pcw="$p_cw" \
-        'BEGIN{di=n/1e6*pi; dou=o/1e6*po; dcw=cw/1e6*pcw; dcr=cr/1e6*pcr; printf "%.2f %.2f %.2f %.2f %.2f", di, dou, dcw, dcr, di+dou+dcw+dcr}')
-    day_reset_disp="?"
-    if [ "${day_reset_ms:-0}" -gt 0 ] 2>/dev/null; then
-        day_secs=$(( day_reset_ms/1000 - now_epoch )); [ "$day_secs" -lt 0 ] && day_secs=0
-        day_reset_disp="$((day_secs/3600))h $((day_secs%3600/60))m"
-    fi
-    OUT+="\033[37m|\033[0m Day-T \033[37m[\033[0m"
-    OUT+=" \033[1mΣ$(fmt_tok "$dt_total")(\$${t_tot})\033[0m"
-    OUT+=" \033[36mNew:$(fmt_tok "$dt_in")(\$${t_in})\033[0m"
-    OUT+=" \033[33mCchW:$(fmt_tok "$dt_cwrite")(\$${t_cwrite})\033[0m"
-    OUT+=" \033[34mCchR:$(fmt_tok "$dt_cread")(\$${t_cread})\033[0m"
-    OUT+=" \033[36mOut:$(fmt_tok "$dt_out")(\$${t_out})\033[0m"
-    OUT+=" \033[37m]\033[0m \033[37m│\033[0m \033[90mReset:${day_reset_disp}\033[0m\n"
-fi
-
-# LINE 4e — Day-S: same as 05h-S, windowed to the current local day. Omitted
-# when this session has no usage inside today's window.
-if [ "${has_day_sess:-0}" = "1" ]; then
-    ds_cache=$(( d_cread_tok + d_cwrite_tok ))
-    ds_total=$(( d_in_tok + ds_cache + d_out_tok ))
-    read s2_in s2_out s2_cwrite s2_cread s2_tot < <(LC_NUMERIC=C awk \
-        -v n="$d_in_tok" -v o="$d_out_tok" -v cr="$d_cread_tok" -v cw="$d_cwrite_tok" \
-        -v pi="$p_in" -v po="$p_out" -v pcr="$p_cr" -v pcw="$p_cw" \
-        'BEGIN{di=n/1e6*pi; dou=o/1e6*po; dcw=cw/1e6*pcw; dcr=cr/1e6*pcr; printf "%.2f %.2f %.2f %.2f %.2f", di, dou, dcw, dcr, di+dou+dcw+dcr}')
-    OUT+="\033[37m|\033[0m Day-S \033[37m[\033[0m"
-    OUT+=" \033[1mΣ$(fmt_tok "$ds_total")(\$${s2_tot})\033[0m"
-    OUT+=" \033[36mNew:$(fmt_tok "$d_in_tok")(\$${s2_in})\033[0m"
-    OUT+=" \033[33mCchW:$(fmt_tok "$d_cwrite_tok")(\$${s2_cwrite})\033[0m"
-    OUT+=" \033[34mCchR:$(fmt_tok "$d_cread_tok")(\$${s2_cread})\033[0m"
-    OUT+=" \033[36mOut:$(fmt_tok "$d_out_tok")(\$${s2_out})\033[0m"
     OUT+=" \033[37m]\033[0m\n"
 fi
 

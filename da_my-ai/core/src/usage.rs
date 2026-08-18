@@ -21,12 +21,6 @@ pub const DEFAULT_PRICING_JSON: &str = include_str!("../../src/data/pricing.json
 /// ccusage block size: 5 hours, in milliseconds.
 pub const BLOCK_MS: i64 = 5 * 3_600_000;
 
-/// Calendar-day window size, in milliseconds. Unlike `BLOCK_MS` (a rolling
-/// 5h billing block), the day window resets at a fixed boundary: LOCAL
-/// midnight, so "today's usage" rolls over when the user's day does rather
-/// than at some hour dictated by their offset from UTC.
-pub const DAY_MS: i64 = 24 * 3_600_000;
-
 /// Statusline cache TTL (tunable) — `my-ai usage --statusline` reuses a cached
 /// line if it's younger than this, so the per-render cost of a fresh scan is
 /// paid at most once per TTL window.
@@ -337,57 +331,6 @@ pub fn fmt_utc(ts_ms: i64) -> String {
 
 pub fn floor_to_hour(ts_ms: i64) -> i64 {
     ts_ms - ts_ms.rem_euclid(3_600_000)
-}
-
-/// The system's current UTC offset in seconds (e.g. +7200 for CEST).
-///
-/// There is no std API for the local timezone and neither `libc` nor `chrono`
-/// is a dependency here — adding one to read a single integer isn't worth it,
-/// and hand-parsing TZif out of /etc/localtime is far more code than this
-/// problem deserves. `date` consults the same system tz database those crates
-/// would, so it gets DST right for free. This is called once per daemon tick
-/// (30s), never on the status line's paint path, so the fork is irrelevant;
-/// the paint path only ever reads the published JSON.
-///
-/// Falls back to 0 (UTC) if `date` is unavailable or prints something
-/// unexpected — a wrong-by-an-offset day window beats no day window.
-pub fn local_utc_offset_secs() -> i64 {
-    let out = match std::process::Command::new("date").arg("+%z").output() {
-        Ok(o) if o.status.success() => o.stdout,
-        _ => return 0,
-    };
-    // Format is ±HHMM.
-    let s = String::from_utf8_lossy(&out);
-    let s = s.trim();
-    let (sign, digits) = match s.as_bytes().first() {
-        Some(b'+') => (1, &s[1..]),
-        Some(b'-') => (-1, &s[1..]),
-        _ => return 0,
-    };
-    if digits.len() < 4 {
-        return 0;
-    }
-    let hh: i64 = match digits[0..2].parse() {
-        Ok(v) => v,
-        Err(_) => return 0,
-    };
-    let mm: i64 = match digits[2..4].parse() {
-        Ok(v) => v,
-        Err(_) => return 0,
-    };
-    sign * (hh * 3600 + mm * 60)
-}
-
-/// Floor to the start of the local calendar day containing `ts_ms`, returned as
-/// a UTC epoch-ms instant (so it stays directly comparable to entry timestamps).
-///
-/// `offset_secs` is the local UTC offset — see `local_utc_offset_secs`. Kept as
-/// a parameter rather than looked up inside so the arithmetic is pure and
-/// testable at any offset, instead of only whatever the test machine is set to.
-pub fn day_start_ms(ts_ms: i64, offset_secs: i64) -> i64 {
-    let off_ms = offset_secs * 1000;
-    let local = ts_ms + off_ms;
-    (local - local.rem_euclid(DAY_MS)) - off_ms
 }
 
 pub fn now_ms() -> i64 {
@@ -741,10 +684,6 @@ impl Scanner {
     ///   absent when idle;
     /// * `block_sessions` — the SAME window split per session (`5h-S`), so a
     ///   session's row is directly comparable to the total above it;
-    /// * `day` — all projects, windowed to the current LOCAL calendar day
-    ///   (`Day-T`), with a fixed `reset_at_ms` (next local midnight, as a UTC
-    ///   instant) instead of a rolling 5h boundary;
-    /// * `day_sessions` — the SAME day window split per session (`Day-S`);
     /// * `sessions` — all-time per-session totals, for rows that are meant to
     ///   cover the whole session rather than the billing window.
     ///
@@ -773,60 +712,6 @@ impl Scanner {
                 s.cost_cache_write += (e.cache_write as f64 / 1e6) * p.cache_write;
             }
         }
-
-        // Day-T / Day-S: same shape as block/block_sessions above, but windowed
-        // to the current LOCAL calendar day instead of the active 5h block. Raw
-        // counts only (no cost_*/cost fields) — the status line already prices
-        // All-S/05h-S client-side from these same raw fields via its own
-        // pricing table, so duplicating that math here would just be a second
-        // place for the two to drift apart.
-        //
-        // Every entry in this window survives the scanner's retention, but the
-        // margin is exactly zero-slack and worth spelling out: for an entry at
-        // `day_start + t` with `elapsed_today = now - day_start`, retention
-        // keeps it when `t >= elapsed_today - RETAIN_MS`, and since
-        // `elapsed_today < DAY_MS <= RETAIN_MS` that bound is always negative —
-        // so every t >= 0 survives, at any hour and any UTC offset. This holds
-        // ONLY while RETAIN_MS >= DAY_MS; see the retention_covers_day_window
-        // test, which fails if that coupling is ever broken.
-        let day_start = day_start_ms(now, local_utc_offset_secs());
-        let mut day = BlockTotals::default();
-        let mut day_sessions: BTreeMap<String, SessionTotals> = BTreeMap::new();
-        for e in self.entries.iter().filter(|e| e.ts_ms >= day_start) {
-            day.input += e.input;
-            day.output += e.output;
-            day.cache_read += e.cache_read;
-            day.cache_write += e.cache_write;
-            let s = day_sessions.entry(e.session.to_string()).or_default();
-            s.input += e.input;
-            s.output += e.output;
-            s.cache_read += e.cache_read;
-            s.cache_write += e.cache_write;
-        }
-        let day_json = serde_json::json!({
-            "input": day.input, "output": day.output,
-            "cache_read": day.cache_read, "cache_write": day.cache_write,
-            "total_tokens": day.total_tokens(),
-            // ponytail: +24h, not a re-derived next-midnight. On the two DST
-            // transition days a year the local day is 23h or 25h, so this
-            // countdown is off by an hour on those days only. Upgrade path if
-            // that ever matters: recompute day_start for (day_start + 36h) with
-            // the offset in effect then, instead of adding a fixed DAY_MS.
-            "reset_at_ms": day_start + DAY_MS,
-        });
-        let day_sessions_json: serde_json::Map<String, Value> = day_sessions
-            .iter()
-            .map(|(id, s)| {
-                (
-                    id.clone(),
-                    serde_json::json!({
-                        "input": s.input, "output": s.output,
-                        "cache_read": s.cache_read, "cache_write": s.cache_write,
-                        "total_tokens": s.total_tokens(),
-                    }),
-                )
-            })
-            .collect();
 
         let block = active.map(|i| {
             let b = &blocks[i];
@@ -887,8 +772,6 @@ impl Scanner {
             "generated_ms": now,
             "block": block,
             "block_sessions": block_sessions,
-            "day": day_json,
-            "day_sessions": day_sessions_json,
             "sessions": sessions,
             "blocks": global_blocks(&home, &cwd),
         })
@@ -1127,62 +1010,6 @@ mod tests {
         // one hour later differs by exactly 3_600_000 ms
         let later = parse_rfc3339_ms("2026-07-31T12:31:04.123Z").unwrap();
         assert_eq!(later - ms, 3_600_000);
-    }
-
-    #[test]
-    fn day_start_ms_floors_to_local_midnight() {
-        let ms = |s: &str| parse_rfc3339_ms(s).unwrap();
-
-        // offset 0 == plain UTC-midnight flooring.
-        assert_eq!(day_start_ms(ms("2026-07-31T23:59:59.999Z"), 0), ms("2026-07-31T00:00:00.000Z"));
-        assert_eq!(day_start_ms(ms("2026-08-01T00:00:00.000Z"), 0), ms("2026-08-01T00:00:00.000Z"));
-
-        // +02:00 (CEST): local midnight is 22:00 UTC the PREVIOUS day. This is
-        // the case that was wrong when the window was UTC-anchored — 01:00
-        // local Saturday must count as Saturday, not Friday.
-        let off = 2 * 3600;
-        let sat_0100_local = ms("2026-08-01T23:00:00.000Z"); // 01:00 local Aug 2
-        assert_eq!(day_start_ms(sat_0100_local, off), ms("2026-08-01T22:00:00.000Z"));
-        // 23:59 local the same day still floors to that same local midnight.
-        assert_eq!(day_start_ms(ms("2026-08-02T21:59:59.999Z"), off), ms("2026-08-01T22:00:00.000Z"));
-        // One minute later is the next local day.
-        assert_eq!(day_start_ms(ms("2026-08-02T22:00:00.000Z"), off), ms("2026-08-02T22:00:00.000Z"));
-
-        // Negative offset (e.g. -05:00) works the same way.
-        let west = -5 * 3600;
-        assert_eq!(day_start_ms(ms("2026-08-02T04:59:59.999Z"), west), ms("2026-08-01T05:00:00.000Z"));
-        assert_eq!(day_start_ms(ms("2026-08-02T05:00:00.000Z"), west), ms("2026-08-02T05:00:00.000Z"));
-
-        // A day start is always <= now and never more than DAY_MS behind it,
-        // which is what keeps the window inside the scanner's 24h retention.
-        for off in [-12 * 3600, -5 * 3600, 0, 2 * 3600, 14 * 3600] {
-            let now = ms("2026-08-02T13:37:11.500Z");
-            let start = day_start_ms(now, off);
-            assert!(start <= now, "day start after now at offset {off}");
-            assert!(now - start < DAY_MS, "day start more than 24h behind now at offset {off}");
-        }
-    }
-
-    /// The Day-T/Day-S rows read `Scanner::entries`, which is pruned to
-    /// RETAIN_MS. If retention were ever shortened below a day, the earliest
-    /// hours of "today" would silently vanish from the row — numbers that look
-    /// plausible but are quietly low, the worst kind of wrong. Fail loudly here
-    /// instead.
-    #[test]
-    fn retention_covers_day_window() {
-        assert!(
-            RETAIN_MS >= DAY_MS,
-            "RETAIN_MS ({RETAIN_MS}) < DAY_MS ({DAY_MS}): the day window would be silently truncated"
-        );
-    }
-
-    #[test]
-    fn local_utc_offset_is_a_whole_number_of_minutes_in_range() {
-        // Can't assert a specific value (depends on the machine), but a bad
-        // parse would show up as an out-of-range or non-minute-aligned result.
-        let off = local_utc_offset_secs();
-        assert!((-14 * 3600..=14 * 3600).contains(&off), "implausible utc offset: {off}");
-        assert_eq!(off % 60, 0, "offset not minute-aligned: {off}");
     }
 
     #[test]
