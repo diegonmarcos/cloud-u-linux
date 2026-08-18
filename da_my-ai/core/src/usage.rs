@@ -21,6 +21,12 @@ pub const DEFAULT_PRICING_JSON: &str = include_str!("../../src/data/pricing.json
 /// ccusage block size: 5 hours, in milliseconds.
 pub const BLOCK_MS: i64 = 5 * 3_600_000;
 
+/// Calendar-day window size, in milliseconds. Unlike `BLOCK_MS` (a rolling
+/// 5h billing block), the day window resets at a fixed boundary — UTC
+/// midnight, matching every other timestamp in this file (`fmt_utc`,
+/// `floor_to_hour`) rather than introducing a local-timezone dependency.
+pub const DAY_MS: i64 = 24 * 3_600_000;
+
 /// Statusline cache TTL (tunable) — `my-ai usage --statusline` reuses a cached
 /// line if it's younger than this, so the per-render cost of a fresh scan is
 /// paid at most once per TTL window.
@@ -331,6 +337,11 @@ pub fn fmt_utc(ts_ms: i64) -> String {
 
 pub fn floor_to_hour(ts_ms: i64) -> i64 {
     ts_ms - ts_ms.rem_euclid(3_600_000)
+}
+
+/// Floor to the start of the UTC calendar day containing `ts_ms`.
+pub fn day_start_ms(ts_ms: i64) -> i64 {
+    ts_ms - ts_ms.rem_euclid(DAY_MS)
 }
 
 pub fn now_ms() -> i64 {
@@ -684,6 +695,10 @@ impl Scanner {
     ///   absent when idle;
     /// * `block_sessions` — the SAME window split per session (`5h-S`), so a
     ///   session's row is directly comparable to the total above it;
+    /// * `day` — all projects, windowed to the current UTC calendar day
+    ///   (`Day-T`), with a fixed `reset_at_ms` (next UTC midnight) instead of
+    ///   a rolling 5h boundary;
+    /// * `day_sessions` — the SAME day window split per session (`Day-S`);
     /// * `sessions` — all-time per-session totals, for rows that are meant to
     ///   cover the whole session rather than the billing window.
     ///
@@ -712,6 +727,46 @@ impl Scanner {
                 s.cost_cache_write += (e.cache_write as f64 / 1e6) * p.cache_write;
             }
         }
+
+        // Day-T / Day-S: same shape as block/block_sessions above, but windowed
+        // to the current UTC calendar day instead of the active 5h block. Raw
+        // counts only (no cost_*/cost fields) — the status line already prices
+        // All-S/05h-S client-side from these same raw fields via its own
+        // pricing table, so duplicating that math here would just be a second
+        // place for the two to drift apart.
+        let day_start = day_start_ms(now);
+        let mut day = BlockTotals::default();
+        let mut day_sessions: BTreeMap<String, SessionTotals> = BTreeMap::new();
+        for e in self.entries.iter().filter(|e| e.ts_ms >= day_start) {
+            day.input += e.input;
+            day.output += e.output;
+            day.cache_read += e.cache_read;
+            day.cache_write += e.cache_write;
+            let s = day_sessions.entry(e.session.to_string()).or_default();
+            s.input += e.input;
+            s.output += e.output;
+            s.cache_read += e.cache_read;
+            s.cache_write += e.cache_write;
+        }
+        let day_json = serde_json::json!({
+            "input": day.input, "output": day.output,
+            "cache_read": day.cache_read, "cache_write": day.cache_write,
+            "total_tokens": day.total_tokens(),
+            "reset_at_ms": day_start + DAY_MS,
+        });
+        let day_sessions_json: serde_json::Map<String, Value> = day_sessions
+            .iter()
+            .map(|(id, s)| {
+                (
+                    id.clone(),
+                    serde_json::json!({
+                        "input": s.input, "output": s.output,
+                        "cache_read": s.cache_read, "cache_write": s.cache_write,
+                        "total_tokens": s.total_tokens(),
+                    }),
+                )
+            })
+            .collect();
 
         let block = active.map(|i| {
             let b = &blocks[i];
@@ -772,6 +827,8 @@ impl Scanner {
             "generated_ms": now,
             "block": block,
             "block_sessions": block_sessions,
+            "day": day_json,
+            "day_sessions": day_sessions_json,
             "sessions": sessions,
             "blocks": global_blocks(&home, &cwd),
         })
@@ -1010,6 +1067,15 @@ mod tests {
         // one hour later differs by exactly 3_600_000 ms
         let later = parse_rfc3339_ms("2026-07-31T12:31:04.123Z").unwrap();
         assert_eq!(later - ms, 3_600_000);
+    }
+
+    #[test]
+    fn day_start_ms_floors_to_utc_midnight_and_resets_after_24h() {
+        let just_before_midnight = parse_rfc3339_ms("2026-07-31T23:59:59.999Z").unwrap();
+        let midnight = parse_rfc3339_ms("2026-08-01T00:00:00.000Z").unwrap();
+        assert_eq!(day_start_ms(just_before_midnight), parse_rfc3339_ms("2026-07-31T00:00:00.000Z").unwrap());
+        assert_eq!(day_start_ms(midnight), midnight);
+        assert_eq!(day_start_ms(midnight) + DAY_MS, day_start_ms(midnight + DAY_MS));
     }
 
     #[test]
