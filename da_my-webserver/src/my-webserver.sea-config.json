@@ -1,0 +1,10 @@
+{
+  "main": "my-webserver.cjs",
+  "output": "sea-prep.blob",
+  "disableExperimentalSEAWarning": true,
+  "assets": {
+    "marked.min.js": "lib/marked.min.js",
+    "github-markdown-dark.css": "lib/github-markdown-dark.css",
+    "browse.html": "lib/browse.html"
+  }
+}
