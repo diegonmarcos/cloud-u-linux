@@ -7,7 +7,7 @@ let
   archMap = { "x86_64-linux" = "x86_64"; "aarch64-linux" = "aarch64"; };
   arch    = archMap.${stdenv.hostPlatform.system}
               or (throw "my-ai: unsupported platform ${stdenv.hostPlatform.system}");
-  baseUrl = "https://github.com/diegonmarcos/unix/releases/download/my-ai-latest";
+  baseUrl = "https://github.com/diegonmarcos/cloud-unix/releases/download/my-ai-latest";
   sys     = hashes.${stdenv.hostPlatform.system};
 in
 stdenv.mkDerivation {
@@ -43,7 +43,7 @@ stdenv.mkDerivation {
 
   meta = with lib; {
     description  = "my-ai — Claude Code via the Headroom compression proxy";
-    homepage     = "https://github.com/diegonmarcos/unix/tree/main/da_my-ai";
+    homepage     = "https://github.com/diegonmarcos/cloud-unix/tree/main/da_my-ai";
     platforms    = [ "x86_64-linux" "aarch64-linux" ];
     mainProgram  = "my-ai";
   };
