@@ -3,7 +3,7 @@
   "owner": {
     "name": "Diego Nepomuceno Marcos"
   },
-  "description": "Local marketplace — Diego's declarative Claude Code plugins (cloud principles, split 2026-07-30 into 4 focused plugins, + ponytail), source-of-truth in ~/git/unix.",
+  "description": "Local marketplace — Diego's declarative Claude Code plugins (cloud principles, split 2026-07-30 into 4 focused plugins, + ponytail), source-of-truth in ~/git/cloud-unix.",
   "plugins": [
     {
       "name": "hooks-stack-framework-principles-cloud-ai-plugin",

@@ -10,13 +10,13 @@
 
 Same engine interface everywhere: `build.sh` (universal engine) + `build.json` (config) per project/service.
 
-**cloud**: `build.sh ship` = build+secrets+deploy+compose (full pipeline). `CLOUD_PROFILE=<name> build.sh profile-ship` = generic topology, never DR/fallback. Submodules (`cloud/tools`, `cloud/I_cloud-data`) read-only — edit `~/git/tools/`, `~/git/I_cloud-data/` instead. GHA auto-deploys `a_solutions/*/src/` changes pushed to `main`.
+**cloud**: `build.sh ship` = build+secrets+deploy+compose (full pipeline). `CLOUD_PROFILE=<name> build.sh profile-ship` = generic topology, never DR/fallback. Submodules (`cloud/tools`, `cloud/I_cloud-data`) read-only — edit `~/git/cloud-mykonsole-dtk/`, `~/git/I_cloud-data/` instead. GHA auto-deploys `a_solutions/*/src/` changes pushed to `main`.
 
 **unix**: `build.sh switch|boot|test|check|update|diff|install|build{raw|iso|qcow|vm}|burn`. Root is tmpfs (impermanence); `/nix` + `/home/*` persistent btrfs. VMs receive HM as GHCR Docker images (1GB hosts OOM on `nix eval`/`home-manager switch`).
 
 **front**: TypeScript strict, Svelte 5 runes / Vue 3 Composition API. No inline CSS (SCSS mixins only). No `fetch()` for JSON — read `globalThis.PORTAL_DATA[key]` from `data-<key>.json.js`. Matomo required in every HTML `<head>`. Deploy: `1.ops/build_main.sh` (TUI) or per-project `build.sh build|dev|deploy`. Never `dev`/`serve` after source edits unless asked.
 
-**vault**: paths only referenced from public repos, never copied values. Bearer token: `python ~/git/vault/A0_keys/providers/authelia/oauth/get_token.py`.
+**vault**: paths only referenced from public repos, never copied values. Bearer token: `python ~/git/cloud-vault/A0_keys/providers/authelia/oauth/get_token.py`.
 
 ## Live Infra Data — use MCP, don't hardcode here
 

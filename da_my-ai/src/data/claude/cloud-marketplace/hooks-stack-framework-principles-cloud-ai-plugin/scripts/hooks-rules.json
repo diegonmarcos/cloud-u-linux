@@ -327,7 +327,7 @@
       },
       "handler": "check_git_add_secret",
       "reason": "git add of secret-shaped path — public-repo exposure risk",
-      "alt": "sops-encrypt secrets.yaml first; raw key material lives only in ~/git/vault",
+      "alt": "sops-encrypt secrets.yaml first; raw key material lives only in ~/git/cloud-vault",
       "tests": {
         "deny": [],
         "allow": [

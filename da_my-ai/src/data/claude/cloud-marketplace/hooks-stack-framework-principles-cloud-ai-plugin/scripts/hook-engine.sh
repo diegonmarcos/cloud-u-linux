@@ -19,7 +19,7 @@
 #   inject → fail-open: emit a minimal static reminder.
 #   nudge  → fail-open: exit 0.
 #
-# Source: ~/git/unix/ba_flakes_desktop/src/modules/dotfiles/claude/cloud-marketplace/cloud-principles-ai-plugin/scripts/
+# Source: ~/git/cloud-unix/ba_flakes_desktop/src/modules/dotfiles/claude/cloud-marketplace/cloud-principles-ai-plugin/scripts/
 # Deployed via: home.file ".claude/cloud-marketplace" + `claude plugin marketplace add`
 #   (see common.nix claudeMarketplace activation) — installed copy runs from
 #   ~/.claude/plugins/cache/cloud-marketplace/cloud-principles-ai-plugin/<version>/scripts/
@@ -128,7 +128,7 @@ if [ "$MODE" = "guard" ]; then
     # ── procedural carve-out handlers (imperative logic stays in shell) ──
     # Return 0 to DENY, 1 to ALLOW.
     check_git_add_secret() {
-        case "$PWD" in "$HOME"/git/vault*) return 1 ;; esac
+        case "$PWD" in "$HOME"/git/cloud-vault*) return 1 ;; esac
         local tokens tok
         tokens="$(printf '%s' "$CMD" | grep -oE '[^[:space:]]+\.(env|key|pem|age|p12|pfx)\b|[^[:space:]]*(^|/)\.secrets\b|[^[:space:]]*secrets\.ya?ml\b' 2>/dev/null || true)"
         for tok in $tokens; do

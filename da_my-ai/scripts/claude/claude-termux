@@ -21,4 +21,4 @@ if [ -x "$_bin" ]; then
   esac
 fi
 echo "[claude-termux] native exec failed — trying rescue chain..." >&2
-exec sh "$HOME/git/tools/5-infos/claude-rescue/claude-rescue.sh" "$@"
+exec sh "$HOME/git/cloud-mykonsole-dtk/5-infos/claude-rescue/claude-rescue.sh" "$@"

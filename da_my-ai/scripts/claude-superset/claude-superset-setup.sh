@@ -31,8 +31,8 @@ esac
 # Last resort when claude isn't installed. Reuses the canonical 12-tier rescue
 # from the tools repo when present (DRY); otherwise runs the inline 4-tier chain.
 if [ "$MODE" = "rescue" ]; then
-  for r in "$HOME/git/tools/commands/recover/claude-rescue/claude-rescue.sh" \
-           "$HOME/git/tools/5-infos/claude-rescue/claude-rescue.sh"; do
+  for r in "$HOME/git/cloud-mykonsole-dtk/commands/recover/claude-rescue/claude-rescue.sh" \
+           "$HOME/git/cloud-mykonsole-dtk/5-infos/claude-rescue/claude-rescue.sh"; do
     [ -f "$r" ] && { say "rescue via canonical tools chain: $r"; exec sh "$r" "$@"; }
   done
   say "tools claude-rescue.sh not found — inline chain: podman -> npx -> nix -> node"
@@ -96,7 +96,7 @@ case "$PLATFORM" in
     # Declarative systems — claude is provided by the flake. Imperatively
     # installing here would violate the fully-declarative rule. Guide instead.
     say "$PLATFORM is flake-managed — claude is declarative, don't hand-install."
-    say "  permanent : ~/git/unix/<flake>/build.sh switch   (rebuild the flake)"
+    say "  permanent : ~/git/cloud-unix/<flake>/build.sh switch   (rebuild the flake)"
     say "  temporary : claude-superset setup --shell         (ephemeral nix-shell)"
     exit 0 ;;
   deb|linux|macos)

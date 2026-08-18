@@ -12,7 +12,7 @@
 set -u
 
 fmt="ansi"; [ "${1:-}" = "--format" ] && fmt="${2:-ansi}"
-JSON="$HOME/git/unix/da_my-ai/src/data/endpoints.json"
+JSON="$HOME/git/cloud-unix/da_my-ai/src/data/endpoints.json"
 
 command -v jq >/dev/null 2>&1 || exit 0
 [ -f "$JSON" ] || exit 0

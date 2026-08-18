@@ -12,7 +12,7 @@ command -v goose-orphan-sweep >/dev/null 2>&1 \
 
 # Read Bearer token from vault for HTTP MCP Authorization headers
 # Config templates use AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN env var
-_token_file="$HOME/git/vault/A0_keys/providers/authelia/signed-bearer_jwt/tokens/claude-admin.json"
+_token_file="$HOME/git/cloud-vault/A0_keys/providers/authelia/signed-bearer_jwt/tokens/claude-admin.json"
 if [ -r "$_token_file" ]; then
   _token=$(jq -r '.access_token' "$_token_file" 2>/dev/null)
   if [ -n "$_token" ] && [ "$_token" != "null" ]; then
