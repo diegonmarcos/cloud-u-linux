@@ -92,6 +92,19 @@ eval "$(echo "$input" | jq -r '
 [ -z "$session_id" ] && session_id=$(basename "$(dirname "$transcript_path")" 2>/dev/null)
 session_short="${session_id:0:8}"
 
+# Claude Code only includes rate_limits on SOME hook calls, not every one —
+# most ticks omit it entirely. Each refresher run overwrites the shared cache
+# wholesale, so an omitted-field tick blanks the whole 5h/7d row until the
+# next tick happens to carry the data again — it flickers in and out. Stick
+# the last-seen values to disk per session and fall back to them when the
+# current payload is silent, so the row stays up between real updates.
+rl_sticky="/tmp/statusline_rl_${session_short}.cache"
+if [ -n "$rl_5h" ] || [ -n "$rl_7d" ]; then
+    printf '%s\n%s\n%s\n' "$rl_5h" "$rl_7d" "$rl_7d_reset" > "$rl_sticky" 2>/dev/null
+elif [ -f "$rl_sticky" ]; then
+    { read -r rl_5h; read -r rl_7d; read -r rl_7d_reset; } < "$rl_sticky" 2>/dev/null
+fi
+
 # Custom session name capped to 13 display chars (ellipsis when longer)
 session_name_disp="$session_name"
 [ "${#session_name_disp}" -gt 13 ] && session_name_disp="${session_name:0:12}…"
