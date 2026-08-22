@@ -60,6 +60,22 @@
     "AUTHELIA_OIDC_TOKENS_DIR": "@HOME@/git/cloud-vault/A0_keys/providers/authelia/signed-bearer_jwt/tokens"
   },
   "alwaysThinkingEnabled": true,
+
+  "_skillOverrides_comment": [
+    "Suppresses the recurring 'Teach auto mode about your environment?' prompt.",
+    "2026-08-22: it had fired 12 times (projectOnboardingSeenCount=12 for /home/diego)",
+    "because answering 'Not now' defers rather than dismisses, and nothing else was",
+    "recording an answer. The prompt is gated in the CLI on",
+    "  aM()?.envOnboarding === true && Qo().skillOverrides?.['auto-mode-setup'] !== 'off'",
+    "so setting the override to 'off' turns it off at the source instead of relying on",
+    "a per-machine dismissal flag. It belongs HERE and not in ~/.claude/settings.json:",
+    "that file is generated from this one on every switch and keeps exactly one runtime",
+    "key (effortLevel), so a hand-dismissal written there is wiped by the next switch",
+    "and the prompt returns forever."
+  ],
+  "skillOverrides": {
+    "auto-mode-setup": "off"
+  },
   "enabledPlugins": {
     "hooks-stack-framework-principles-cloud-ai-plugin@cloud-marketplace": true,
     "compression-cloud-ai-plugin@cloud-marketplace": true,
