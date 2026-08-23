@@ -12,7 +12,7 @@
       "Read(**/*.webp)",
       "Read(**/*.bmp)"
     ],
-    "_allow_comment": "Read-only inspection commands that prompted repeatedly across the last 50 sessions (2026-08-20 transcript scan of 64k tool calls). Only non-mutating forms are listed: systemctl/journalctl QUERY subcommands (is-active/show/cat/status/list-units, -u/-b/-k log reads) and `gh run watch`. Deliberately NOT here: systemctl start/stop/restart, gh workflow run, gh release download, docker pull, nix build, and any interpreter or `env`/`bash`/`python3` form, since a wildcard on those is arbitrary code execution. Commands Claude Code already auto-allows (cat/ls/head/tail/grep/rg/jq/find/sed/ps/git read-only/gh view+list/docker ps) are intentionally omitted - they never prompt and an entry would be dead weight.",
+    "_allow_comment": "Read-only inspection commands that prompted repeatedly across the last 50 sessions (2026-08-20 transcript scan of 64k tool calls). Only non-mutating forms are listed: systemctl/journalctl QUERY subcommands (is-active/show/cat/status/list-units, -u/-b/-k log reads) and `gh run watch`. Deliberately NOT here: systemctl start/stop/restart, gh workflow run, gh release download, docker pull, nix build, and any interpreter or `env`/`bash`/`python3` form, since a wildcard on those is arbitrary code execution. 2026-08-23: added `mcp__cloud-infra` - a SERVER-WIDE grant on the c3-infra-mcp server (Claude Code MCP rules take `mcp__<server>` for all tools or `mcp__<server>__<tool>` for one; `mcp__<server>__*` is NOT a supported form). This is deliberately broader than the Bash policy above and does cover mutating verbs (devops_service_start, devops_container_restart, devops_docker_compose_up, devops_build_ship, devops_vm_stop, devops_secrets_set). Rationale: every fleet repair routed through this server was being denied one tool at a time, and the server is our own authenticated infra API behind Authelia bearer + the wg mesh gate - not arbitrary code execution. Narrow it back to per-tool entries if that trust boundary ever changes. Commands Claude Code already auto-allows (cat/ls/head/tail/grep/rg/jq/find/sed/ps/git read-only/gh view+list/docker ps) are intentionally omitted - they never prompt and an entry would be dead weight.",
     "allow": [
       "Bash(gh run watch *)",
       "Bash(systemctl --user is-active *)",
@@ -34,7 +34,8 @@
       "Bash(journalctl --list-boots *)",
       "mcp__google-workspace__workspace_drive",
       "mcp__google-workspace__search_drive_files",
-      "mcp__cloud-cgc-mcp__cgc_octocode_search"
+      "mcp__cloud-cgc-mcp__cgc_octocode_search",
+      "mcp__cloud-infra"
     ]
   },
   "_extraKnownMarketplaces_comment": "Registers the cloud-marketplace plugin dir. 2026-08-12: this existed ONLY in the runtime ~/.claude/settings.json and was declared nowhere, so every switch wiped it — home.activation.claudeSettings rebuilds the file from source and preserves exactly one runtime key (effortLevel). The value is fully derivable (@HOME@/.claude/cloud-marketplace, deployed by this same module), so it belongs in the declaration rather than depending on Claude Code re-registering it after each rebuild.",
