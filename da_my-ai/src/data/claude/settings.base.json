@@ -63,6 +63,9 @@
   },
   "alwaysThinkingEnabled": true,
 
+  "_enableAllProjectMcpServers_comment": "Auto-trust a project's own .mcp.json servers instead of prompting per-server. The fleet's .mcp.json files are machine-derived from a_solutions/*/build.json (all our own servers), so blanket-trust is safe here. Mirrored into every repo's committed .claude/settings.json (0_apps/src/claude/settings.json) so fresh clones with no ~/.claude — CI, containers, Claude Code on the web — auto-load them too; this copy covers ~/.claude on home-manager machines.",
+  "enableAllProjectMcpServers": true,
+
   "_skillOverrides_comment": [
     "Suppresses the recurring 'Teach auto mode about your environment?' prompt.",
     "2026-08-22: it had fired 12 times (projectOnboardingSeenCount=12 for /home/diego)",
