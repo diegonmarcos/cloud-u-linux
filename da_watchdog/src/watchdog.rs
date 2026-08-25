@@ -578,6 +578,10 @@ struct ProcAvg {
     read_bps: f64,
     write_bps: f64,
     runq_wait_pct: f64,
+    /// Averaged too, because a major-fault rate is spiky by nature: a process
+    /// faults in a burst and then runs quiet, so the instant number alone
+    /// says "nothing is thrashing" a tick after it was.
+    majflt_per_s: f64,
 }
 
 /// Averaging windows, in seconds — the EWMA time constants. 1m/5m/15m mirror
@@ -605,13 +609,16 @@ impl ProcAvg {
         self.read_bps = f(self.read_bps, live.read_bps);
         self.write_bps = f(self.write_bps, live.write_bps);
         self.runq_wait_pct = f(self.runq_wait_pct, live.runq_wait_pct);
+        self.majflt_per_s = f(self.majflt_per_s, live.majflt_per_s);
     }
 
     fn to_json(self) -> String {
         format!(
             "{{\"cpu_pct\":{:.1},\"mem_pct\":{:.2},\"mem_rss_bytes\":{:.0},\
-              \"read_bytes_per_s\":{:.0},\"write_bytes_per_s\":{:.0},\"runq_wait_pct\":{:.2}}}",
-            self.cpu_pct, self.mem_pct, self.rss_bytes, self.read_bps, self.write_bps, self.runq_wait_pct
+              \"read_bytes_per_s\":{:.0},\"write_bytes_per_s\":{:.0},\"runq_wait_pct\":{:.2},\
+              \"majflt_per_s\":{:.1}}}",
+            self.cpu_pct, self.mem_pct, self.rss_bytes, self.read_bps, self.write_bps,
+            self.runq_wait_pct, self.majflt_per_s
         )
     }
 }
@@ -624,6 +631,8 @@ impl ProcAvg {
 #[derive(Clone, Copy)]
 struct ProcSample {
     cpu_ticks: u64,
+    /// Cumulative major faults — pages that had to be read back from disk.
+    majflt: u64,
     read_bytes: u64,
     write_bytes: u64,
     runq_wait_ns: u64,
@@ -702,15 +711,28 @@ fn proc_name(pid: i32, status: &str) -> String {
         .unwrap_or_else(|| "?".into())
 }
 
-fn read_proc_cpu_ticks(pid: i32) -> Option<u64> {
+/// CPU ticks and major faults, from ONE read of /proc/<pid>/stat.
+///
+/// Major faults are here rather than in a reader of their own because this
+/// file is opened once per pid per tick on purpose — the fleet's policy exists
+/// to stop a monitor becoming the load it reports, and a second open of the
+/// same file for one more integer is exactly that.
+///
+/// WHY MAJOR FAULTS. The table could already say who is waiting on the CPU
+/// (runq) and who is moving bytes (read/write). It could not say who is
+/// STALLING ON MEMORY. A major fault is a page that had to come back from
+/// disk — a refault or a swap-in — which is precisely what memory pressure is
+/// made of. Rate, not total: the total is dominated by whatever started first.
+fn read_proc_stat_bits(pid: i32) -> Option<(u64, u64)> {
     let s = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     let after = s.rsplit_once(')')?.1;
     let f: Vec<&str> = after.split_whitespace().collect();
-    // After the comm field, index 0 is state; utime is field 14 overall,
-    // i.e. index (14-3)=11 in this post-comm slice, stime is index 12.
+    // After the comm field, index 0 is state, so field N is index N-3:
+    // majflt is field 12 → 9, utime 14 → 11, stime 15 → 12.
+    let majflt: u64 = f.get(9)?.parse().ok()?;
     let utime: u64 = f.get(11)?.parse().ok()?;
     let stime: u64 = f.get(12)?.parse().ok()?;
-    Some(utime + stime)
+    Some((utime + stime, majflt))
 }
 
 /// read_bytes/write_bytes from /proc/<pid>/io — actual storage I/O, not the
@@ -761,6 +783,71 @@ fn read_proc_runq_wait_ns(pid: i32) -> Option<u64> {
 /// closes. Callers diff it with saturating_sub, which turns that drop into a
 /// zero — losing the last few bytes of a closed connection, never inventing a
 /// spike. That trade is deliberate: a wrong rate is worse than a missing one.
+/// The page-reclaim counters, cumulative since boot.
+///
+/// These are what memory pressure is MADE of, and the pair that matters most
+/// is direct vs kswapd. Reclaim by kswapd is background work: it happens on
+/// its own thread and shows up as PSI `some`. DIRECT reclaim is a process
+/// being made to free memory before its own allocation can proceed — that is
+/// a synchronous stall, and it is what drives PSI `full`. A panel that shows
+/// only "memory is under pressure" cannot tell those apart, and they call for
+/// completely different responses.
+#[derive(Clone, Copy, Default)]
+struct VmStat {
+    refault_file: u64,
+    refault_anon: u64,
+    swap_in: u64,
+    swap_out: u64,
+    scan_direct: u64,
+    scan_kswapd: u64,
+    steal_direct: u64,
+    steal_kswapd: u64,
+}
+
+fn read_vmstat() -> VmStat {
+    let Ok(t) = fs::read_to_string("/proc/vmstat") else { return VmStat::default() };
+    let g = |k: &str| -> u64 {
+        t.lines()
+            .find(|l| l.split_whitespace().next() == Some(k))
+            .and_then(|l| l.split_whitespace().nth(1))
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0)
+    };
+    VmStat {
+        refault_file: g("workingset_refault_file"),
+        refault_anon: g("workingset_refault_anon"),
+        swap_in: g("pswpin"),
+        swap_out: g("pswpout"),
+        scan_direct: g("pgscan_direct"),
+        scan_kswapd: g("pgscan_kswapd"),
+        steal_direct: g("pgsteal_direct"),
+        steal_kswapd: g("pgsteal_kswapd"),
+    }
+}
+
+/// Pages per second, from the delta. Saturating, because these counters are
+/// per-boot and a peer that rebooted between two samples would otherwise
+/// publish a vast negative spike as a vast positive one.
+fn reclaim_json(prev: VmStat, now: VmStat, secs: f64) -> String {
+    let r = |a: u64, b: u64| -> f64 {
+        if secs <= 0.0 { 0.0 } else { a.saturating_sub(b) as f64 / secs }
+    };
+    format!(
+        "{{\"refault_file\":{:.0},\"refault_anon\":{:.0},\
+          \"swap_in\":{:.0},\"swap_out\":{:.0},\
+          \"scan_direct\":{:.0},\"scan_kswapd\":{:.0},\
+          \"steal_direct\":{:.0},\"steal_kswapd\":{:.0}}}",
+        r(now.refault_file, prev.refault_file),
+        r(now.refault_anon, prev.refault_anon),
+        r(now.swap_in, prev.swap_in),
+        r(now.swap_out, prev.swap_out),
+        r(now.scan_direct, prev.scan_direct),
+        r(now.scan_kswapd, prev.scan_kswapd),
+        r(now.steal_direct, prev.steal_direct),
+        r(now.steal_kswapd, prev.steal_kswapd),
+    )
+}
+
 fn read_proc_net() -> HashMap<i32, (u64, u64)> {
     let mut out: HashMap<i32, (u64, u64)> = HashMap::new();
     let Ok(o) = clean_command("ss").args(["-tinHp"]).output() else { return out };
@@ -849,6 +936,9 @@ fn build_proc_table(
         read_total: u64,
         write_total: u64,
         runq_wait_pct: f64,
+        /// Major faults per second — pages this process had to fetch back
+        /// from disk. The memory-stall counterpart to runq_wait_pct.
+        majflt_per_s: f64,
         avg: [ProcAvg; 4],
     }
 
@@ -890,7 +980,7 @@ fn build_proc_table(
         let state = field("State:").to_string();
         let slice = proc_slice(pid);
 
-        let cpu_ticks = read_proc_cpu_ticks(pid).unwrap_or(0);
+        let (cpu_ticks, majflt) = read_proc_stat_bits(pid).unwrap_or((0, 0));
         let (read_bytes, write_bytes) = read_proc_io(pid);
         let runq_wait_ns = read_proc_runq_wait_ns(pid).unwrap_or(0);
         let (net_rx, net_tx) = net.get(&pid).copied().unwrap_or((0, 0));
@@ -946,6 +1036,14 @@ fn build_proc_table(
                 }
             })
             .unwrap_or(0.0);
+        // Major faults PER SECOND. The cumulative count is dominated by
+        // whatever has been running longest, which is never the answer to
+        // "who is thrashing right now".
+        let majflt_per_s = p
+            .map(|p| {
+                if secs <= 0.0 { 0.0 } else { majflt.saturating_sub(p.majflt) as f64 / secs }
+            })
+            .unwrap_or(0.0);
 
         let mem_pct = if total_mem_kb > 0.0 { rss_kb / total_mem_kb * 100.0 } else { 0.0 };
 
@@ -961,6 +1059,7 @@ fn build_proc_table(
             read_bps,
             write_bps,
             runq_wait_pct,
+            majflt_per_s,
         };
         let mut avg = p.map(|p| p.avg).unwrap_or_default();
         let seeded = p.map(|p| p.seeded).unwrap_or(false);
@@ -981,6 +1080,7 @@ fn build_proc_table(
             pid,
             ProcSample {
                 cpu_ticks,
+                majflt,
                 read_bytes,
                 write_bytes,
                 runq_wait_ns,
@@ -1024,6 +1124,7 @@ fn build_proc_table(
             read_total: read_bytes,
             write_total: write_bytes,
             runq_wait_pct,
+            majflt_per_s,
             avg,
         });
     }
@@ -1159,7 +1260,7 @@ fn build_proc_table(
                   \"net_rx_bytes_per_s\":{:.0},\"net_tx_bytes_per_s\":{:.0},\
                   \"net_rx_bytes_total\":{},\"net_tx_bytes_total\":{},\
                   \"read_bytes_total\":{},\"write_bytes_total\":{},\
-                  \"runq_wait_pct\":{:.2},\"protected\":{is_protected},\
+                  \"runq_wait_pct\":{:.2},\"majflt_per_s\":{:.1},\"protected\":{is_protected},\
                   \"protected_reason\":{},\"avg\":{{{}}}}}",
                 r.pid, r.ppid, r.cpu_pct, r.rss_kb * 1024.0,
                 r.pss_bytes.map(|v| format!("{v:.0}")).unwrap_or_else(|| "null".into()),
@@ -1167,6 +1268,7 @@ fn build_proc_table(
                 r.net_rx_bps, r.net_tx_bps,
                 r.net_rx_total, r.net_tx_total, r.read_total, r.write_total,
                 r.runq_wait_pct,
+                r.majflt_per_s,
                 if is_protected { format!("\"{}\"", json_escape(&reason)) } else { "null".to_string() },
                 avg_json.join(","),
             )
@@ -2532,6 +2634,7 @@ fn render(
     storage: &str,
     slices: &str,
     services: &str,
+    reclaim: &str,
 ) -> String {
     // Named, not positional: this format string mixes inline-captured names
     // with `{}` holes, and when the cores list was positional it was simply
@@ -2557,7 +2660,7 @@ fn render(
           \"psi\":{{\"cpu\":{},\"io\":{},\"memory\":{}}},\
           \"slice_gib\":{slice_cur:.2},\"slice_max_gib\":{slice_max:.2},\"slice_pct\":{slice_pct:.1},\
           \"battery\":{},\
-          \"storage\":{storage},\"slices\":{slices},\"services\":{services},\
+          \"storage\":{storage},\"slices\":{slices},\"services\":{services},\"reclaim\":{reclaim},\
           \"cpu_info\":{cpu_info},\"host_info\":{host_info},\"totals\":{totals},\"history\":{history},\"containers\":{containers},\"images\":{images},\"procs\":{procs},\"proc_table\":{proc_table},\"proc_spine\":{proc_spine},\"ts\":{}}}",
         vram_json(vram),
         pressure_block("cpu"),
@@ -2982,6 +3085,10 @@ pub fn snapshot_once() -> String {
         &btrfs_storage_json(),
         &slices_json(&protected),
         &services_json(),
+        // One sample has nothing to subtract, so every reclaim rate is zero
+        // here by construction — same as cpu% in this path. It is the shape
+        // of the snapshot, not a measurement of it.
+        &reclaim_json(VmStat::default(), VmStat::default(), 0.0),
     )
 }
 
@@ -2994,6 +3101,7 @@ pub fn spawn() {
     std::thread::spawn(move || {
         let (mut prev, mut prev_cores) = read_cpu_all();
         let mut prev_disk = read_diskstats();
+        let mut prev_vm = read_vmstat();
         let mut prev_net = read_net();
         let mut prev_proc_table: HashMap<i32, ProcSample> = HashMap::new();
         // Two systemctl calls cost ~100ms and the unit set changes on the
@@ -3065,6 +3173,10 @@ pub fn spawn() {
                 history = history_step(cpu, mem, swap, now_unix());
             }
 
+            // Reclaim rates from the same interval as everything else.
+            let now_vm = read_vmstat();
+            let reclaim = reclaim_json(prev_vm, now_vm, INTERVAL_MS as f64 / 1000.0);
+            prev_vm = now_vm;
             let body = render(
                 cpu, &cores, &cpu_detail, mem, swap,
                 &mem_detail, &swap_detail,
@@ -3088,6 +3200,7 @@ pub fn spawn() {
                 &btrfs_storage_json(),
                 &slices_json(&protected_slices),
                 &services,
+                &reclaim,
             );
             publish(&path, &body);
         }
@@ -3135,12 +3248,12 @@ mod tests {
                        Some((1024.0, 512.0)),
                        "{}",
                        0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 5.6,
-                       &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]");
+                       &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]", "{}");
         for k in ["cpu", "cores", "cpu_detail", "mem", "swap", "mem_detail", "swap_detail",
                   "vram", "disk", "disk_r", "disk_w", "disks",
                   "net_rx", "net_tx", "load1", "load5", "load15",
                   "psi", "slice_gib", "slice_max_gib", "slice_pct", "battery", "procs",
-                  "storage", "slices",
+                  "storage", "slices", "reclaim",
                   "proc_table", "ts"] {
             assert!(s.contains(&format!("\"{k}\":")), "missing {k} in {s}");
         }
@@ -3150,14 +3263,61 @@ mod tests {
         // machines without a readable GPU VRAM counter), not an absent key.
         let s2 = render(12.5, &[], cpu_detail, 40.0, 1.0, mem_detail, swap_detail,
                          55.0, 1.5, 2.5, "[]", None, "{}",
-                         0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 5.6, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]");
+                         0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 5.6, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]", "{}");
         assert!(s2.contains("\"vram\":null"), "expected null vram, got {s2}");
 
         // slice_pct must be 0.0, not NaN/Infinity, when slice_max is 0.
         let s3 = render(12.5, &[], cpu_detail, 40.0, 1.0, mem_detail, swap_detail,
                          55.0, 1.5, 2.5, "[]", None, "{}",
-                         0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 0.0, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]");
+                         0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 0.0, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]", "{}");
         assert!(s3.contains("\"slice_pct\":0.0"), "expected 0.0 slice_pct, got {s3}");
+    }
+
+    // The pair that matters is direct vs kswapd, so the rates must not be
+    // silently swapped or shared — and a counter that went BACKWARDS (a peer
+    // that rebooted between two samples) must read as zero, never as a
+    // gigantic positive spike.
+    #[test]
+    fn reclaim_rates_are_per_second_and_never_negative() {
+        let prev = VmStat {
+            refault_file: 1_000,
+            refault_anon: 100,
+            swap_in: 50,
+            swap_out: 70,
+            scan_direct: 200,
+            scan_kswapd: 5_000,
+            steal_direct: 150,
+            steal_kswapd: 4_000,
+        };
+        let now = VmStat {
+            refault_file: 3_000,
+            refault_anon: 200,
+            swap_in: 150,
+            swap_out: 270,
+            scan_direct: 600,
+            scan_kswapd: 9_000,
+            steal_direct: 350,
+            steal_kswapd: 6_000,
+        };
+        let j = reclaim_json(prev, now, 2.0);
+        // (3000-1000)/2 = 1000, and each field must carry ITS OWN delta.
+        assert!(j.contains("\"refault_file\":1000"), "{j}");
+        assert!(j.contains("\"refault_anon\":50"), "{j}");
+        assert!(j.contains("\"swap_in\":50"), "{j}");
+        assert!(j.contains("\"swap_out\":100"), "{j}");
+        assert!(j.contains("\"scan_direct\":200"), "{j}");
+        assert!(j.contains("\"scan_kswapd\":2000"), "{j}");
+        assert!(j.contains("\"steal_direct\":100"), "{j}");
+        assert!(j.contains("\"steal_kswapd\":1000"), "{j}");
+
+        // Counters that went backwards read as zero, not as a huge spike.
+        let back = reclaim_json(now, prev, 2.0);
+        assert!(back.contains("\"refault_file\":0"), "{back}");
+        assert!(back.contains("\"scan_direct\":0"), "{back}");
+
+        // No division by zero on the first tick.
+        let zero = reclaim_json(prev, now, 0.0);
+        assert!(zero.contains("\"refault_file\":0"), "{zero}");
     }
 
     // Pure /proc/meminfo parsing: feed sample text in directly so this is
