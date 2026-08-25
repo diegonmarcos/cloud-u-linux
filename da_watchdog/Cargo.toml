@@ -3,6 +3,10 @@ name = "my-watchdog"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "my_watchdog"
+path = "src/lib.rs"
+
 [[bin]]
 name = "my-watchdog"
 path = "src/main.rs"

@@ -21,7 +21,7 @@
 // mailbox. This process drains it and applies the protected-slice policy. No
 // consumer decides anything — a panel dimming a row is a courtesy, and if it
 // were the boundary it would be one an unprivileged edit could step around.
-mod watchdog;
+use my_watchdog::watchdog;
 
 use std::sync::{Arc, Mutex};
 
