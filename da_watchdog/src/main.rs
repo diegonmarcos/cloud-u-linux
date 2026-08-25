@@ -23,10 +23,16 @@
 // were the boundary it would be one an unprivileged edit could step around.
 use my_watchdog::watchdog;
 
+// The tray is a build-time choice, not a runtime one. On the fleet this is
+// built without it: a headless VM has no tray to put an icon on, and dropping
+// ksni drops libdbus with it, which is what lets the same source cross-compile
+// to a static musl binary that runs on any Linux of that architecture.
+#[cfg(feature = "tray")]
 use std::sync::{Arc, Mutex};
 
 /// What the tray shows and what its menu acts on. Refreshed from the snapshot
 /// this process just wrote, so the tray can never disagree with the file.
+#[cfg(feature = "tray")]
 #[derive(Default)]
 struct Vitals {
     cpu: f64,
@@ -36,10 +42,12 @@ struct Vitals {
     procs: usize,
 }
 
+#[cfg(feature = "tray")]
 struct Tray {
     v: Arc<Mutex<Vitals>>,
 }
 
+#[cfg(feature = "tray")]
 impl ksni::Tray for Tray {
     fn id(&self) -> String {
         "my-watchdog".into()
@@ -111,7 +119,8 @@ fn main() {
              Samples this machine every {}ms and publishes one JSON snapshot,\n\
              then drains the kill/restart mailbox beside it.\n\
              \n\
-             --no-tray   run headless (systemd, a server, a container)\n\
+             --no-tray   run headless (systemd, a server, a container)
+                         (builds for the fleet have no tray compiled in at all)\n\
              --once      write one snapshot to stdout and exit",
             watchdog::interval_ms()
         );
@@ -128,6 +137,16 @@ fn main() {
 
     watchdog::spawn();
 
+    #[cfg(not(feature = "tray"))]
+    {
+        // Built without a tray at all: there is nothing else for this thread
+        // to do but stay alive, since the sampler owns its own.
+        loop {
+            std::thread::park();
+        }
+    }
+
+    #[cfg(feature = "tray")]
     if flag("--no-tray") {
         // Nothing to do on this thread but stay alive: the sampler owns its
         // own. Parking rather than looping so an idle watchdog costs nothing.
@@ -136,6 +155,8 @@ fn main() {
         }
     }
 
+    #[cfg(feature = "tray")]
+    {
     let v = Arc::new(Mutex::new(Vitals::default()));
     {
         let v = v.clone();
@@ -181,5 +202,6 @@ fn main() {
                 std::thread::park();
             }
         }
+    }
     }
 }

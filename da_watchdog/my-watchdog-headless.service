@@ -1,0 +1,18 @@
+# my-watchdog on a server: no tray, no graphical session to hang off.
+#
+# The fleet build has no tray compiled in at all, so --no-tray is belt and
+# braces for a desktop build deployed somewhere headless.
+[Unit]
+Description=my-watchdog — machine sampler (headless)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/my-watchdog --no-tray
+Restart=always
+RestartSec=3
+Nice=5
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=default.target

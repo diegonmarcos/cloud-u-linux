@@ -1,0 +1,24 @@
+# my-watchdog as a user service.
+#
+# User, not system: it samples what THIS user can see and signals only what
+# this user could signal anyway. Running it as root would widen both, and the
+# protected-slice policy it enforces is not a substitute for the kernel's own
+# permission check — it is a second opinion on top of one.
+[Unit]
+Description=my-watchdog — machine sampler and guarded kill mailbox
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/my-watchdog
+Restart=always
+RestartSec=3
+# Nice, because a monitor that competes with what it is monitoring is the
+# problem it exists to report. The freeze this fleet had was a watchdog that
+# computed before its early exit and became the load.
+Nice=5
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=graphical-session.target

@@ -19,7 +19,17 @@ libc = "0.2"
 # ksni, not tray-icon: on Linux tray-icon drops the tooltip entirely, and a
 # watchdog whose tray cannot say what it is watching is not much of a tray.
 # Same choice my-konsole already made, for the same reason.
-ksni = { version = "0.3", features = ["blocking"] }
+#
+# OPTIONAL, and that is what makes this deployable to the fleet. A headless VM
+# has no tray and no D-Bus session to put one on, and ksni links libdbus —
+# which is exactly the dependency that stops a build being statically linked.
+# Without it the crate is std + libc, which cross-compiles to a static musl
+# binary that runs on any Linux of that architecture regardless of its libc.
+ksni = { version = "0.3", features = ["blocking"], optional = true }
+
+[features]
+default = ["tray"]
+tray = ["dep:ksni"]
 
 [profile.release]
 opt-level = "s"
