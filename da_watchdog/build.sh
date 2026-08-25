@@ -46,7 +46,11 @@ case "${1:-fetch}" in
     # x86_64 both, so the right artifact is chosen per host from uname -m
     # rather than assumed.
     shift || true
-    hosts="${*:-$(awk '/^Host /{h=$2} /HostName[ =]+10\.0\.0\./{if(h!~/dropbear/)print h}' "$HOME/.ssh/config")}"
+    # One host per ADDRESS: the config gives several aliases per machine
+    # (a -dropbear twin, a claude_ prefix), and deploying to the same box four
+    # times under four names is four copies of the same scp.
+    hosts="${*:-$(awk '/^Host /{h=$2}
+      /HostName[ =]+10\.0\.0\./{ if (h !~ /dropbear/ && !(seen[$2]++)) print h }' "$HOME/.ssh/config")}"
     for h in $hosts; do
       arch=$(ssh -o BatchMode=yes -o ConnectTimeout=6 "$h" 'uname -m' 2>/dev/null) || {
         say "$h: unreachable, skipped"; continue; }

@@ -614,6 +614,41 @@ const server = createServer(async (req, res) => {
     }
 
     // ── API: directory listing ──
+    // The machine's own metrics, so the hub can ask over HTTP instead of
+    // opening an ssh session and running a collector script on the far end.
+    //
+    // This does NOT sample anything: my-watchdog is the publisher, it writes
+    // one file every two seconds, and this hands that file over. Two things
+    // follow from that being the whole implementation — a peer without the
+    // watchdog running says so rather than serving a stale or invented
+    // snapshot, and this route can never disagree with what the machine's own
+    // panel is showing, because it is literally the same bytes.
+    //
+    // Deliberately outside the served root: the snapshot lives in the runtime
+    // directory, and the alternative — asking people to serve /run — is a far
+    // worse trade than one hard-coded read-only path.
+    if (urlPath === '/__api__/watchdog') {
+      ctx.render = 'api-watchdog';
+      const runtime = process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid ? process.getuid() : 1000}`;
+      const snap = `${runtime}/my-konsole-watchdog.json`;
+      const body = await readFile(snap, 'utf8').catch(() => null);
+      if (body === null) {
+        res.writeHead(503, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify({
+          error: 'no snapshot',
+          detail: `${snap} is not readable — is my-watchdog running on this machine?`,
+        }));
+      }
+      // no-store: it is two seconds old by construction and a cache would
+      // serve yesterday's numbers under today's timestamp.
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'cache-control': 'no-store',
+        'access-control-allow-origin': '*',
+      });
+      return res.end(body);
+    }
+
     if (urlPath === '/__api__/ls') {
       ctx.render = 'api-ls';
       const dirPath = url.searchParams.get('path') || '/';
