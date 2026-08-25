@@ -1648,57 +1648,120 @@ fn totals_json(uptime_s: f64) -> String {
 /// rather than parsed into numbers here: they are already the units a person
 /// reading a container list expects, and re-deriving them would be inventing
 /// precision docker did not give.
-fn containers_json() -> String {
-    let fmt = "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}\t{{.PIDs}}";
+fn containers_json() -> (String, String) {
+    // `ps` is the authoritative list and it always answers; `stats` can spend
+    // twenty seconds and hand back "--" in every column. So the list comes
+    // from ps, and stats is merged onto it if and when it arrives.
+    let run = |args: &[&str]| -> String {
+        clean_command("docker")
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .unwrap_or_default()
+    };
+
+    let ps = run(&[
+        "ps",
+        "--format",
+        "{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}\t{{.RunningFor}}\t{{.Command}}\t{{.State}}",
+    ]);
+    if ps.trim().is_empty() {
+        return ("[]".into(), images_json());
+    }
+    let stats = run(&[
+        "stats",
+        "--no-stream",
+        "--format",
+        "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}\t{{.PIDs}}",
+    ]);
+    // The image list carries the size, which `ps` does not: a container's
+    // footprint on disk is a property of its image, and "which of these is
+    // costing me four gigabytes" is one of the questions this view is for.
+    let imgs = run(&["images", "--format", "{{.Repository}}:{{.Tag}}\t{{.Size}}"]);
+    let size_of = |image: &str| -> String {
+        imgs.lines()
+            .map(|l| l.split('\t').collect::<Vec<_>>())
+            .find(|p| p.first().map(|r| *r == image).unwrap_or(false))
+            .and_then(|p| p.get(1).map(|s| s.to_string()))
+            .unwrap_or_default()
+    };
+
+    let items: Vec<String> = ps
+        .lines()
+        .filter_map(|l| {
+            let f: Vec<&str> = l.split('\t').collect();
+            let name = *f.first()?;
+            if name.is_empty() {
+                return None;
+            }
+            let g = |i: usize| -> &str { f.get(i).copied().unwrap_or("") };
+            // "--" is docker saying it could not read the cgroup, not a value.
+            let st: Vec<&str> = stats
+                .lines()
+                .map(|s| s.split('\t').collect::<Vec<_>>())
+                .find(|p| p.first() == Some(&name))
+                .filter(|p| p.get(1) != Some(&"--"))
+                .unwrap_or_default();
+            let sv = |i: usize| -> &str { st.get(i).copied().unwrap_or("") };
+            let image = g(2);
+            Some(format!(
+                "{{\"name\":\"{}\",\"cpu\":\"{}\",\"mem\":\"{}\",\"mem_pct\":\"{}\",\
+                  \"net\":\"{}\",\"block\":\"{}\",\"pids\":\"{}\",\"status\":\"{}\",\
+                  \"image\":\"{}\",\"image_size\":\"{}\",\"ports\":\"{}\",\"uptime\":\"{}\",\
+                  \"command\":\"{}\",\"state\":\"{}\"}}",
+                json_escape(name),
+                json_escape(sv(1)),
+                json_escape(sv(2)),
+                json_escape(sv(3)),
+                json_escape(sv(4)),
+                json_escape(sv(5)),
+                json_escape(sv(6)),
+                json_escape(g(1)),
+                json_escape(image),
+                json_escape(&size_of(image)),
+                json_escape(g(3)),
+                json_escape(g(4)),
+                json_escape(g(5)),
+                json_escape(g(6)),
+            ))
+        })
+        .collect();
+    (format!("[{}]", items.join(",")), images_json())
+}
+
+/// Every image on the box, running or not.
+///
+/// A container list answers "what is running"; it cannot answer "what is this
+/// costing me on disk", because the images nothing is running are exactly the
+/// ones nobody notices.
+fn images_json() -> String {
     let Ok(o) = clean_command("docker")
-        .args(["stats", "--no-stream", "--format", fmt])
+        .args([
+            "images",
+            "--format",
+            "{{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}\t{{.ID}}",
+        ])
         .output()
     else {
         return "[]".into();
     };
-    if !o.status.success() {
-        return "[]".into();
-    }
-    let Ok(text) = String::from_utf8(o.stdout) else { return "[]".into() };
-
-    // Status and image are not in `stats` output, so pair it with `ps`.
-    let ps = clean_command("docker")
-        .args(["ps", "--format", "{{.Names}}\t{{.Status}}\t{{.Image}}"])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default();
-
-    let items: Vec<String> = text
+    let Ok(t) = String::from_utf8(o.stdout) else { return "[]".into() };
+    let items: Vec<String> = t
         .lines()
         .filter_map(|l| {
             let f: Vec<&str> = l.split('\t').collect();
-            if f.len() < 7 {
+            if f.len() < 5 {
                 return None;
             }
-            let (status, image) = ps
-                .lines()
-                .map(|p| p.split('\t').collect::<Vec<_>>())
-                .find(|p| p.first() == Some(&f[0]))
-                .map(|p| {
-                    (
-                        (*p.get(1).unwrap_or(&"")).to_string(),
-                        (*p.get(2).unwrap_or(&"")).to_string(),
-                    )
-                })
-                .unwrap_or_default();
             Some(format!(
-                "{{\"name\":\"{}\",\"cpu\":\"{}\",\"mem\":\"{}\",\"mem_pct\":\"{}\",\
-                  \"net\":\"{}\",\"block\":\"{}\",\"pids\":\"{}\",\"status\":\"{}\",\"image\":\"{}\"}}",
+                "{{\"repo\":\"{}\",\"tag\":\"{}\",\"size\":\"{}\",\"created\":\"{}\",\"id\":\"{}\"}}",
                 json_escape(f[0]),
                 json_escape(f[1]),
                 json_escape(f[2]),
                 json_escape(f[3]),
                 json_escape(f[4]),
-                json_escape(f[5]),
-                json_escape(f[6]),
-                json_escape(&status),
-                json_escape(&image),
             ))
         })
         .collect();
@@ -2325,6 +2388,7 @@ fn render(
     totals: &str,
     history: &str,
     containers: &str,
+    images: &str,
     storage: &str,
     slices: &str,
     services: &str,
@@ -2354,7 +2418,7 @@ fn render(
           \"slice_gib\":{slice_cur:.2},\"slice_max_gib\":{slice_max:.2},\"slice_pct\":{slice_pct:.1},\
           \"battery\":{},\
           \"storage\":{storage},\"slices\":{slices},\"services\":{services},\
-          \"cpu_info\":{cpu_info},\"host_info\":{host_info},\"totals\":{totals},\"history\":{history},\"containers\":{containers},\"procs\":{procs},\"proc_table\":{proc_table},\"proc_spine\":{proc_spine},\"ts\":{}}}",
+          \"cpu_info\":{cpu_info},\"host_info\":{host_info},\"totals\":{totals},\"history\":{history},\"containers\":{containers},\"images\":{images},\"procs\":{procs},\"proc_table\":{proc_table},\"proc_spine\":{proc_spine},\"ts\":{}}}",
         vram_json(vram),
         pressure_block("cpu"),
         pressure_block("io"),
@@ -2724,7 +2788,8 @@ pub fn snapshot_once() -> String {
         &host_info_json(),
         &totals_json(read_uptime_s()),
         "{}",
-        &containers_json(),
+        &containers_json().0,
+        &images_json(),
         &btrfs_storage_json(),
         &slices_json(&protected),
         &services_json(),
@@ -2752,7 +2817,7 @@ pub fn spawn() {
         // Rewritten once a minute; carried between ticks so the panel always
         // has the last summary rather than an empty object 29 ticks out of 30.
         let mut history = String::from("{}");
-        let mut containers = containers_json();
+        let (mut containers, mut images) = containers_json();
         let mut tick: u64 = 0;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(INTERVAL_MS));
@@ -2800,7 +2865,9 @@ pub fn spawn() {
             if tick % SERVICES_EVERY_TICKS == 0 {
                 services = services_json();
                 host_info = host_info_json();
-                containers = containers_json();
+                let c = containers_json();
+                containers = c.0;
+                images = c.1;
             }
             if tick % HISTORY_EVERY_TICKS == 1 {
                 history = history_step(cpu, mem, swap, now_unix());
@@ -2825,6 +2892,7 @@ pub fn spawn() {
                 &totals_json(read_uptime_s()),
                 &history,
                 &containers,
+                &images,
                 &btrfs_storage_json(),
                 &slices_json(&protected_slices),
                 &services,
@@ -2875,7 +2943,7 @@ mod tests {
                        Some((1024.0, 512.0)),
                        "{}",
                        0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 5.6,
-                       &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]");
+                       &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]");
         for k in ["cpu", "cores", "cpu_detail", "mem", "swap", "mem_detail", "swap_detail",
                   "vram", "disk", "disk_r", "disk_w", "disks",
                   "net_rx", "net_tx", "load1", "load5", "load15",
@@ -2890,13 +2958,13 @@ mod tests {
         // machines without a readable GPU VRAM counter), not an absent key.
         let s2 = render(12.5, &[], cpu_detail, 40.0, 1.0, mem_detail, swap_detail,
                          55.0, 1.5, 2.5, "[]", None, "{}",
-                         0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 5.6, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]");
+                         0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 5.6, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]");
         assert!(s2.contains("\"vram\":null"), "expected null vram, got {s2}");
 
         // slice_pct must be 0.0, not NaN/Infinity, when slice_max is 0.
         let s3 = render(12.5, &[], cpu_detail, 40.0, 1.0, mem_detail, swap_detail,
                          55.0, 1.5, 2.5, "[]", None, "{}",
-                         0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 0.0, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]");
+                         0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 0.0, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]");
         assert!(s3.contains("\"slice_pct\":0.0"), "expected 0.0 slice_pct, got {s3}");
     }
 
