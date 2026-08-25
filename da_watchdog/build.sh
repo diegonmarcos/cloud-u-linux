@@ -23,6 +23,12 @@ case "${1:-fetch}" in
     chmod +x "$tmp"
     mv -f "$tmp" "$DEST/$BIN"
     ln -sf "$DEST/$BIN" "$LINK"
+    # The policy travels with the binary. One source of truth means every
+    # machine resolves the same document, so it has to actually arrive on
+    # every machine.
+    mkdir -p "$HOME/.config/my-watchdog"
+    install -m644 "$(dirname "$0")/configs/watchdog-policy.json" \
+      "$HOME/.config/my-watchdog/watchdog-policy.json" 2>/dev/null || true
     say "Fetched → $DEST/$BIN (restart my-watchdog to load it)"
     ;;
   install)
@@ -65,6 +71,10 @@ case "${1:-fetch}" in
       ssh -o BatchMode=yes "$h" 'mkdir -p ~/.local/bin' </dev/null
       scp -q "$tmp" "$h:.local/bin/.$BIN.new"
       ssh -o BatchMode=yes "$h" "chmod +x ~/.local/bin/.$BIN.new && mv -f ~/.local/bin/.$BIN.new ~/.local/bin/$BIN" </dev/null
+      # Same policy document to every peer — that is what makes it one source
+      # of truth rather than one file per machine that happens to agree today.
+      ssh -o BatchMode=yes "$h" 'mkdir -p ~/.config/my-watchdog' </dev/null
+      scp -q "$(dirname "$0")/configs/watchdog-policy.json" "$h:.config/my-watchdog/watchdog-policy.json"
       rm -f "$tmp"
       say "$h ($arch): installed"
     done

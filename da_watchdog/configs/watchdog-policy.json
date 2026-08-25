@@ -1,0 +1,111 @@
+{
+  "_comment": "THE watchdog policy for every machine \u2014 desktop and VM alike. One source of truth.\n\nWHERE THIS CAME FROM. The surface desktop's cloud-data-system-protection.json is the reference design and this is derived from it verbatim, not reinvented: it is the config that survived ten freezes and it encodes what was learned from each. The fleet inherits it and overrides only what hardware forces.\n\nTHE ONE RULE: PSI IS THE ONLY LIMITER. No absolute mem%, no RSS threshold, and above all no per-container memory.max. A hard ceiling is a LOCAL wall: the instant a cgroup touches it the kernel force-reclaims from that cgroup synchronously, however much RAM the host has free. That is not pressure management, it is thrashing on a schedule \u2014 measured on oci-apps as stalwart at 250.8MB of a 256MB cap having hit the wall 2909 times, and snappymail at 60MB of 64MB, 2852 times, while the host was fine. The desktop removed exactly these caps on 2026-08-07 for exactly this reason (see no_hard_memcap_services in the source file): plasmashell's own cap alone caused two freezes through memory.high throttle-thrash while real PSI stayed low.\n\nWHAT REPLACES THEM. memory.high as a soft ramp (throttle, never kill), MemoryMin to protect what must stay resident, and a PSI watchdog that reads /proc/pressure and acts only when a signal actually exceeds its limit. Pressure is the thing you care about; a byte count is a proxy that is wrong whenever the host is not the bottleneck.",
+  "version": 1,
+  "defaults": {
+    "_comment": "Inherited by every profile. These are the desktop's numbers because the desktop is the reference; a profile overrides a key only where its hardware makes the desktop's answer wrong.",
+    "watchdog": {
+      "_comment": "PSI IS THE ONLY KILL METRIC. mem/io use `full avg10` \u2014 the share of the last 10s in which ALL tasks were stalled; cpu uses `some avg10`, because a pure spin stalls some tasks and rarely all of them. Only when a signal exceeds its limit does anything get killed.",
+      "enabled": true,
+      "interval_sec": 2,
+      "mem_pressure_full_avg10": 40.0,
+      "io_pressure_full_avg10": 30.0,
+      "cpu_pressure_some_avg10": 80.0,
+      "alert_ladder_pct": [
+        50,
+        70,
+        88
+      ],
+      "alert_rearm_sec": 300,
+      "max_kills_per_tick": 8,
+      "prefer_kill": [
+        "cc1plus",
+        "cc1",
+        "rustc",
+        "ld.bfd",
+        "ld.lld",
+        "ld.gold",
+        "collect2",
+        "lto1",
+        "ghc",
+        "node",
+        "electron",
+        "brave",
+        "firefox",
+        "chromium"
+      ],
+      "avoid_kill": "kwin|plasmashell|kwin_wayland|sddm|Xwayland|pipewire|wireplumber|systemd|dbus|dbus-broker|dropbear|sshd|freeze-guard|earlyoom|systemd-oomd|polkit|NetworkManager|wpa_supplicant"
+    },
+    "protected_slices": {
+      "_comment": "Slices the kill path refuses to signal into, whatever signal is asked for. os-essentials is ssh/wg/session/watchdog; connectivity is the untouchable island. pid 1 is refused in code, not from this list.",
+      "slices": [
+        "os-essentials.slice",
+        "connectivity.slice"
+      ]
+    },
+    "reservation": {
+      "_comment": "The untouchable island: guaranteed unreclaimable RAM, realtime CPU and IO priority, OOMScoreAdjust=-1000. The killers and the remote rescue path must be able to run when everything else is starved, or they are decorative.",
+      "memory_min": "256M",
+      "cpu_weight": 10000,
+      "io_weight": 1000
+    },
+    "memory": {
+      "_comment": "high, never max. memory.high throttles and lets reclaim ramp; memory.max is a wall that forces synchronous reclaim the moment it is touched. Percentages of total RAM so one number serves an 8G laptop and a 1G VM.",
+      "workload_high_pct": 70,
+      "workload_max_pct": null,
+      "session_min_pct": 12,
+      "swappiness": 20
+    }
+  },
+  "profiles": {
+    "desktop": {
+      "_comment": "The surface. Everything here is already in defaults \u2014 this profile exists so the reference machine is named in the same table as everything that inherits from it.",
+      "specs": {
+        "_comment": "U1 (PLAN-hardening-2026-07-07 \u00a71C): desktop hardware specs, mirroring the vm-pilot schema _cloud-data-consolidated.json[._home_manager.vms.<vm>.specs] (ram_gb, cpu) so configuration_system-protection.nix derives its slice budgets from data instead of the old hardcoded cpus=8/ramMB=8192 let-bindings. The desktop is NOT in the cloud consolidated JSON (it is not a VM); this local desktop data file is its SoT. ram_gb\u00d71024 = ramMB; cpu = logical CPUs (4 cores \u00d7 2 threads on the Surface Pro 8).",
+        "ram_gb": 8,
+        "cpu": 8
+      }
+    },
+    "vm-small": {
+      "_comment": "1-2G, 1-2 vCPU: oci-mail, oci-analytics, gcp-proxy. On a box this size the desktop's absolute reservation is a tenth of RAM, so the island shrinks; and pressure limits come DOWN, not up \u2014 a small VM reaches genuine trouble sooner and there is less slack to ride it out.",
+      "reservation": {
+        "memory_min": "64M"
+      },
+      "watchdog": {
+        "mem_pressure_full_avg10": 25.0,
+        "io_pressure_full_avg10": 20.0
+      },
+      "memory": {
+        "workload_high_pct": 60
+      }
+    },
+    "vm-large": {
+      "_comment": "8G+ and container-heavy: oci-apps. Same limits as the desktop; a bigger island because there are more containers competing for the same reclaim path.",
+      "reservation": {
+        "memory_min": "256M"
+      }
+    }
+  },
+  "hosts": {
+    "_comment": "Which profile each machine takes. A host absent from here gets vm-small, which is the conservative answer: tighter limits on an unknown box are recoverable, loose ones are not.",
+    "surface-nixos": {
+      "profile": "desktop"
+    },
+    "gcp-proxy": {
+      "profile": "vm-small"
+    },
+    "web-server": {
+      "profile": "vm-small",
+      "_alias": "oci-mail"
+    },
+    "oci-analytics": {
+      "profile": "vm-small"
+    },
+    "arm-server-1": {
+      "profile": "vm-large",
+      "_alias": "oci-apps"
+    },
+    "gcp-t4": {
+      "profile": "vm-large"
+    }
+  }
+}

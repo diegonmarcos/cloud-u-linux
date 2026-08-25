@@ -80,8 +80,57 @@ fn proc_table_n() -> usize {
 /// and this one is read by the per-user tray daemon straight off disk. Falls
 /// back to the same two names if the file is missing/unparseable so a broken
 /// sync never *widens* what can be killed.
+/// Where the fleet policy lives, in the order it is looked for.
+///
+/// One file, one shape, every machine — the desktop and the VMs resolve the
+/// same document, so "what limits this box" is answerable by reading it rather
+/// than by grepping a flake per host. The desktop's own
+/// cloud-data-system-protection.json is where the numbers came from; this is
+/// that design, made portable.
+fn policy_paths() -> Vec<PathBuf> {
+    let mut v = Vec::new();
+    if let Some(h) = std::env::var_os("HOME") {
+        let h = PathBuf::from(h);
+        v.push(h.join(".config/my-watchdog/watchdog-policy.json"));
+        v.push(h.join(".local/share/my-konsole/watchdog-policy.json"));
+    }
+    v.push(PathBuf::from("/etc/my-watchdog/watchdog-policy.json"));
+    v
+}
+
+fn read_policy() -> Option<String> {
+    policy_paths().into_iter().find_map(|p| fs::read_to_string(p).ok())
+}
+
+/// Pull one array out of a JSON document by key.
+///
+/// Hand-parsed rather than pulling serde_json in for this: the crate is std +
+/// libc precisely so the fleet build stays a static musl binary with no
+/// dependency that could drag libc back in, and the policy is read once per
+/// kill request from a file this user owns.
+fn json_array(body: &str, key: &str) -> Vec<String> {
+    let Some(start) = body.find(&format!("\"{key}\"")) else { return vec![] };
+    let Some(open) = body[start..].find('[') else { return vec![] };
+    let Some(close) = body[start + open..].find(']') else { return vec![] };
+    body[start + open + 1..start + open + close]
+        .split(',')
+        .filter_map(|tok| {
+            let t = tok.trim().trim_matches('"').trim();
+            if t.is_empty() { None } else { Some(t.to_string()) }
+        })
+        .collect()
+}
+
 fn load_protected_slices() -> Vec<String> {
     let fallback = || vec!["os-essentials.slice".to_string(), "connectivity.slice".to_string()];
+    // The fleet policy first: it is the single source of truth, and a machine
+    // that has it should not also be reading a per-host copy that can drift.
+    if let Some(body) = read_policy() {
+        let names = json_array(&body, "slices");
+        if !names.is_empty() {
+            return names;
+        }
+    }
     let Some(home) = std::env::var_os("HOME") else { return fallback() };
     let path = PathBuf::from(home).join(".local/share/my-konsole/protected-slices.json");
     let Ok(body) = fs::read_to_string(&path) else { return fallback() };
