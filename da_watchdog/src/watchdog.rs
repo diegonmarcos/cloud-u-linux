@@ -586,6 +586,8 @@ struct ProcAvg {
 /// are different questions and a 1m average answers only the second.
 /// 15 ticks at INTERVAL_MS = 30s between service-list refreshes.
 const SERVICES_EVERY_TICKS: u64 = 15;
+/// smaps_rollup is a page-table walk; 5 ticks at INTERVAL_MS is 10s.
+const PSS_EVERY_TICKS: u64 = 5;
 
 const PROC_AVG_WINDOWS: [f64; 4] = [10.0, 60.0, 300.0, 900.0];
 const PROC_AVG_LABELS: [&str; 4] = ["10s", "1m", "5m", "15m"];
@@ -638,6 +640,8 @@ struct ProcSample {
     /// round for a number people read as a total.
     net_rx_total: u64,
     net_tx_total: u64,
+    /// Last PSS reading, carried between the ticks that do not re-read it.
+    pss_bytes: Option<f64>,
     avg: [ProcAvg; 4],
     /// False until this pid has produced one real rate sample, so the first
     /// EWMA step SEEDS with the live value instead of ramping up from zero
@@ -823,6 +827,7 @@ fn build_proc_table(
     total_mem_kb: f64,
     protected: &[String],
     uid_names: &HashMap<u32, String>,
+    pss_due: bool,
 ) -> (String, String, HashMap<i32, ProcSample>) {
     struct Row {
         pid: i32,
@@ -983,6 +988,7 @@ fn build_proc_table(
                 net_tx,
                 net_rx_total,
                 net_tx_total,
+                pss_bytes: None,
                 avg,
                 seeded: seeded || p.is_some(),
             },
@@ -1024,9 +1030,31 @@ fn build_proc_table(
 
     rows.sort_unstable_by(|a, b| b.cpu_pct.partial_cmp(&a.cpu_pct).unwrap_or(std::cmp::Ordering::Equal));
     rows.truncate(n);
-    // After the truncate, never before: this is the expensive read.
-    for r in rows.iter_mut() {
-        r.pss_bytes = read_proc_pss(r.pid);
+    // After the truncate, never before — and not on every tick.
+    //
+    // smaps_rollup is a page-table walk: the kernel adds up every mapping the
+    // process has, and for a 500MB process that is real work. A resident set
+    // changes on the scale of a working set, not of a 2s sample, so paying for
+    // it five times a second bought precision nobody can read and cost CPU the
+    // machine being measured wanted.
+    if pss_due {
+        for r in rows.iter_mut() {
+            r.pss_bytes = read_proc_pss(r.pid);
+        }
+    } else {
+        // Carry the previous reading rather than publishing null: absent means
+        // "not readable", and a cell that blinked to a dash on four ticks out
+        // of five would be saying something untrue.
+        for r in rows.iter_mut() {
+            r.pss_bytes = prev.get(&r.pid).and_then(|p| p.pss_bytes);
+        }
+    }
+    // Written back so the next four ticks have something to carry. `next` was
+    // filled before the truncate, when no row had a reading yet.
+    for r in rows.iter() {
+        if let Some(e) = next.get_mut(&r.pid) {
+            e.pss_bytes = r.pss_bytes;
+        }
     }
 
     // The spine: every ancestor of a published row, up to pid 1.
@@ -1035,41 +1063,58 @@ fn build_proc_table(
     // it and a tree drawn from the table alone bottoms out at whatever
     // happened to rank — it can never reach systemd. These carry no metrics
     // because they are not measured rows, only the path between them.
+    //
+    // MEMOISED, and that is not a micro-optimisation. The first version read
+    // /proc/<pid>/status twice per step and re-walked shared ancestors once
+    // per published row: forty rows whose chains converge on the same shell,
+    // the same konsole, the same systemd meant the same handful of files read
+    // dozens of times every two seconds. It cost ~10% of a core — a sampler
+    // competing with the thing it is sampling, which is the exact failure this
+    // fleet's policy is written to prevent. One read per distinct pid per tick.
     let published: Vec<i32> = rows.iter().map(|r| r.pid).collect();
+    let mut seen: HashMap<i32, (i32, String)> = HashMap::new();
+    let mut parent_of = |pid: i32, seen: &mut HashMap<i32, (i32, String)>| -> Option<(i32, String)> {
+        if let Some(v) = seen.get(&pid) {
+            return Some(v.clone());
+        }
+        let st = fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+        let field = |k: &str| -> &str {
+            st.lines()
+                .find(|l| l.starts_with(k))
+                .and_then(|l| l.split_whitespace().nth(1))
+                .unwrap_or("")
+        };
+        let ppid: i32 = field("PPid:").parse().ok()?;
+        let name = st
+            .lines()
+            .find(|l| l.starts_with("Name:"))
+            .map(|l| l[5..].trim().to_string())
+            .unwrap_or_else(|| "?".into());
+        let v = (ppid, name);
+        seen.insert(pid, v.clone());
+        Some(v)
+    };
+
     let mut spine: Vec<(i32, i32, String)> = Vec::new();
     for pid in &published {
         let mut cur = *pid;
         // Bounded: a pid cycle would otherwise loop forever, and no real
         // ancestry is anywhere near this deep.
         for _ in 0..24 {
-            let Ok(st) = fs::read_to_string(format!("/proc/{cur}/status")) else { break };
-            let f = |k: &str| -> String {
-                st.lines()
-                    .find(|l| l.starts_with(k))
-                    .and_then(|l| l.split_whitespace().nth(1))
-                    .unwrap_or("")
-                    .to_string()
-            };
-            let Ok(ppid) = f("PPid:").parse::<i32>() else { break };
+            let Some((ppid, _)) = parent_of(cur, &mut seen) else { break };
             if ppid <= 0 {
                 break;
             }
-            if published.contains(&ppid) || spine.iter().any(|(p, _, _)| *p == ppid) {
+            // Already on the spine, or already a measured row: the rest of
+            // this chain was walked by whoever put it there.
+            if spine.iter().any(|(p, _, _)| *p == ppid) {
+                break;
+            }
+            if published.contains(&ppid) {
                 cur = ppid;
                 continue;
             }
-            let pst = fs::read_to_string(format!("/proc/{ppid}/status")).unwrap_or_default();
-            let name = pst
-                .lines()
-                .find(|l| l.starts_with("Name:"))
-                .map(|l| l[5..].trim().to_string())
-                .unwrap_or_else(|| "?".into());
-            let gp: i32 = pst
-                .lines()
-                .find(|l| l.starts_with("PPid:"))
-                .and_then(|l| l.split_whitespace().nth(1))
-                .and_then(|x| x.parse().ok())
-                .unwrap_or(0);
+            let Some((gp, name)) = parent_of(ppid, &mut seen) else { break };
             spine.push((ppid, gp, name));
             cur = ppid;
         }
@@ -2834,6 +2879,7 @@ pub fn snapshot_once() -> String {
         mem_total_kb(),
         &protected,
         &uid_names,
+        true,
     );
     let (load1, load5, load15) = loadavg();
     render(
@@ -2935,6 +2981,9 @@ pub fn spawn() {
                 mem_total_kb(),
                 &protected_slices,
                 &uid_names,
+                // Every fifth tick: 10s, the shortest window the panel shows a
+                // memory average over anyway.
+                tick % PSS_EVERY_TICKS == 0,
             );
             prev_proc_table = next_proc_table;
 
