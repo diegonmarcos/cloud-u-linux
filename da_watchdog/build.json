@@ -1,0 +1,23 @@
+{
+  "name": "my-watchdog",
+  "description": "my-watchdog — the machine sampler. Publishes one JSON snapshot of cpu, memory, swap, storage, cgroup slices, PSI, network and the process table, and owns the guarded kill/restart mailbox. Its own systray; my-konsole and my-konsole-dash are consumers.",
+  "app": {
+    "identifier": "com.diegonmarcos.my-watchdog",
+    "bin": "my-watchdog"
+  },
+  "build": {
+    "engine": "cargo build --release",
+    "remote": true,
+    "_remote_note": "Rust compile is heavy — built on GHA, published to the rolling GitHub Release, fetched by the desktop nix module. Never compiled locally (freeze-guard).",
+    "release_tag": "my-watchdog-latest",
+    "repo": "diegonmarcos/cloud-unix",
+    "subdir": "da_watchdog"
+  },
+  "runtime": {
+    "snapshot": "$XDG_RUNTIME_DIR/my-konsole-watchdog.json",
+    "mailbox": "$XDG_RUNTIME_DIR/my-konsole-watchdog.kill",
+    "history": "$XDG_DATA_HOME/my-konsole/history.jsonl",
+    "_path_note": "The published paths keep the my-konsole- prefix on purpose. They are a contract with every consumer already reading them — the panel, the dash, the QML widget — and renaming a file to match a repo layout would break all of them to no benefit.",
+    "interval_ms": 2000
+  }
+}

@@ -1,0 +1,24 @@
+[package]
+name = "my-watchdog"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "my-watchdog"
+path = "src/main.rs"
+
+[dependencies]
+# The sampler is pure std + libc: every figure comes out of /proc, /sys and
+# cgroupfs, and nothing here needs a JSON crate because the snapshot is
+# written by hand. That is why this extracts from my-konsole cleanly.
+libc = "0.2"
+# ksni, not tray-icon: on Linux tray-icon drops the tooltip entirely, and a
+# watchdog whose tray cannot say what it is watching is not much of a tray.
+# Same choice my-konsole already made, for the same reason.
+ksni = { version = "0.3", features = ["blocking"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
