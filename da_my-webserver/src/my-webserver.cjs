@@ -343,23 +343,36 @@ document.addEventListener('dblclick',(e)=>{
   });
 });
 
-function renderValue(val) {
+function renderValue(val, depth) {
+  depth = depth || 0;
   const span = document.createElement('span');
   if (val===null||val===undefined) { span.className='val-null'; span.textContent='—'; }
   else if (typeof val==='boolean') { span.className=val?'val-bool-true':'val-bool-false'; span.textContent=String(val); }
   else if (typeof val==='number') { span.className='val-number'; span.textContent=String(val); }
   else if (Array.isArray(val)) {
     if (!val.length) { span.className='val-null'; span.textContent='—'; }
-    else if (typeof val[0]==='object') return renderArrayTable(val);
+    else if (val[0]!==null&&typeof val[0]==='object') return renderArrayTable(val, depth);
     else { span.className='val-array'; span.textContent=val.join(', '); }
-  } else if (typeof val==='object') { span.className='val-object'; span.textContent=JSON.stringify(val); }
+  } else if (typeof val==='object') {
+    // Recurse. This used to be JSON.stringify(val) unconditionally, which is
+    // why anything nested more than two levels deep arrived as a wall of
+    // escaped text instead of a table — the watchdog snapshots are depth 5.
+    // Capped, because the point is readability: past a few levels a table of
+    // tables is worse than the raw JSON, and an unbounded recurse would also
+    // hang on a self-referential object.
+    if (depth>=3) { span.className='val-object'; span.textContent=JSON.stringify(val); }
+    else return renderKVTable(val, depth+1);
+  }
   else { span.textContent=String(val); }
   return span;
 }
 
-function renderArrayTable(arr) {
+function renderArrayTable(arr, depth) {
+  depth = depth || 0;
   if (!arr.length) return document.createTextNode('(empty)');
-  if (typeof arr[0]!=='object') { const d=document.createElement('div'); d.className='val-array'; d.textContent=arr.join(', '); return d; }
+  // arr[0]===null matters: typeof null is 'object', so the old test sent a
+  // [null, ...] array down the table path and Object.keys(null) threw.
+  if (arr[0]===null||typeof arr[0]!=='object') { const d=document.createElement('div'); d.className='val-array'; d.textContent=arr.join(', '); return d; }
   const keys=[...new Set(arr.flatMap(obj=>Object.keys(obj)))].filter(k=>k!=='_meta');
   const table=document.createElement('table');
   const thead=document.createElement('thead');
@@ -369,13 +382,14 @@ function renderArrayTable(arr) {
   const tbody=document.createElement('tbody');
   arr.forEach(obj=>{
     const tr=document.createElement('tr');
-    keys.forEach(k=>{const td=document.createElement('td');td.appendChild(renderValue(obj[k]));tr.appendChild(td);});
+    keys.forEach(k=>{const td=document.createElement('td');td.appendChild(renderValue(obj[k], depth+1));tr.appendChild(td);});
     tbody.appendChild(tr);
   });
   table.appendChild(tbody); return table;
 }
 
-function renderKVTable(obj) {
+function renderKVTable(obj, depth) {
+  depth = depth || 0;
   const table=document.createElement('table');
   const tbody=document.createElement('tbody');
   for (const [k,v] of Object.entries(obj)) {
@@ -384,7 +398,7 @@ function renderKVTable(obj) {
     th.innerHTML='<strong>'+escHtml(prettyKey(k))+'</strong>';
     tr.appendChild(th);
     const td=document.createElement('td');
-    td.appendChild(renderValue(v));
+    td.appendChild(renderValue(v, depth));
     // Copy button on every row (secrets + data)
     const btn=document.createElement('button');
     btn.className='copy-btn'; btn.innerHTML='\\u2398'; btn.title='Copy value';
@@ -404,15 +418,32 @@ function renderObjectSections(container, obj) {
     const h3=document.createElement('h3'); h3.textContent=prettyKey(key); section.appendChild(h3);
     if (Array.isArray(val)) { section.appendChild(renderArrayTable(val)); }
     else if (typeof val==='object'&&val!==null) {
-      const subKeys=Object.keys(val);
-      if (subKeys.length&&typeof val[subKeys[0]]==='object'&&!Array.isArray(val[subKeys[0]])) {
-        subKeys.forEach(sk=>{
-          const card=document.createElement('div'); card.className='card';
-          const h4=document.createElement('h4'); h4.textContent=sk; card.appendChild(h4);
-          card.appendChild(renderKVTable(val[sk]));
-          section.appendChild(card);
-        });
-      } else { section.appendChild(renderKVTable(val)); }
+      // Partition by what each sub-key actually holds. This used to pick the
+      // layout for the WHOLE object from subKeys[0] alone, then apply it to
+      // every sub-key. Real objects are heterogeneous: the watchdog snapshot
+      // has 38 sub-keys of which the first (battery) is an object and 18 are
+      // plain numbers — so all 38 went down the card path, and renderKVTable
+      // on a number is Object.entries(88.0) === [], i.e. an empty card. Every
+      // headline metric (cpu 88.0, mem 97.3, slice_pct 91.4) rendered as a
+      // heading over a blank table. Nothing was malformed; the shape was
+      // inferred from a sample of one.
+      const subKeys=Object.keys(val).filter(k=>k!=='_meta');
+      const scalars=subKeys.filter(k=>val[k]===null||typeof val[k]!=='object');
+      const nested=subKeys.filter(k=>val[k]!==null&&typeof val[k]==='object');
+      if (scalars.length) {
+        const flat={}; scalars.forEach(k=>{flat[k]=val[k];});
+        section.appendChild(renderKVTable(flat));
+      }
+      nested.forEach(sk=>{
+        const card=document.createElement('div'); card.className='card';
+        const h4=document.createElement('h4'); h4.textContent=sk; card.appendChild(h4);
+        card.appendChild(Array.isArray(val[sk])?renderArrayTable(val[sk]):renderKVTable(val[sk]));
+        section.appendChild(card);
+      });
+      if (!subKeys.length) {
+        const p=document.createElement('p'); p.className='val-null'; p.textContent='(empty)';
+        section.appendChild(p);
+      }
     } else { const p=document.createElement('p'); p.appendChild(renderValue(val)); section.appendChild(p); }
     container.appendChild(section);
   }
