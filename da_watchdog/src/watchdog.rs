@@ -1,3 +1,23 @@
+// Style lints are allowed for this module, deliberately and narrowly.
+//
+// It is a verbatim move out of my-konsole: the code has been sampling this
+// machine for months and it is the enforcement point for every kill, restart
+// and unit verb a panel can ask for. Reflowing 2900 lines of it to satisfy
+// `unnecessary_sort_by` and friends risks a real bug in the one file where a
+// real bug means signalling the wrong process, and buys nothing but tidiness.
+//
+// Correctness lints are NOT allowed away — only style. New code here should
+// still be written the way clippy wants; this is a moving allowance, not a
+// standing one.
+#![allow(
+    clippy::empty_line_after_doc_comments,
+    clippy::manual_contains,
+    clippy::manual_is_multiple_of,
+    clippy::needless_borrow,
+    clippy::too_many_arguments,
+    clippy::unnecessary_sort_by
+)]
+
 // watchdog.rs — ONE process reads the machine, everything else reads a file.
 //
 // This exists because of what the KDE panel cost. Fourteen

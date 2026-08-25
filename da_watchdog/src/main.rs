@@ -168,7 +168,7 @@ fn main() {
     }
 
     use ksni::blocking::TrayMethods;
-    match (Tray { v }).spawn_without_dbus_name() {
+    match (Tray { v }).disable_dbus_name(true).spawn() {
         Ok(_) => loop {
             std::thread::park();
         },
