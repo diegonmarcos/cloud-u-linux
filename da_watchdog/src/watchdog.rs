@@ -2124,6 +2124,89 @@ fn parse_i915_gem_gtt(s: &str) -> Option<(f64, f64)> {
     }
 }
 
+/// GPU memory, split into the two kinds that are not interchangeable.
+///
+/// DEDICATED is memory that belongs to the card and to nothing else: a T4's
+/// 16G, a discrete Radeon's VRAM. Filling it means the GPU starts evicting.
+///
+/// SHARED is system RAM the GPU has been given: an integrated chip's aperture,
+/// or a discrete card's GTT spill. It comes out of the same pool as everything
+/// else on the box, so filling it is a memory-pressure problem rather than a
+/// GPU one — which is exactly why merging the two into a single "VRAM" figure
+/// answers neither question.
+///
+/// A machine can have both (a T4 host), one (most of this fleet: an integrated
+/// chip with shared only), or neither that is readable. Intel i915 exposes no
+/// usage at all through sysfs — the numbers live in debugfs, which is root —
+/// so on those boxes this reports absent rather than guessing a number.
+fn vram_detail_json() -> String {
+    let mut dedicated: Option<(f64, f64)> = None; // (used, total) bytes
+    let mut shared: Option<(f64, f64)> = None;
+    let mut source = "none";
+
+    if let Ok(rd) = fs::read_dir("/sys/class/drm") {
+        for e in rd.flatten() {
+            let name = e.file_name();
+            let Some(nm) = name.to_str() else { continue };
+            if !nm.starts_with("card") || !nm["card".len()..].chars().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
+            let dev = e.path().join("device");
+            let pair = |a: &str, b: &str| -> Option<(f64, f64)> {
+                let u: f64 = fs::read_to_string(dev.join(a)).ok()?.trim().parse().ok()?;
+                let t: f64 = fs::read_to_string(dev.join(b)).ok()?.trim().parse().ok()?;
+                if t > 0.0 { Some((u, t)) } else { None }
+            };
+            if let Some(p) = pair("mem_info_vram_used", "mem_info_vram_total") {
+                dedicated = Some(p);
+                source = "amdgpu";
+            }
+            // GTT is the card's window onto system RAM: shared by definition.
+            if let Some(p) = pair("mem_info_gtt_used", "mem_info_gtt_total") {
+                shared = Some(p);
+                source = "amdgpu";
+            }
+        }
+    }
+
+    // NVIDIA publishes nothing usable through sysfs, so nvidia-smi is the only
+    // way in. Bounded, because on a busy or wedged GPU it blocks rather than
+    // failing, and this runs on the sampler's 2s tick.
+    if dedicated.is_none() {
+        if let Ok(o) = clean_command("nvidia-smi")
+            .args([
+                "--query-gpu=memory.used,memory.total",
+                "--format=csv,noheader,nounits",
+            ])
+            .output()
+        {
+            if let Ok(t) = String::from_utf8(o.stdout) {
+                if let Some(line) = t.lines().next() {
+                    let f: Vec<f64> =
+                        line.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+                    if f.len() == 2 && f[1] > 0.0 {
+                        // nvidia-smi reports MiB with --nounits.
+                        dedicated = Some((f[0] * 1_048_576.0, f[1] * 1_048_576.0));
+                        source = "nvidia";
+                    }
+                }
+            }
+        }
+    }
+
+    let one = |p: Option<(f64, f64)>| -> String {
+        match p {
+            Some((u, t)) => format!("{{\"used\":{u:.0},\"total\":{t:.0}}}"),
+            None => "null".into(),
+        }
+    };
+    format!(
+        "{{\"dedicated\":{},\"shared\":{},\"source\":\"{source}\"}}",
+        one(dedicated),
+        one(shared)
+    )
+}
+
 fn vram_json(v: Option<(f64, f64)>) -> String {
     match v {
         Some((total, used)) => format!("{{\"total\":{total:.0},\"used\":{used:.0}}}"),
@@ -2229,6 +2312,7 @@ fn render(
     disk: f64, disk_r: f64, disk_w: f64,
     disks: &str,
     vram: Option<(f64, f64)>,
+    vram_detail: &str,
     net_rx: f64, net_tx: f64,
     load1: f64, load5: f64, load15: f64,
     slice_cur: f64, slice_max: f64,
@@ -2261,7 +2345,7 @@ fn render(
         "{{\"cpu\":{cpu:.1},\"cores\":[{cores_joined}],\"cpu_detail\":{cpu_detail},\
           \"mem\":{mem:.1},\"swap\":{swap:.1},\
           \"mem_detail\":{mem_detail},\"swap_detail\":{swap_detail},\
-          \"vram\":{},\
+          \"vram\":{},\"vram_detail\":{vram_detail},\
           \"disk\":{disk:.1},\"disk_r\":{disk_r:.2},\"disk_w\":{disk_w:.2},\
           \"disks\":{disks},\
           \"net_rx\":{net_rx:.2},\"net_tx\":{net_tx:.2},\
@@ -2624,6 +2708,7 @@ pub fn snapshot_once() -> String {
         0.0,
         &disks_json(),
         read_vram(),
+        &vram_detail_json(),
         0.0,
         0.0,
         load1,
@@ -2727,6 +2812,7 @@ pub fn spawn() {
                 disk_root_percent(), disk_r, disk_w,
                 &disks_json(),
                 read_vram(),
+                &vram_detail_json(),
                 net_rx, net_tx,
                 load1, load5, load15,
                 slice_cur, slice_max,
@@ -2787,6 +2873,7 @@ mod tests {
                        55.0, 1.5, 2.5,
                        disks,
                        Some((1024.0, 512.0)),
+                       "{}",
                        0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 5.6,
                        &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]");
         for k in ["cpu", "cores", "cpu_detail", "mem", "swap", "mem_detail", "swap_detail",
@@ -2802,13 +2889,13 @@ mod tests {
         // vram must render as a null literal when None (the expected case on
         // machines without a readable GPU VRAM counter), not an absent key.
         let s2 = render(12.5, &[], cpu_detail, 40.0, 1.0, mem_detail, swap_detail,
-                         55.0, 1.5, 2.5, "[]", None,
+                         55.0, 1.5, 2.5, "[]", None, "{}",
                          0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 5.6, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]");
         assert!(s2.contains("\"vram\":null"), "expected null vram, got {s2}");
 
         // slice_pct must be 0.0, not NaN/Infinity, when slice_max is 0.
         let s3 = render(12.5, &[], cpu_detail, 40.0, 1.0, mem_detail, swap_detail,
-                         55.0, 1.5, 2.5, "[]", None,
+                         55.0, 1.5, 2.5, "[]", None, "{}",
                          0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 0.0, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]");
         assert!(s3.contains("\"slice_pct\":0.0"), "expected 0.0 slice_pct, got {s3}");
     }
