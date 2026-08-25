@@ -2065,10 +2065,25 @@ fn host_info_json() -> String {
             continue;
         }
         addr_list.push((f[1].to_string(), f[3].split('/').next().unwrap_or("").to_string()));
+        // MTU and operational state alongside the address. On a mesh
+        // interface these are most of what is knowable without root: wg(8)
+        // and /etc/wireguard are root-only, so the keys, the last handshake
+        // and the per-peer transfer counters are simply not available to an
+        // unprivileged sampler — on the desktop AND on every VM. Publishing
+        // what CAN be read and saying what cannot beats blank fields that
+        // look like a bug.
+        let sysfs = |k: &str| -> String {
+            fs::read_to_string(format!("/sys/class/net/{}/{k}", f[1]))
+                .map(|x| x.trim().to_string())
+                .unwrap_or_default()
+        };
         ifaces.push(format!(
-            "{{\"name\":\"{}\",\"addr\":\"{}\"}}",
+            "{{\"name\":\"{}\",\"addr\":\"{}\",\"mtu\":\"{}\",\"state\":\"{}\",\"mesh\":{}}}",
             json_escape(f[1]),
-            json_escape(f[3])
+            json_escape(f[3]),
+            json_escape(&sysfs("mtu")),
+            json_escape(&sysfs("operstate")),
+            f[1].starts_with("wg")
         ));
     }
 
