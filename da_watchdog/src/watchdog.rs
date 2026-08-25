@@ -1849,6 +1849,12 @@ fn host_info_json() -> String {
         .find_map(|l| l.strip_prefix("PRETTY_NAME=").map(|v| v.trim_matches('"').to_string()))
         .unwrap_or_default();
     let host = fs::read_to_string("/proc/sys/kernel/hostname").unwrap_or_default().trim().to_string();
+    // The user this is sampling AS, which is not cosmetic: what it can read in
+    // /proc and what it is allowed to signal both follow from it.
+    let user = read_uid_names()
+        .get(&current_uid())
+        .cloned()
+        .unwrap_or_else(|| current_uid().to_string());
     let kernel = fs::read_to_string("/proc/sys/kernel/osrelease").unwrap_or_default().trim().to_string();
 
     // ip(8) rather than parsing /proc/net/{fib_trie,if_inet6} by hand: those
@@ -1913,10 +1919,11 @@ fn host_info_json() -> String {
         .collect();
 
     format!(
-        "{{\"host\":\"{}\",\"os\":\"{}\",\"kernel\":\"{}\",\"gateway\":\"{}\",\"wan_if\":\"{}\",\"public\":\"{}\",\"ifaces\":[{}],\"dns\":[{}],\"search\":[{}]}}",
+        "{{\"host\":\"{}\",\"os\":\"{}\",\"kernel\":\"{}\",\"user\":\"{}\",\"gateway\":\"{}\",\"wan_if\":\"{}\",\"public\":\"{}\",\"ifaces\":[{}],\"dns\":[{}],\"search\":[{}]}}",
         json_escape(&host),
         json_escape(&os),
         json_escape(&kernel),
+        json_escape(&user),
         json_escape(gateway),
         json_escape(wan_if),
         json_escape(&public),
