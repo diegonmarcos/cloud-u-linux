@@ -84,7 +84,11 @@ body {
   gap: 3px;
 }
 
-.search-toggles input[type="radio"] { accent-color: var(--accent); }
+.search-toggles input[type="radio"],
+.search-toggles input[type="checkbox"] { accent-color: var(--accent); }
+/* Its own row: a checkbox reads as a fourth radio when it sits inline with
+   three, and it is not one — the modes are exclusive, this is orthogonal. */
+.search-toggles .dot-toggle { flex-basis: 100%; }
 
 .path-bar {
   padding: 8px 12px;
@@ -401,7 +405,9 @@ html { min-width: 900px; }
     <input type="text" id="search" placeholder="Search..." autocomplete="off">
     <div class="search-toggles">
       <label><input type="radio" name="smode" value="filename" checked> Filename</label>
+      <label><input type="radio" name="smode" value="folder"> Folder</label>
       <label><input type="radio" name="smode" value="content"> Content</label>
+      <label class="dot-toggle"><input type="checkbox" id="showdot"> Dot files</label>
     </div>
   </div>
   <div class="path-bar" id="path-bar">/</div>
@@ -423,7 +429,8 @@ html { min-width: 900px; }
     </ul>
     <h4>Features</h4>
     <ul>
-      <li>Sidebar file browser with recursive search (filename / content)</li>
+      <li>Sidebar file browser with recursive search (filename / folder / content)</li>
+      <li>Dot files hidden by default — tick <b>Dot files</b> to include them</li>
       <li>Raw / Render toggle switch</li>
       <li>Copy raw file button + double-click row to copy value</li>
       <li>Hover tooltip shows full file path</li>
@@ -460,8 +467,17 @@ html { min-width: 900px; }
 <script>
 let currentDir = '/';
 
+// Remembered per browser, and deliberately read here rather than threaded
+// through every call site: ls and search must never disagree about whether
+// dotfiles exist, or a search would surface a file the listing then hides.
+function showDot() {
+  const el = document.getElementById('showdot');
+  return el ? el.checked : false;
+}
+
 async function api(endpoint, params) {
   const qs = new URLSearchParams(params);
+  if (showDot()) qs.set('dot', '1');
   const res = await fetch('/__api__/' + endpoint + '?' + qs);
   return res.json();
 }
@@ -598,6 +614,22 @@ function updatePathBar() {
 }
 
 // ── Search ──
+// Restore the remembered choice, then re-render whatever is on screen when it
+// changes — a listing and a search result are both stale the moment the set of
+// visible files changes underneath them. Storage access is wrapped because a
+// private window or blocked site data throws on the accessor itself, and the
+// browser is still perfectly usable with the box simply defaulting to off.
+(function initDotToggle() {
+  const el = document.getElementById('showdot');
+  if (!el) return;
+  try { el.checked = localStorage.getItem('showdot') === '1'; } catch (e) {}
+  el.addEventListener('change', () => {
+    try { localStorage.setItem('showdot', el.checked ? '1' : '0'); } catch (e) {}
+    const q = document.getElementById('search').value.trim();
+    if (q) runSearch(q); else loadDir(currentDir);
+  });
+})();
+
 let searchDebounce;
 document.getElementById('search').addEventListener('input', (e) => {
   clearTimeout(searchDebounce);
@@ -633,22 +665,43 @@ function esc(s) {
 // Init path injected by server (or fallback to hash or /)
 const INIT_PATH = __INIT_PATH__;
 
-async function init() {
-  // Use hash if present (for shared links), otherwise server-injected path
-  const path = location.hash.length > 1
-    ? location.hash.slice(1)
-    : INIT_PATH;
-  const lastPart = path.split('/').pop();
-  if (lastPart && lastPart.includes('.')) {
-    const parentDir = path.replace(/\/[^/]+$/, '') || '/';
-    await loadDir(parentDir);
-    openFile(path, null);
-  } else {
-    await loadDir(path);
+// Is this path a directory? ASK, do not guess. This used to test whether the
+// last segment contained a dot and treat that as "file" — which is wrong for
+// exactly the entries the Dot files toggle exists to reveal: /.watchdog,
+// /.config and /.ssh are directories whose names all contain a dot, so every
+// one of them was routed to openFile() and loaded into the viewer iframe
+// instead of being listed. The extension heuristic cannot answer this
+// question; ls can, and it is one request.
+async function isDir(path) {
+  const r = await api('ls', { path }).catch(() => null);
+  return Array.isArray(r);
+}
+
+let routing = false;
+async function route() {
+  if (routing) return;              // hashchange fires while we rewrite it below
+  routing = true;
+  try {
+    const path = location.hash.length > 1 ? location.hash.slice(1) : INIT_PATH;
+    if (await isDir(path)) {
+      await loadDir(path);
+    } else {
+      const parentDir = path.replace(/\/[^/]+$/, '') || '/';
+      await loadDir(parentDir);
+      openFile(path, null);
+    }
+  } finally {
+    routing = false;
   }
 }
 
-init();
+// Editing the address bar changes only the fragment, so the browser does not
+// navigate and nothing re-runs — which is why typing a path did nothing until
+// you pressed reload, and why reload then "fixed" it. route() is the single
+// entry point for both the first load and every later hash change.
+window.addEventListener('hashchange', route);
+
+route();
 </script>
 </body>
 </html>

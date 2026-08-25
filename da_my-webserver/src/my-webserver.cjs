@@ -674,10 +674,18 @@ const server = createServer(async (req, res) => {
         res.writeHead(404, { 'content-type': 'application/json' });
         return res.end(JSON.stringify({ error: 'Not a directory' }));
       }
+      // Dotfiles stay hidden unless asked for. ROOT is $HOME and reads are not
+      // confined to the write allowlist, so the dot filter is the only thing
+      // standing between an unauthenticated GET and ~/.ssh, ~/.aws and every
+      // shell profile. Opt-in per request, never sticky server-side: a client
+      // that does not ask cannot be handed them by something else's setting.
+      // Note this only ever hid them from LISTINGS — an explicit path always
+      // resolved, so this grants no read that was not already reachable.
+      const showDot = url.searchParams.get('dot') === '1';
       const items = await readdir(fsDir);
       const entries = [];
       for (const name of items) {
-        if (name.startsWith('.')) continue;
+        if (!showDot && name.startsWith('.')) continue;
         const full = join(fsDir, name);
         const s = await stat(full).catch(() => null);
         if (s) { entries.push({ name, isDir: s.isDirectory() }); continue; }
@@ -732,6 +740,7 @@ const server = createServer(async (req, res) => {
       const q = (url.searchParams.get('q') || '').toLowerCase();
       const mode = url.searchParams.get('mode') || 'filename';
       const base = url.searchParams.get('path') || '/';
+      const showDot = url.searchParams.get('dot') === '1';   // see /__api__/ls
       if (!q) {
         res.writeHead(200, { 'content-type': 'application/json' });
         return res.end('[]');
@@ -746,13 +755,18 @@ const server = createServer(async (req, res) => {
         if (results.length > 200) return;
         const names = await readdir(dir).catch(() => []);
         for (const name of names) {
-          if (name.startsWith('.')) continue;
+          if (!showDot && name.startsWith('.')) continue;
           const childRel = rel ? rel + '/' + name : name;
           const childFs = join(dir, name);
           const s = await stat(childFs).catch(() => null);
           if (!s) continue;
           if (s.isDirectory()) {
-            if (mode === 'filename' && name.toLowerCase().includes(q)) {
+            // 'folder' is 'filename' restricted to directories: same match, but
+            // the file branch below ignores it entirely, so a folder search
+            // still DESCENDS through non-matching dirs and just does not report
+            // them. Narrowing the walk instead would stop at the first
+            // non-matching parent and miss every nested hit.
+            if ((mode === 'filename' || mode === 'folder') && name.toLowerCase().includes(q)) {
               results.push({ path: childRel, isDir: true });
             }
             await walk(childFs, childRel);
@@ -1086,7 +1100,7 @@ function startupBanner() {
     `    ${C.cyan}/__browse__/${C.reset}                       SPA browser`,
     `    ${C.cyan}/__api__/ls?path=...${C.reset}               directory listing JSON`,
     `    ${C.cyan}/__api__/read?path=...${C.reset}             file content JSON (≤5MB)`,
-    `    ${C.cyan}/__api__/search?q=...&mode=filename|content${C.reset}  recursive search`,
+    `    ${C.cyan}/__api__/search?q=...&mode=filename|folder|content&dot=1${C.reset}  recursive search`,
     `    ${C.cyan}/__lib__/{marked.min.js,github-markdown-dark.css,browse.html}${C.reset}`,
     '',
     `  ${C.bold}log columns${C.reset}  ${C.dim}timestamp method status duration size render-mode url${C.reset}`,
