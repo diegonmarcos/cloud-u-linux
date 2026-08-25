@@ -1072,6 +1072,7 @@ fn build_proc_table(
     // competing with the thing it is sampling, which is the exact failure this
     // fleet's policy is written to prevent. One read per distinct pid per tick.
     let published: Vec<i32> = rows.iter().map(|r| r.pid).collect();
+<<<<<<< Updated upstream
     let mut seen: HashMap<i32, (i32, String)> = HashMap::new();
     let mut parent_of = |pid: i32, seen: &mut HashMap<i32, (i32, String)>| -> Option<(i32, String)> {
         if let Some(v) = seen.get(&pid) {
@@ -1095,6 +1096,34 @@ fn build_proc_table(
         Some(v)
     };
 
+||||||| Stash base
+=======
+    let mut seen: HashMap<i32, (i32, String)> = HashMap::new();
+    // Not `mut`: the map it mutates comes in as a parameter, so the closure
+    // itself captures nothing.
+    let parent_of = |pid: i32, seen: &mut HashMap<i32, (i32, String)>| -> Option<(i32, String)> {
+        if let Some(v) = seen.get(&pid) {
+            return Some(v.clone());
+        }
+        let st = fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+        let field = |k: &str| -> &str {
+            st.lines()
+                .find(|l| l.starts_with(k))
+                .and_then(|l| l.split_whitespace().nth(1))
+                .unwrap_or("")
+        };
+        let ppid: i32 = field("PPid:").parse().ok()?;
+        let name = st
+            .lines()
+            .find(|l| l.starts_with("Name:"))
+            .map(|l| l[5..].trim().to_string())
+            .unwrap_or_else(|| "?".into());
+        let v = (ppid, name);
+        seen.insert(pid, v.clone());
+        Some(v)
+    };
+
+>>>>>>> Stashed changes
     let mut spine: Vec<(i32, i32, String)> = Vec::new();
     for pid in &published {
         let mut cur = *pid;
