@@ -751,11 +751,34 @@ const server = createServer(async (req, res) => {
         return res.end(JSON.stringify({ error: 'Not a directory' }));
       }
       const results = [];
+      // The only stop condition here used to be `results.length > 200` — a
+      // bound on MATCHES, not on WORK. Searches are rooted at ROOT, which is
+      // $HOME, so any query matching fewer than 200 things recursed the whole
+      // home directory: every git checkout, node_modules, nix profile and
+      // waydroid image. Reproduced 2026-08-25: an idle server at 0%, one
+      // search for a term matching nothing, client gone after 6s — and the
+      // process sat at 90% of a core with ZERO open connections, still
+      // walking, because nothing ties the walk to the request that started it.
+      // ~5,800 stat() calls/sec, event loop plus all four libuv fs workers
+      // saturated. The sidebar debounces on input, so typing a word launches
+      // several overlapping walks and they stack: observed 198%.
+      //
+      // Three bounds, kept separate because they fail in different ways:
+      //   budget  — the walk terminates whatever the tree turns out to be
+      //   seen    — stat() FOLLOWS symlinks, so one link pointing back up the
+      //             tree is an infinite descent no budget would explain
+      //   aborted — a walk nobody is waiting for should not still be running
+      let budget = 50000;
+      const seen = new Set();
+      let aborted = false;
+      req.on('close', () => { aborted = true; });
       async function walk(dir, rel) {
-        if (results.length > 200) return;
+        if (aborted || budget <= 0 || results.length > 200) return;
         const names = await readdir(dir).catch(() => []);
         for (const name of names) {
+          if (aborted || budget <= 0) return;
           if (!showDot && name.startsWith('.')) continue;
+          budget--;
           const childRel = rel ? rel + '/' + name : name;
           const childFs = join(dir, name);
           const s = await stat(childFs).catch(() => null);
@@ -769,7 +792,13 @@ const server = createServer(async (req, res) => {
             if ((mode === 'filename' || mode === 'folder') && name.toLowerCase().includes(q)) {
               results.push({ path: childRel, isDir: true });
             }
-            await walk(childFs, childRel);
+            // Keyed by identity, not by path: two paths that reach the same
+            // directory through a symlink are the same directory.
+            const key = s.dev + ':' + s.ino;
+            if (!seen.has(key)) {
+              seen.add(key);
+              await walk(childFs, childRel);
+            }
           } else {
             if (mode === 'filename' && name.toLowerCase().includes(q)) {
               results.push({ path: childRel, isDir: false });
@@ -786,7 +815,13 @@ const server = createServer(async (req, res) => {
         }
       }
       await walk(fsBase, '');
-      res.writeHead(200, { 'content-type': 'application/json' });
+      // Never let a bounded walk look like an exhaustive one.
+      const partial = budget <= 0 || results.length > 200;
+      if (partial) log(`search "${q}" (${mode}) stopped early — ${results.length} results, budget ${budget <= 0 ? 'exhausted' : 'remaining'}`);
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'x-search-partial': partial ? '1' : '0',
+      });
       return res.end(JSON.stringify(results));
     }
 

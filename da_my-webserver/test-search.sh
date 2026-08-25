@@ -45,22 +45,41 @@ const TREE = {
   "target.txt":            null,
 };
 const CONTENT = { "notes/other.md": "mentions target inside the body" };
-const isDir = (p) => Array.isArray(TREE[p]);
-const readdir  = async (p) => TREE[p] || [];
-const stat     = async (p) => ({ isDirectory: () => isDir(p), size: 10 });
+// "loop" is a directory that always contains "back", and every path inside it
+// reports the SAME dev:ino — a symlink pointing back up its own tree. Without
+// the visited-set the walk descends it until the budget runs out; with it, the
+// second visit is recognised as somewhere it has already been.
+const inLoop  = (p) => p === "loop" || p.startsWith("loop/");
+const isDir   = (p) => inLoop(p) || Array.isArray(TREE[p]);
+// Counted, and hard-capped: without the visited-set a cycle recurses forever,
+// and a test that HANGS reports nothing. The cap turns that into a throw, so
+// the runaway fails the check instead of wedging the suite.
+let readdirCalls = 0;
+const readdir = async (p) => {
+  if (++readdirCalls > 5000) throw new Error("runaway walk");
+  return inLoop(p) ? ["back"] : (TREE[p] || []);
+};
+let nextIno = 1; const INO = {};
+const inoOf = (p) => inLoop(p) ? 999 : (INO[p] = INO[p] || ++nextIno);
+const stat  = async (p) => ({ isDirectory: () => isDir(p), size: 10, dev: 1, ino: inoOf(p) });
 const readFile = async (p) => CONTENT[p] ?? "";
 const join = (a, b) => (a ? a + "/" + b : b);
 
-let results, mode, q, showDot;
+let results, mode, q, showDot, budget, seen, aborted;
 JS
 cat "$TMP/walk.js" >> "$TMP/run.js"
 cat >> "$TMP/run.js" <<'JS'
 
 const out = [];
 const check = (n, ok) => out.push([n, ok]);
-async function run(m, term, dot) {
+const BUDGET0 = 50000;
+async function run(m, term, dot, opts) {
+  opts = opts || {};
   results = []; mode = m; q = term; showDot = !!dot;
-  await walk("", "");
+  budget = opts.budget === undefined ? BUDGET0 : opts.budget;
+  seen = new Set(); aborted = false;
+  if (opts.abortNow) aborted = true;
+  await walk(opts.from === undefined ? "" : opts.from, "");
   return results.map(r => (r.isDir ? "d:" : "f:") + r.path).sort();
 }
 (async () => {
@@ -89,6 +108,21 @@ async function run(m, term, dot) {
   const dOn = await run("folder", "target", true);
   check("dot dirs shown when asked", dOn.includes("d:.target-hidden"));
   check("nested dot dir found only with dot on", dOn.includes("d:.target-hidden/.inner-target"));
+
+  // The three bounds. Each is checked by what it COSTS, not just by the answer:
+  // a walk that returns the right list after visiting the whole disk is still
+  // the bug this was written for.
+  readdirCalls = 0;
+  let looped = false;
+  try { await run("filename", "back", false, { from: "loop" }); }
+  catch (e) { looped = true; }
+  check("symlink cycle does not walk forever", !looped && readdirCalls < 10);
+
+  await run("filename", "target", false, { budget: 3 });
+  check("budget is honoured", budget <= 0);
+
+  const ab = await run("filename", "target", false, { abortNow: true });
+  check("abort stops the walk immediately", ab.length === 0 && budget === BUDGET0);
 
   let bad = 0;
   for (const [n, ok] of out) { console.log((ok ? "  ok   — " : "  FAIL — ") + n); if (!ok) bad++; }
