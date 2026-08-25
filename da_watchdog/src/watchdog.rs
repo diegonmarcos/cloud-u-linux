@@ -2799,6 +2799,55 @@ fn drain_kill_requests() {
             eprintln!("[watchdog] reap: {}", reap_zombies());
             continue;
         }
+        // "0 CTR <verb> <name>" and "0 IMG <verb> <ref>" — container and image
+        // verbs, allow-listed the same way UNIT is. This line arrives from a
+        // file any process of this user can append to, so "whatever word came
+        // next" is never handed to docker.
+        //
+        // No `rm` for containers. Stopping one is reversible and removing one
+        // is not — a compose stack recreates it, but anything in its writable
+        // layer is gone, and a panel keystroke is the wrong weight for that.
+        if sig.eq_ignore_ascii_case("CTR") {
+            let verb = it.next().unwrap_or("");
+            let name = it.next().unwrap_or("");
+            if !matches!(verb, "start" | "stop" | "restart" | "pause" | "unpause")
+                || name.is_empty()
+                || name.starts_with('-')
+                || name.contains('/')
+            {
+                eprintln!("[watchdog] refusing container request {verb:?} {name:?}");
+                continue;
+            }
+            match clean_command("docker").args([verb, name]).output() {
+                Ok(o) if o.status.success() => eprintln!("[watchdog] docker {verb} {name}: ok"),
+                Ok(o) => eprintln!(
+                    "[watchdog] docker {verb} {name} failed: {}",
+                    String::from_utf8_lossy(&o.stderr).trim()
+                ),
+                Err(e) => eprintln!("[watchdog] docker {verb} {name}: {e}"),
+            }
+            continue;
+        }
+        if sig.eq_ignore_ascii_case("IMG") {
+            let verb = it.next().unwrap_or("");
+            let reference = it.next().unwrap_or("");
+            if !matches!(verb, "pull" | "rm") || reference.is_empty() || reference.starts_with('-') {
+                eprintln!("[watchdog] refusing image request {verb:?} {reference:?}");
+                continue;
+            }
+            // `rmi`, not `rm`: docker refuses to remove an image a container
+            // still references, which is the guard we want and already have.
+            let cmd = if verb == "rm" { "rmi" } else { "pull" };
+            match clean_command("docker").args([cmd, reference]).output() {
+                Ok(o) if o.status.success() => eprintln!("[watchdog] docker {cmd} {reference}: ok"),
+                Ok(o) => eprintln!(
+                    "[watchdog] docker {cmd} {reference} failed: {}",
+                    String::from_utf8_lossy(&o.stderr).trim()
+                ),
+                Err(e) => eprintln!("[watchdog] docker {cmd} {reference}: {e}"),
+            }
+            continue;
+        }
         // "0 UNIT <scope> <verb> <name>" — a systemd verb on a declared unit.
         if sig.eq_ignore_ascii_case("UNIT") {
             let scope = it.next().unwrap_or("");
