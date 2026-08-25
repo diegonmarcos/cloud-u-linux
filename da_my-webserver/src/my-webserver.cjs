@@ -629,9 +629,21 @@ const server = createServer(async (req, res) => {
     // worse trade than one hard-coded read-only path.
     if (urlPath === '/__api__/watchdog') {
       ctx.render = 'api-watchdog';
-      const runtime = process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid ? process.getuid() : 1000}`;
-      const snap = `${runtime}/my-konsole-watchdog.json`;
-      const body = await readFile(snap, 'utf8').catch(() => null);
+      // Same order my-watchdog resolves: XDG_RUNTIME_DIR, then /run/user/<uid>,
+      // then /tmp. A service started outside a login session has no
+      // XDG_RUNTIME_DIR, and that is the common case on a VM.
+      const uid = process.getuid ? process.getuid() : 1000;
+      const candidates = [
+        process.env.XDG_RUNTIME_DIR && `${process.env.XDG_RUNTIME_DIR}/my-konsole-watchdog.json`,
+        `/run/user/${uid}/my-konsole-watchdog.json`,
+        `/tmp/my-konsole-${uid}/my-konsole-watchdog.json`,
+      ].filter(Boolean);
+      let body = null;
+      let snap = candidates[candidates.length - 1];
+      for (const c of candidates) {
+        const t = await readFile(c, 'utf8').catch(() => null);
+        if (t !== null) { body = t; snap = c; break; }
+      }
       if (body === null) {
         res.writeHead(503, { 'content-type': 'application/json' });
         return res.end(JSON.stringify({

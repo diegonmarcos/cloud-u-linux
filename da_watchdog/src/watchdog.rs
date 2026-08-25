@@ -142,8 +142,37 @@ fn proc_slice(pid: i32) -> String {
         .unwrap_or_default()
 }
 
+/// Where the runtime files live.
+///
+/// XDG_RUNTIME_DIR first, then /run/user/<uid>, then /tmp.
+///
+/// The fallbacks are not defensive padding — they are the headless case, which
+/// is the one this binary exists for. A non-interactive ssh session gets no
+/// XDG_RUNTIME_DIR at all, so relying on it alone meant the sampler started
+/// happily on every VM, logged one line nobody was reading, and published
+/// nothing. It looked exactly like a working deployment.
+fn runtime_dir() -> PathBuf {
+    if let Some(d) = std::env::var_os("XDG_RUNTIME_DIR") {
+        let p = PathBuf::from(d);
+        if p.is_dir() {
+            return p;
+        }
+    }
+    let uid = current_uid();
+    let p = PathBuf::from(format!("/run/user/{uid}"));
+    if p.is_dir() {
+        return p;
+    }
+    // Last resort. /tmp is world-writable, so the file is created with the
+    // process umask and its name carries the uid — two processes for different
+    // users on one box must not fight over one path.
+    PathBuf::from(format!("/tmp/my-konsole-{uid}"))
+}
+
 pub fn snapshot_path() -> Option<PathBuf> {
-    std::env::var_os("XDG_RUNTIME_DIR").map(|d| PathBuf::from(d).join("my-konsole-watchdog.json"))
+    let d = runtime_dir();
+    let _ = fs::create_dir_all(&d);
+    Some(d.join("my-konsole-watchdog.json"))
 }
 
 // /proc/stat's cpu line is cumulative since boot, so a percentage needs two
@@ -2635,8 +2664,7 @@ fn fmt_mib(b: u64) -> String {
 /// Each line is "<pid> <SIG>"; the file is consumed on read, so a stale request
 /// cannot fire twice.
 fn drain_kill_requests() {
-    let Some(dir) = std::env::var_os("XDG_RUNTIME_DIR") else { return };
-    let req = PathBuf::from(&dir).join("my-konsole-watchdog.kill");
+    let req = runtime_dir().join("my-konsole-watchdog.kill");
     let Ok(body) = fs::read_to_string(&req) else { return };
     let _ = fs::remove_file(&req);
     // Loaded fresh per drain (not cached in `spawn`'s state) so an edit to
@@ -2798,7 +2826,7 @@ pub fn snapshot_once() -> String {
 
 pub fn spawn() {
     let Some(path) = snapshot_path() else {
-        eprintln!("[watchdog] no XDG_RUNTIME_DIR — not publishing metrics");
+        eprintln!("[watchdog] no writable runtime directory — not publishing metrics");
         return;
     };
     let ptn = proc_table_n();
