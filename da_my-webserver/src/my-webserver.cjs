@@ -877,7 +877,17 @@ const server = createServer(async (req, res) => {
       const q = (url.searchParams.get('q') || '').toLowerCase();
       const mode = url.searchParams.get('mode') || 'filename';
       const base = url.searchParams.get('path') || '/';
-      const showDot = url.searchParams.get('dot') === '1';   // see /__api__/ls
+      // The Dot files toggle governs BOTH showing and searching: on means dot
+      // entries are listed AND walked into, off means neither. One switch, one
+      // meaning, in the listing and in the search.
+      //
+      // It looked broken with the toggle ON for a reason unrelated to this
+      // flag: the walk was depth-first under a 3s deadline, so turning dot on
+      // enlarged the tree while the walk still spent the whole budget down the
+      // first branch it entered. Dot results were reachable in principle and
+      // never reached in practice. The breadth-first queue below is the fix;
+      // this flag was always doing what it said.
+      const showDot = url.searchParams.get('dot') === '1';
       if (!q) {
         res.writeHead(200, { 'content-type': 'application/json' });
         return res.end('[]');
@@ -927,15 +937,26 @@ const server = createServer(async (req, res) => {
         if (Date.now() > deadline) { timedOut = true; return true; }
         return false;
       }
+      // BREADTH-first, not depth-first. Under a deadline the order is the whole
+      // ballgame: depth-first dives into whichever directory it meets first and
+      // spends the entire budget down one branch, so a root-scoped search for
+      // "konsole" returned a single buried match and stopped — measured, and
+      // deterministic, which made it look like the only match rather than the
+      // first one reached. Breadth-first spends the same budget on the
+      // shallowest paths, which are the ones you meant. Truncation then
+      // degrades gracefully instead of arbitrarily.
       async function walk(dir, rel) {
+        const queue = [[dir, rel]];
+        while (queue.length) {
         if (aborted || spent() || budget <= 0 || results.length > 200) return;
-        const names = await readdir(dir).catch(() => []);
+        const [cur, curRel] = queue.shift();
+        const names = await readdir(cur).catch(() => []);
         for (const name of names) {
           if (aborted || spent() || budget <= 0) return;
           if (!showDot && name.startsWith('.')) continue;
           budget--;
-          const childRel = rel ? rel + '/' + name : name;
-          const childFs = join(dir, name);
+          const childRel = curRel ? curRel + '/' + name : name;
+          const childFs = join(cur, name);
           const s = await stat(childFs).catch(() => null);
           if (!s) continue;
           if (s.isDirectory()) {
@@ -952,7 +973,7 @@ const server = createServer(async (req, res) => {
             const key = s.dev + ':' + s.ino;
             if (!seen.has(key)) {
               seen.add(key);
-              await walk(childFs, childRel);
+              queue.push([childFs, childRel]);
             }
           } else {
             if (mode === 'filename' && name.toLowerCase().includes(q)) {
@@ -967,6 +988,7 @@ const server = createServer(async (req, res) => {
               }
             }
           }
+        }
         }
       }
       await walk(fsBase, '');
