@@ -20,14 +20,20 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 node -e '
 const fs = require("fs");
 const s = fs.readFileSync(process.argv[1], "utf8");
-const i = s.indexOf("async function walk(dir, rel)");
-if (i < 0) { console.error("walk() not found in my-webserver.cjs"); process.exit(1); }
-let d = 0, j = s.indexOf("{", i);
-for (let k = j; k < s.length; k++) {
-  if (s[k] === "{") d++;
-  else if (s[k] === "}" && --d === 0) { j = k + 1; break; }
+// spent() as well as walk(): the deadline check lives outside walk, and a
+// hand-written copy of it here would pass while production drifted away.
+let out = "";
+for (const sig of ["function spent()", "async function walk(dir, rel)"]) {
+  const i = s.indexOf(sig);
+  if (i < 0) { console.error(sig + " not found in my-webserver.cjs"); process.exit(1); }
+  let d = 0, j = s.indexOf("{", i);
+  for (let k = j; k < s.length; k++) {
+    if (s[k] === "{") d++;
+    else if (s[k] === "}" && --d === 0) { j = k + 1; break; }
+  }
+  out += s.slice(i, j) + "\n";
 }
-fs.writeFileSync(process.argv[2], s.slice(i, j));
+fs.writeFileSync(process.argv[2], out);
 ' "$SRC" "$TMP/walk.js" || exit 1
 
 cat > "$TMP/run.js" <<'JS'
@@ -65,7 +71,7 @@ const stat  = async (p) => ({ isDirectory: () => isDir(p), size: 10, dev: 1, ino
 const readFile = async (p) => CONTENT[p] ?? "";
 const join = (a, b) => (a ? a + "/" + b : b);
 
-let results, mode, q, showDot, budget, seen, aborted;
+let results, mode, q, showDot, budget, seen, aborted, deadline, timedOut;
 JS
 cat "$TMP/walk.js" >> "$TMP/run.js"
 cat >> "$TMP/run.js" <<'JS'
@@ -77,7 +83,8 @@ async function run(m, term, dot, opts) {
   opts = opts || {};
   results = []; mode = m; q = term; showDot = !!dot;
   budget = opts.budget === undefined ? BUDGET0 : opts.budget;
-  seen = new Set(); aborted = false;
+  seen = new Set(); aborted = false; timedOut = false;
+  deadline = opts.deadline === undefined ? Date.now() + 60000 : opts.deadline;
   if (opts.abortNow) aborted = true;
   await walk(opts.from === undefined ? "" : opts.from, "");
   return results.map(r => (r.isDir ? "d:" : "f:") + r.path).sort();
@@ -137,6 +144,15 @@ async function run(m, term, dot, opts) {
   const undef   = [...new Set(called)].filter(n=>!defined.has(n));
   check("search handler calls no undefined logger", undef.length===0);
   if (undef.length) console.log("    undefined: "+undef.join(", "));
+
+  // The deadline is the bound that matches "this will not bog the machine
+  // down": budget counts entries, not seconds, and 50k stat()s on a cold disk
+  // is still minutes. An already-expired deadline must stop it dead.
+  const past = await run("filename", "target", false, { deadline: Date.now() - 1 });
+  check("expired deadline stops the walk", past.length === 0 && timedOut === true);
+
+  await run("filename", "target", false, {});
+  check("a live deadline does not trip", timedOut === false);
 
   let bad = 0;
   for (const [n, ok] of out) { console.log((ok ? "  ok   — " : "  FAIL — ") + n); if (!ok) bad++; }

@@ -404,8 +404,8 @@ html { min-width: 900px; }
   <div class="search-box">
     <input type="text" id="search" placeholder="Search..." autocomplete="off">
     <div class="search-toggles">
-      <label><input type="radio" name="smode" value="filename" checked> Filename</label>
-      <label><input type="radio" name="smode" value="folder"> Folder</label>
+      <label><input type="radio" name="smode" value="folder" checked> Folder</label>
+      <label><input type="radio" name="smode" value="filename"> Filename</label>
       <label><input type="radio" name="smode" value="content"> Content</label>
       <label class="dot-toggle"><input type="checkbox" id="showdot"> Dot files</label>
     </div>
@@ -475,10 +475,16 @@ function showDot() {
   return el ? el.checked : false;
 }
 
+let lastSearchPartial = false;
 async function api(endpoint, params) {
   const qs = new URLSearchParams(params);
   if (showDot()) qs.set('dot', '1');
-  const res = await fetch('/__api__/' + endpoint + '?' + qs);
+  // no-store on both ends: the server sets it, and this stops the browser
+  // serving a previous identical query from its own cache. A search is a
+  // question about the filesystem right now, never a lookup in something
+  // remembered.
+  const res = await fetch('/__api__/' + endpoint + '?' + qs, { cache: 'no-store' });
+  if (endpoint === 'search') lastSearchPartial = res.headers.get('x-search-partial') === '1';
   return res.json();
 }
 
@@ -631,9 +637,16 @@ function updatePathBar() {
 })();
 
 let searchDebounce;
+// A one-character query matches almost every path, so it walks the entire tree
+// and throws away nearly all of it. Two characters, and a slightly longer
+// pause, keeps a burst of typing from launching several full walks that then
+// race each other — that stacking is how one search became 198% CPU.
+const MIN_QUERY = 2;
 document.getElementById('search').addEventListener('input', (e) => {
   clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(() => runSearch(e.target.value.trim()), 300);
+  const v = e.target.value.trim();
+  if (v.length && v.length < MIN_QUERY) return;
+  searchDebounce = setTimeout(() => runSearch(v), 400);
 });
 
 async function runSearch(q) {
@@ -642,6 +655,13 @@ async function runSearch(q) {
   // Search recursively from current directory into children
   const results = await api('search', { q, mode, path: currentDir });
   renderEntries(results, true);
+  // A bounded search that stays silent reads as "there is nothing else there".
+  if (lastSearchPartial) {
+    const note = document.createElement('div');
+    note.className = 'meta';
+    note.textContent = 'partial — stopped at the time/size limit; search inside a subfolder to narrow it';
+    document.getElementById('file-list').appendChild(note);
+  }
 }
 
 function fileIcon(name) {

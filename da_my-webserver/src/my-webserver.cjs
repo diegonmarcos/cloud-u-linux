@@ -803,11 +803,29 @@ const server = createServer(async (req, res) => {
       const seen = new Set();
       let aborted = false;
       req.on('close', () => { aborted = true; });
+      // A WALL-CLOCK deadline, which is the bound that actually matches the
+      // promise made to the user: "this will not bog down the machine". budget
+      // bounds entries, not seconds — a cold cache on a loaded disk can spend
+      // minutes on 50k stat()s, and that is indistinguishable from the runaway
+      // this is all meant to prevent. Whichever trips first wins.
+      //
+      // This is explicitly NOT an index. Nothing is cached, nothing is crawled
+      // in the background, nothing persists between requests — that is the
+      // whole difference from baloo, which keeps a database warm by rescanning
+      // the filesystem forever. A search here costs one bounded walk and then
+      // the process goes back to idle at 0% CPU.
+      const SEARCH_MS = Number(process.env.HTTPD_SEARCH_MS || 3000);
+      const deadline = Date.now() + SEARCH_MS;
+      let timedOut = false;
+      function spent() {
+        if (Date.now() > deadline) { timedOut = true; return true; }
+        return false;
+      }
       async function walk(dir, rel) {
-        if (aborted || budget <= 0 || results.length > 200) return;
+        if (aborted || spent() || budget <= 0 || results.length > 200) return;
         const names = await readdir(dir).catch(() => []);
         for (const name of names) {
-          if (aborted || budget <= 0) return;
+          if (aborted || spent() || budget <= 0) return;
           if (!showDot && name.startsWith('.')) continue;
           budget--;
           const childRel = rel ? rel + '/' + name : name;
@@ -847,15 +865,18 @@ const server = createServer(async (req, res) => {
       }
       await walk(fsBase, '');
       // Never let a bounded walk look like an exhaustive one.
-      const partial = budget <= 0 || results.length > 200;
+      const partial = timedOut || budget <= 0 || results.length > 200;
       // console.log, not log(): this file has logRequest/logParts and no bare
       // log(). The typo only threw when `partial` was true — i.e. only once a
       // search actually hit the budget — so it survived every small-directory
       // test and 500'd the first real search from $HOME.
-      if (partial) console.log(`[search] "${q}" (${mode}) stopped early — ${results.length} results, budget ${budget <= 0 ? 'exhausted' : 'remaining'}`);
+      if (partial) console.log(`[search] "${q}" (${mode}) stopped early — ${results.length} results, reason: ${timedOut ? SEARCH_MS + 'ms deadline' : budget <= 0 ? 'entry budget' : 'result cap'}`);
       res.writeHead(200, {
         'content-type': 'application/json',
         'x-search-partial': partial ? '1' : '0',
+        // Results describe the filesystem at this instant. A cached 304 would
+        // show a stale tree that no longer matches what the sidebar lists.
+        'cache-control': 'no-store',
       });
       return res.end(JSON.stringify(results));
     }
