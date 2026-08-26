@@ -848,7 +848,11 @@ const server = createServer(async (req, res) => {
       await walk(fsBase, '');
       // Never let a bounded walk look like an exhaustive one.
       const partial = budget <= 0 || results.length > 200;
-      if (partial) log(`search "${q}" (${mode}) stopped early — ${results.length} results, budget ${budget <= 0 ? 'exhausted' : 'remaining'}`);
+      // console.log, not log(): this file has logRequest/logParts and no bare
+      // log(). The typo only threw when `partial` was true — i.e. only once a
+      // search actually hit the budget — so it survived every small-directory
+      // test and 500'd the first real search from $HOME.
+      if (partial) console.log(`[search] "${q}" (${mode}) stopped early — ${results.length} results, budget ${budget <= 0 ? 'exhausted' : 'remaining'}`);
       res.writeHead(200, {
         'content-type': 'application/json',
         'x-search-partial': partial ? '1' : '0',

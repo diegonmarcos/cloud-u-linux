@@ -124,6 +124,20 @@ async function run(m, term, dot, opts) {
   const ab = await run("filename", "target", false, { abortNow: true });
   check("abort stops the walk immediately", ab.length === 0 && budget === BUDGET0);
 
+  // Guard against calling a helper this file does not define. The bounded-walk
+  // change shipped `log(...)` on the partial-result path; there is no bare
+  // log() here (only logRequest/logParts), so it threw ReferenceError -> HTTP
+  // 500 — but ONLY once a search actually exhausted its budget, which no small
+  // fixture does. Cheap and narrow on purpose: it checks the one shape that bit.
+  // Strip line comments first — prose that mentions log() is not a call to it.
+  const src = require("fs").readFileSync(process.argv[3], "utf8")
+    .split("\n").map(l => l.replace(/\/\/.*$/, "")).join("\n");
+  const defined = new Set([...src.matchAll(/(?:function|const|let)\s+(\w+)\s*[=(]/g)].map(m=>m[1]));
+  const called  = [...src.matchAll(/(?:^|[^.\w])(log|warn|err|debug)\(/g)].map(m=>m[1]);
+  const undef   = [...new Set(called)].filter(n=>!defined.has(n));
+  check("search handler calls no undefined logger", undef.length===0);
+  if (undef.length) console.log("    undefined: "+undef.join(", "));
+
   let bad = 0;
   for (const [n, ok] of out) { console.log((ok ? "  ok   — " : "  FAIL — ") + n); if (!ok) bad++; }
   process.exit(bad === 0 ? 0 : 1);
@@ -131,5 +145,5 @@ async function run(m, term, dot, opts) {
 JS
 
 echo "=== my-webserver search modes ==="
-node "$TMP/run.js" || exit 1
+node "$TMP/run.js" "" "$SRC" || exit 1
 echo "=== my-webserver search modes: PASS ==="
