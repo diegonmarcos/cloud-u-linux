@@ -18,8 +18,13 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 node -e '
 const fs=require("fs");
 const s=fs.readFileSync(process.argv[1],"utf8");
+// BIG is the collapse threshold — grabbed as a line, not re-declared here, so
+// the test cannot disagree with production about what counts as large.
 let out="";
-for (const fn of ["function renderValue","function renderArrayTable","function renderKVTable","function renderObjectSections"]) {
+const bigLine = s.match(/^const BIG = \d+;$/m);
+if (!bigLine) { console.error("const BIG not found"); process.exit(1); }
+out += bigLine[0] + "\n";
+for (const fn of ["function sizeOf","function addCount","function makeSortable","function renderValue","function renderArrayTable","function renderKVTable","function renderObjectSections"]) {
   const i=s.indexOf(fn);
   if(i<0){console.error("missing "+fn);process.exit(1);}
   let d=0,j=s.indexOf("{",i);
@@ -78,6 +83,24 @@ function tables(n){ return (n.tag==="table"?1:0)+n.children.reduce((a,k)=>a+tabl
 check("nested objects become tables", tables(root) > 5);
 check("nested objects are not stringified",
   !all.includes('{"') || tables(root) > 20);
+
+  // ---- collapsing -------------------------------------------------------
+  function detailsOf(n){ return (n.tag==="details"?[n]:[]).concat(n.children.flatMap(detailsOf)); }
+  function summaryText(d){ const su=d.children.find(c=>c.tag==="summary"); return su?text(su):""; }
+  const dets = detailsOf(root);
+  check("sections and cards are <details>", dets.length > 0);
+
+  // A container bigger than BIG must start closed; that is the whole point —
+  // the 358-entry file list is what you scroll past to reach the metrics.
+  const big = dets.filter(d => { const m = summaryText(d).match(/\((\d+)\)/); return m && +m[1] > BIG; });
+  check("large containers start collapsed", big.length > 0 && big.every(d => d.open === false));
+
+  const small = dets.filter(d => { const m = summaryText(d).match(/\((\d+)\)/); return m && +m[1] > 0 && +m[1] <= BIG; });
+  check("small containers stay open", small.length === 0 || small.every(d => d.open === true));
+
+  // A collapsed section with no count is indistinguishable from an absent one.
+  check("every collapsed container shows its count",
+    dets.filter(d => d.open === false).every(d => /\(\d+\)/.test(summaryText(d))));
 
 let bad=0;
 for(const [n,ok] of out){ console.log((ok?"  ok   — ":"  FAIL — ")+n); if(!ok)bad++; }

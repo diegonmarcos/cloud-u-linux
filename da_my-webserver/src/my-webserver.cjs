@@ -301,6 +301,26 @@ tbody tr.row-copied{background:rgba(0,214,143,0.2);transition:background 0.3s}
 .card{background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:14px 18px;margin-bottom:12px}
 .card h4{font-size:13px;color:var(--accent);margin-bottom:8px}
 .card table{margin-bottom:0}
+/* Collapsing is <details>, not a JS widget: it is keyboard accessible, it has
+   correct semantics for a screen reader, and modern browsers auto-expand a
+   closed <details> when Ctrl-F finds text inside it — none of which a
+   div-and-onclick toggle gets without work. */
+details.section>summary,details.card>summary{cursor:pointer;list-style:none;user-select:none}
+details.section>summary::-webkit-details-marker,details.card>summary::-webkit-details-marker{display:none}
+details.section>summary::before,details.card>summary::before{content:'▸';display:inline-block;width:12px;color:var(--text-dim);transition:transform 0.12s ease}
+details[open]>summary::before{transform:rotate(90deg)}
+details.section>summary{font-size:14px;color:var(--link);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px}
+details.card>summary{font-size:13px;color:var(--accent);margin-bottom:8px}
+.count{color:var(--text-dim);font-weight:normal;text-transform:none;letter-spacing:0}
+th.sortable{cursor:pointer}
+th.sortable::after{content:'↕';color:var(--text-dim);margin-left:6px;font-size:10px}
+th[data-dir=asc]::after{content:'▲';color:var(--accent)}
+th[data-dir=desc]::after{content:'▼';color:var(--accent)}
+.filter-bar{margin-bottom:16px}
+.filter-bar input{width:100%;max-width:420px;padding:6px 10px;font-family:var(--mono);font-size:12px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:4px}
+.filter-bar input:focus{outline:none;border-color:var(--accent)}
+.filter-bar .hits{color:var(--text-dim);font-size:11px;margin-left:10px}
+.filtered-out{display:none}
 .val-array{font-size:11px;color:var(--text-dim)}
 .val-object{font-size:11px;color:var(--text-dim);font-style:italic}
 .val-null{color:#555}
@@ -314,6 +334,7 @@ pre.fallback{background:var(--bg-card);padding:16px;border-radius:6px;border:1px
 </style></head><body>
 <div class="nav">${breadcrumb(urlPath)} <a style="float:right;color:var(--text-dim);font-size:11px" href="${urlPath}?raw">view raw</a></div>
 <h2>${fileName} <span class="badge">${badgeText}</span></h2>
+<div class="filter-bar"><input type="text" id="docfilter" placeholder="Filter rows..." autocomplete="off"><span class="hits" id="filterhits"></span></div>
 <div id="root"></div>
 ${format === 'yaml' ? '<script src="/__lib__/js-yaml.min.js"></script>' : ''}
 <script>
@@ -386,7 +407,35 @@ function renderArrayTable(arr, depth) {
     keys.forEach(k=>{const td=document.createElement('td');td.appendChild(renderValue(obj[k], depth+1));tr.appendChild(td);});
     tbody.appendChild(tr);
   });
-  table.appendChild(tbody); return table;
+  table.appendChild(tbody);
+  makeSortable(table);
+  return table;
+}
+
+// Click a header to sort. Numeric only when the WHOLE cell is a number —
+// otherwise "1.2.3" and "10 items" would sort as 1.2 and 10 and quietly
+// reorder rows by a value that is not what the cell says.
+function makeSortable(table) {
+  const head = table.tHead; if (!head || !head.rows.length) return;
+  const cells = Array.from(head.rows[0].cells);
+  cells.forEach(function (th, idx) {
+    th.classList.add('sortable');
+    th.addEventListener('click', function () {
+      const dir = th.dataset.dir === 'asc' ? 'desc' : 'asc';
+      cells.forEach(function (c) { delete c.dataset.dir; });
+      th.dataset.dir = dir;
+      const tb = table.tBodies[0]; if (!tb) return;
+      const isNum = function (v) { return /^-?\d+(\.\d+)?$/.test(v); };
+      const val = function (tr) { return tr.cells[idx] ? tr.cells[idx].textContent.trim() : ''; };
+      Array.from(tb.rows).sort(function (a, b) {
+        const x = val(a), y = val(b);
+        const c = (isNum(x) && isNum(y))
+          ? parseFloat(x) - parseFloat(y)
+          : x.localeCompare(y, undefined, { numeric: true });
+        return dir === 'asc' ? c : -c;
+      }).forEach(function (r) { tb.appendChild(r); });
+    });
+  });
 }
 
 function renderKVTable(obj, depth) {
@@ -412,11 +461,34 @@ function renderKVTable(obj, depth) {
   table.appendChild(tbody); return table;
 }
 
+// Anything longer than this starts collapsed.
+const BIG = 20;
+function sizeOf(v) {
+  if (Array.isArray(v)) return v.length;
+  if (v !== null && typeof v === 'object') return Object.keys(v).length;
+  return 0;
+}
+function addCount(summary, v) {
+  const n = sizeOf(v);
+  if (!n) return;
+  const span = document.createElement('span');
+  span.className = 'count';
+  span.textContent = '  (' + n + ')';
+  summary.appendChild(span);
+}
+
 function renderObjectSections(container, obj) {
   for (const [key,val] of Object.entries(obj)) {
     if (key==='_meta') continue;
-    const section=document.createElement('div'); section.className='section';
-    const h3=document.createElement('h3'); h3.textContent=prettyKey(key); section.appendChild(h3);
+    const section=document.createElement('details'); section.className='section'; section.open=true;
+    const h3=document.createElement('summary'); h3.textContent=prettyKey(key); section.appendChild(h3);
+    // The count goes in the summary so a collapsed section is never mistaken
+    // for an absent one — the same reason a truncated search says it truncated.
+    addCount(h3, val);
+    // Only fold away what is actually in the way. The watchdog snapshot's
+    // "files" is 358 entries; scrolling past it to reach the metrics is the
+    // complaint. Anything small stays open, so nothing hides unexpectedly.
+    if (sizeOf(val) > BIG) section.open=false;
     if (Array.isArray(val)) { section.appendChild(renderArrayTable(val)); }
     else if (typeof val==='object'&&val!==null) {
       // Partition by what each sub-key actually holds. This used to pick the
@@ -436,8 +508,10 @@ function renderObjectSections(container, obj) {
         section.appendChild(renderKVTable(flat));
       }
       nested.forEach(sk=>{
-        const card=document.createElement('div'); card.className='card';
-        const h4=document.createElement('h4'); h4.textContent=sk; card.appendChild(h4);
+        const card=document.createElement('details'); card.className='card'; card.open=true;
+        const h4=document.createElement('summary'); h4.textContent=sk; card.appendChild(h4);
+        addCount(h4, val[sk]);
+        if (sizeOf(val[sk]) > BIG) card.open=false;
         card.appendChild(Array.isArray(val[sk])?renderArrayTable(val[sk]):renderKVTable(val[sk]));
         section.appendChild(card);
       });
@@ -472,6 +546,35 @@ function renderData(container, data) {
 // them as an em-dash, indistinguishable from unset; and the isNaN coercion
 // turned version:1.20 into 1.2 and 1e5 into 100000. A raw dump is obviously
 // raw — wrong values that look parsed are not.
+// Filter hides non-matching ROWS and then any section left with nothing to
+// show, and force-opens whatever still matches — a hit inside a collapsed
+// section you cannot see is the same as no hit at all.
+function applyFilter(q) {
+  const root = document.getElementById('root');
+  const rows = root.querySelectorAll('tbody tr');
+  let hits = 0;
+  rows.forEach(function (tr) {
+    const hit = !q || tr.textContent.toLowerCase().indexOf(q) !== -1;
+    tr.classList.toggle('filtered-out', !hit);
+    if (q && hit) hits++;
+  });
+  root.querySelectorAll('details').forEach(function (d) {
+    if (!q) { d.classList.remove('filtered-out'); return; }
+    const visible = d.querySelectorAll('tbody tr:not(.filtered-out)').length;
+    d.classList.toggle('filtered-out', visible === 0);
+    if (visible) d.open = true;
+  });
+  document.getElementById('filterhits').textContent =
+    q ? (hits + (hits === 1 ? ' row' : ' rows')) : '';
+}
+
+let filterDebounce;
+document.getElementById('docfilter').addEventListener('input', function (e) {
+  clearTimeout(filterDebounce);
+  const v = e.target.value.trim().toLowerCase();
+  filterDebounce = setTimeout(function () { applyFilter(v); }, 120);
+});
+
 try {
   const fmt = ${JSON.stringify(format)};
   const data = fmt === 'yaml' ? jsyaml.load(raw) : JSON.parse(raw);
