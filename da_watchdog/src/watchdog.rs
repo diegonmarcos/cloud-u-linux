@@ -2019,7 +2019,40 @@ fn history_path() -> Option<PathBuf> {
 }
 
 const HISTORY_EVERY_TICKS: u64 = 30; // 60s at INTERVAL_MS
-const HISTORY_WINDOW_S: f64 = 86_400.0;
+/// How long the per-minute samples are kept. Thirty days at one line a minute
+/// is roughly 4MB of short JSON — nothing, next to being able to answer "was
+/// last Tuesday like this too".
+const HISTORY_WINDOW_S: f64 = 30.0 * 86_400.0;
+/// The rolling summary the panel has always shown stays a DAY, whatever the
+/// file now holds behind it. Widening the retention must not silently turn
+/// "downloaded today" into "downloaded this month".
+const HISTORY_SUMMARY_S: f64 = 86_400.0;
+
+/// The local calendar date of a unix timestamp, as YYYY-MM-DD.
+///
+/// localtime_r, not arithmetic on the epoch: "per day" means the day the
+/// person was living in, which is a timezone question — and one whose answer
+/// changes twice a year in most of them.
+fn local_date(ts: f64) -> String {
+    let t = ts as libc::time_t;
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    unsafe { libc::localtime_r(&t, &mut tm) };
+    format!("{:04}-{:02}-{:02}", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday)
+}
+
+/// One day's worth, accumulated.
+#[derive(Default)]
+struct DayAcc {
+    rx: f64,
+    tx: f64,
+    dr: f64,
+    dw: f64,
+    cpu_s: f64,
+    mem_s: f64,
+    swap_s: f64,
+    dt: f64,
+    n: usize,
+}
 
 /// Append this minute, drop anything older than a day, and return the summary
 /// the panel shows.
@@ -2079,8 +2112,15 @@ fn history_step(cpu: f64, mem: f64, swap: f64, now: f64) -> String {
     // middle of the window costs that one step rather than the whole figure.
     let (mut rx, mut tx, mut dr, mut dw) = (0.0, 0.0, 0.0, 0.0);
     let (mut cpu_s, mut mem_s, mut swap_s) = (0.0, 0.0, 0.0);
+    let mut recent = 0usize;
     for w in kept.windows(2) {
         let (a, b) = (&w[0], &w[1]);
+        // The file holds a month; this summary is still a DAY. Pairs older
+        // than that are the per-day table's business, below.
+        if now - num(b, "ts") > HISTORY_SUMMARY_S {
+            continue;
+        }
+        recent += 1;
         let step = |k: &str| -> f64 { (num(b, k) - num(a, k)).max(0.0) };
         rx += step("rx");
         tx += step("tx");
@@ -2091,18 +2131,69 @@ fn history_step(cpu: f64, mem: f64, swap: f64, now: f64) -> String {
         mem_s += num(b, "mem") * dt;
         swap_s += num(b, "swap") * dt;
     }
+    // The span of what the SUMMARY covers, which is at most a day even though
+    // the file behind it now reaches back a month.
     let span = kept
-        .first()
-        .map(|f| (now - num(f, "ts")).max(1.0))
+        .iter()
+        .map(|l| num(l, "ts"))
+        .find(|ts| now - ts <= HISTORY_SUMMARY_S)
+        .map(|ts| (now - ts).max(1.0))
         .unwrap_or(1.0);
+
+    // PER DAY, over everything the file holds.
+    //
+    // Same forward-delta walk as the summary above, bucketed by the local date
+    // of the LATER sample of each pair — so the minute that straddles midnight
+    // is credited to the day it ended in, and a reboot costs that one step
+    // rather than a whole day. The averages are time-weighted for the same
+    // reason the summary's are: samples are a minute apart until they are not.
+    let mut days: Vec<(String, DayAcc)> = vec![];
+    for w in kept.windows(2) {
+        let (a, b) = (&w[0], &w[1]);
+        let date = local_date(num(b, "ts"));
+        if days.last().map(|(d, _)| d != &date).unwrap_or(true) {
+            days.push((date, DayAcc::default()));
+        }
+        let acc = &mut days.last_mut().expect("just pushed").1;
+        let step = |k: &str| -> f64 { (num(b, k) - num(a, k)).max(0.0) };
+        acc.rx += step("rx");
+        acc.tx += step("tx");
+        acc.dr += step("dr");
+        acc.dw += step("dw");
+        let dt = (num(b, "ts") - num(a, "ts")).clamp(0.0, 600.0);
+        acc.cpu_s += num(b, "cpu") * dt;
+        acc.mem_s += num(b, "mem") * dt;
+        acc.swap_s += num(b, "swap") * dt;
+        acc.dt += dt;
+        acc.n += 1;
+    }
+    // Newest first: the day people want is today, and it should not be at the
+    // bottom of a month-long table.
+    days.reverse();
+    let days_json: Vec<String> = days
+        .iter()
+        .map(|(d, a)| {
+            let w = a.dt.max(1.0);
+            format!(
+                "{{\"date\":\"{d}\",\"samples\":{},\"seconds\":{:.0},\
+                  \"cpu_pct_avg\":{:.2},\"mem_pct_avg\":{:.2},\"swap_pct_avg\":{:.2},\
+                  \"net_rx_bytes\":{:.0},\"net_tx_bytes\":{:.0},\
+                  \"disk_read_bytes\":{:.0},\"disk_write_bytes\":{:.0}}}",
+                a.n, a.dt, a.cpu_s / w, a.mem_s / w, a.swap_s / w, a.rx, a.tx, a.dr, a.dw
+            )
+        })
+        .collect();
+
     format!(
         "{{\"window_s\":{span:.0},\"samples\":{},\"net_rx_bytes\":{rx:.0},\"net_tx_bytes\":{tx:.0},\
           \"disk_read_bytes\":{dr:.0},\"disk_write_bytes\":{dw:.0},\
-          \"cpu_pct_avg\":{:.2},\"mem_pct_avg\":{:.2},\"swap_pct_avg\":{:.2}}}",
-        kept.len(),
+          \"cpu_pct_avg\":{:.2},\"mem_pct_avg\":{:.2},\"swap_pct_avg\":{:.2},\
+          \"days\":[{}]}}",
+        recent + 1,
         cpu_s / span,
         mem_s / span,
         swap_s / span,
+        days_json.join(","),
     )
 }
 
