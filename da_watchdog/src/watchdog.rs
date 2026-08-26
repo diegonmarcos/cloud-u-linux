@@ -783,6 +783,153 @@ fn read_proc_runq_wait_ns(pid: i32) -> Option<u64> {
 /// closes. Callers diff it with saturating_sub, which turns that drop into a
 /// zero — losing the last few bytes of a closed connection, never inventing a
 /// spike. That trade is deliberate: a wrong rate is worse than a missing one.
+/// The numbers atop shows that nothing here did: what the CPU is ACTUALLY
+/// clocked at against what it could be, whether the kernel has killed anything
+/// for memory, how deep the run queue is, and whether the network is losing
+/// packets.
+///
+/// One function with its own previous sample, rather than four more arguments
+/// threaded through render(): every figure here is a rate over the same tick,
+/// and keeping them together is what makes them comparable.
+#[derive(Clone, Copy, Default)]
+struct Health {
+    ctxt: f64,
+    intr: f64,
+    tcp_out: f64,
+    tcp_retrans: f64,
+    /// (io_ticks_ms, ios_completed, io_time_ms) for the busiest real disk.
+    disk_ticks: f64,
+    disk_ios: f64,
+    disk_wait: f64,
+}
+
+fn read_health() -> Health {
+    let mut h = Health::default();
+    let stat = fs::read_to_string("/proc/stat").unwrap_or_default();
+    for l in stat.lines() {
+        if let Some(v) = l.strip_prefix("ctxt ") {
+            h.ctxt = v.trim().parse().unwrap_or(0.0);
+        } else if let Some(v) = l.strip_prefix("intr ") {
+            h.intr = v.split_whitespace().next().and_then(|x| x.parse().ok()).unwrap_or(0.0);
+        }
+    }
+    // /proc/net/snmp is two lines per protocol: a header naming the columns and
+    // a values line. Reading it by NAME rather than by position because the
+    // column set differs between kernels, and RetransSegs sits in a different
+    // place on some of them.
+    let snmp = fs::read_to_string("/proc/net/snmp").unwrap_or_default();
+    let mut lines = snmp.lines();
+    while let Some(hdr) = lines.next() {
+        if !hdr.starts_with("Tcp:") {
+            continue;
+        }
+        let Some(vals) = lines.next() else { break };
+        let keys: Vec<&str> = hdr.split_whitespace().collect();
+        let nums: Vec<&str> = vals.split_whitespace().collect();
+        let get = |k: &str| -> f64 {
+            keys.iter().position(|x| *x == k).and_then(|i| nums.get(i)).and_then(|v| v.parse().ok()).unwrap_or(0.0)
+        };
+        h.tcp_out = get("OutSegs");
+        h.tcp_retrans = get("RetransSegs");
+        break;
+    }
+    // /proc/diskstats: field 10 is ios-in-flight-time (io_ticks, ms the device
+    // had anything queued) and 11 is weighted io time. Reads+writes completed
+    // are 1 and 5. Partitions and loop/zram devices are skipped — a partition
+    // double-counts its parent, and a zram device is memory wearing a disk's
+    // clothes.
+    for l in fs::read_to_string("/proc/diskstats").unwrap_or_default().lines() {
+        let f: Vec<&str> = l.split_whitespace().collect();
+        if f.len() < 14 {
+            continue;
+        }
+        let name = f[2];
+        if name.starts_with("loop") || name.starts_with("zram") || name.starts_with("dm-") {
+            continue;
+        }
+        // A whole device, not a partition: nvme0n1 yes, nvme0n1p2 no.
+        if name.chars().last().map(|c| c.is_ascii_digit()).unwrap_or(false) && !name.starts_with("nvme") {
+            continue;
+        }
+        if name.starts_with("nvme") && name.contains('p') {
+            continue;
+        }
+        let n = |i: usize| -> f64 { f.get(i).and_then(|x| x.parse().ok()).unwrap_or(0.0) };
+        // Sum across devices: "is the storage busy" is one question on a box
+        // with one pool, and picking a favourite disk would answer it wrong on
+        // a box with two.
+        h.disk_ios += n(3) + n(7);
+        h.disk_wait += n(6) + n(10);
+        h.disk_ticks += n(12);
+    }
+    h
+}
+
+/// Health as JSON, rates over `secs`.
+fn health_json(prev: Health, now: Health, secs: f64) -> String {
+    let d = |a: f64, b: f64| -> f64 { (b - a).max(0.0) / secs.max(0.001) };
+    // CPU CLOCK against what the part can actually do. The panel showed a
+    // frequency with nothing to compare it to, which is the one thing that
+    // makes it mean something: 600MHz reads as fine until you know the ceiling
+    // is 4400.
+    let read1 = |p: &str| -> f64 { fs::read_to_string(p).ok().and_then(|s| s.trim().parse().ok()).unwrap_or(0.0) };
+    let mut cur = 0.0;
+    let mut n = 0.0;
+    if let Ok(rd) = fs::read_dir("/sys/devices/system/cpu") {
+        for e in rd.flatten() {
+            let f = e.path().join("cpufreq/scaling_cur_freq");
+            if f.exists() {
+                cur += read1(f.to_str().unwrap_or(""));
+                n += 1.0;
+            }
+        }
+    }
+    let cur_mhz = if n > 0.0 { cur / n / 1000.0 } else { 0.0 };
+    let max_mhz = read1("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq") / 1000.0;
+    let scal = if max_mhz > 0.0 { cur_mhz / max_mhz * 100.0 } else { 0.0 };
+
+    // Instantaneous, not rates: /proc/stat publishes these directly, which is
+    // cheaper and more accurate than counting process states ourselves.
+    let stat = fs::read_to_string("/proc/stat").unwrap_or_default();
+    let field = |k: &str| -> f64 {
+        stat.lines()
+            .find_map(|l| l.strip_prefix(k))
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0.0)
+    };
+    let vm = fs::read_to_string("/proc/vmstat").unwrap_or_default();
+    let vmk = |k: &str| -> f64 {
+        vm.lines()
+            .find_map(|l| l.strip_prefix(&format!("{k} ")))
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0.0)
+    };
+
+    let ios = d(prev.disk_ios, now.disk_ios);
+    let wait = d(prev.disk_wait, now.disk_wait);
+    let out = d(prev.tcp_out, now.tcp_out);
+    let re = d(prev.tcp_retrans, now.tcp_retrans);
+    format!(
+        "{{\"cur_mhz\":{cur_mhz:.0},\"max_mhz\":{max_mhz:.0},\"scal_pct\":{scal:.1},\
+          \"procs_running\":{:.0},\"procs_blocked\":{:.0},\"oom_kill\":{:.0},\
+          \"ctxt_per_s\":{:.0},\"intr_per_s\":{:.0},\
+          \"tcp_out_per_s\":{out:.1},\"tcp_retrans_per_s\":{re:.2},\"tcp_retrans_pct\":{:.3},\
+          \"disk_busy_pct\":{:.1},\"disk_avio_ms\":{:.2},\"disk_iops\":{ios:.0}}}",
+        field("procs_running"),
+        field("procs_blocked"),
+        vmk("oom_kill"),
+        d(prev.ctxt, now.ctxt),
+        d(prev.intr, now.intr),
+        if out > 0.0 { re / out * 100.0 } else { 0.0 },
+        // io_ticks is milliseconds the device had a request outstanding, so
+        // its rate over a second IS the utilisation.
+        (d(prev.disk_ticks, now.disk_ticks) / 10.0).min(100.0),
+        // Average service time per io. The number that says a disk is dying
+        // long before throughput does.
+        if ios > 0.0 { wait / ios } else { 0.0 },
+    )
+}
+
 /// The page-reclaim counters, cumulative since boot.
 ///
 /// These are what memory pressure is MADE of, and the pair that matters most
@@ -2726,6 +2873,7 @@ fn render(
     slices: &str,
     services: &str,
     reclaim: &str,
+    health: &str,
 ) -> String {
     // Named, not positional: this format string mixes inline-captured names
     // with `{}` holes, and when the cores list was positional it was simply
@@ -2751,7 +2899,7 @@ fn render(
           \"psi\":{{\"cpu\":{},\"io\":{},\"memory\":{}}},\
           \"slice_gib\":{slice_cur:.2},\"slice_max_gib\":{slice_max:.2},\"slice_pct\":{slice_pct:.1},\
           \"battery\":{},\
-          \"storage\":{storage},\"slices\":{slices},\"services\":{services},\"reclaim\":{reclaim},\
+          \"storage\":{storage},\"slices\":{slices},\"services\":{services},\"reclaim\":{reclaim},\"health\":{health},\
           \"cpu_info\":{cpu_info},\"host_info\":{host_info},\"totals\":{totals},\"history\":{history},\"containers\":{containers},\"images\":{images},\"procs\":{procs},\"proc_table\":{proc_table},\"proc_spine\":{proc_spine},\"ts\":{}}}",
         vram_json(vram),
         pressure_block("cpu"),
@@ -3180,6 +3328,7 @@ pub fn snapshot_once() -> String {
         // here by construction — same as cpu% in this path. It is the shape
         // of the snapshot, not a measurement of it.
         &reclaim_json(VmStat::default(), VmStat::default(), 0.0),
+        &health_json(Health::default(), read_health(), 0.0),
     )
 }
 
@@ -3193,6 +3342,7 @@ pub fn spawn() {
         let (mut prev, mut prev_cores) = read_cpu_all();
         let mut prev_disk = read_diskstats();
         let mut prev_vm = read_vmstat();
+        let mut prev_health = read_health();
         let mut prev_net = read_net();
         let mut prev_proc_table: HashMap<i32, ProcSample> = HashMap::new();
         // Two systemctl calls cost ~100ms and the unit set changes on the
@@ -3267,6 +3417,9 @@ pub fn spawn() {
             // Reclaim rates from the same interval as everything else.
             let now_vm = read_vmstat();
             let reclaim = reclaim_json(prev_vm, now_vm, INTERVAL_MS as f64 / 1000.0);
+            let now_health = read_health();
+            let health = health_json(prev_health, now_health, INTERVAL_MS as f64 / 1000.0);
+            prev_health = now_health;
             prev_vm = now_vm;
             let body = render(
                 cpu, &cores, &cpu_detail, mem, swap,
@@ -3292,6 +3445,7 @@ pub fn spawn() {
                 &slices_json(&protected_slices),
                 &services,
                 &reclaim,
+                &health,
             );
             publish(&path, &body);
         }
