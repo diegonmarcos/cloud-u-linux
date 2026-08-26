@@ -43,7 +43,12 @@ cat >> "$TMP/run.js" <<'JS'
 
 const fs=require("fs");
 const snapFile=process.argv[2];
-const data=JSON.parse(fs.readFileSync(snapFile,"utf8"));
+const rawTxt=fs.readFileSync(snapFile,"utf8");
+// .yaml goes through the SAME vendored parser the page loads, so this test
+// fails if that bundle is missing or stops exporting load().
+const data = /\.ya?ml$/.test(snapFile)
+  ? require(process.argv[3]).load(rawTxt)
+  : JSON.parse(rawTxt);
 
 const out=[]; const check=(n,ok)=>out.push([n,ok]);
 function text(n){ return (n.textContent||"") + n.children.map(text).join(" "); }
@@ -83,5 +88,5 @@ JS
 SNAP="${1:-$(ls -t "$HOME"/.watchdog/*.json 2>/dev/null | head -1)}"
 [ -f "$SNAP" ] || { echo "no watchdog snapshot to test against"; exit 0; }
 echo "=== structured render vs $(basename "$SNAP") ==="
-node "$TMP/run.js" "$SNAP" || exit 1
+node "$TMP/run.js" "$SNAP" "$SELF_DIR/src/lib/js-yaml.min.js" || exit 1
 echo "=== structured render: PASS ==="

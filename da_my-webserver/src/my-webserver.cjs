@@ -34,7 +34,7 @@ const LIB_DIR = join(homedir(), '.local/lib/httpd');
 // serving a bare "browse.html not found" 404 on every install (2026-08-17).
 // LIB_DIR is still consulted as a fallback below, so a hand-placed override
 // keeps working for local iteration on the browse UI.
-const SEA_ASSETS = new Set(['marked.min.js', 'github-markdown-dark.css', 'browse.html']);
+const SEA_ASSETS = new Set(['marked.min.js', 'github-markdown-dark.css', 'browse.html', 'js-yaml.min.js']);
 
 async function getLibAsset(libFile) {
   if (SEA_ASSETS.has(libFile) && isSea()) {
@@ -315,6 +315,7 @@ pre.fallback{background:var(--bg-card);padding:16px;border-radius:6px;border:1px
 <div class="nav">${breadcrumb(urlPath)} <a style="float:right;color:var(--text-dim);font-size:11px" href="${urlPath}?raw">view raw</a></div>
 <h2>${fileName} <span class="badge">${badgeText}</span></h2>
 <div id="root"></div>
+${format === 'yaml' ? '<script src="/__lib__/js-yaml.min.js"></script>' : ''}
 <script>
 const raw = ${safeJsonForScript(rawContent)};
 const isSecret = ${isSecret};
@@ -459,23 +460,25 @@ function renderData(container, data) {
   } else { container.appendChild(document.createTextNode(String(data))); }
 }
 
+// Real YAML, via the vendored js-yaml — the same route lib/marked.min.js
+// already takes. What this replaces was six lines of regex that matched only
+// top-level "key: value" and set ok=false on the FIRST line it did not
+// understand, dumping the whole document as plain text. Every nested mapping,
+// every list, every --- separator, every block scalar hit that. The watchdog
+// YAML snapshots are depth 6 with a 358-entry list, so they always did.
+//
+// The quieter half was worse: when it DID match it corrupted silently.
+// The v-or-null idiom turned enabled:false and retries:0 into null, rendering
+// them as an em-dash, indistinguishable from unset; and the isNaN coercion
+// turned version:1.20 into 1.2 and 1e5 into 100000. A raw dump is obviously
+// raw — wrong values that look parsed are not.
 try {
-  let data;
-  if (${JSON.stringify(format)}==='yaml') {
-    const lines=raw.split('\\n').filter(l=>l.trim()&&!l.trim().startsWith('#'));
-    const obj={}; let ok=true;
-    for (const line of lines) {
-      const m=line.match(/^([\\w][\\w.-]*):\\s*(.*)$/);
-      if(m){let v=m[2].trim();if(v==='true')v=true;else if(v==='false')v=false;else if(v&&!isNaN(v))v=Number(v);else if((v.startsWith('"')&&v.endsWith('"'))||(v.startsWith("'")&&v.endsWith("'")))v=v.slice(1,-1);obj[m[1]]=v||null;}
-      else{ok=false;break;}
-    }
-    data=ok&&Object.keys(obj).length?obj:null;
-    if(!data){document.getElementById('root').innerHTML='<pre class="fallback">'+escHtml(raw)+'</pre>';}
-    else{renderData(document.getElementById('root'),data);}
-  } else {
-    data=JSON.parse(raw);
-    renderData(document.getElementById('root'),data);
-  }
+  const fmt = ${JSON.stringify(format)};
+  const data = fmt === 'yaml' ? jsyaml.load(raw) : JSON.parse(raw);
+  // A YAML document may legitimately be empty; renderData handles arrays and
+  // scalars at the root, so anything else defined is renderable as-is.
+  if (data === undefined) throw new Error('empty document');
+  renderData(document.getElementById('root'), data);
 } catch(e) {
   document.getElementById('root').innerHTML='<pre class="fallback">'+escHtml(raw)+'</pre>';
 }
@@ -1006,8 +1009,11 @@ const server = createServer(async (req, res) => {
     if (urlPath.startsWith('/__lib__/')) {
       ctx.render = 'lib';
       const libFile = urlPath.slice('/__lib__/'.length);
-      // Only allow known lib files (no path traversal)
-      if (!['marked.min.js', 'github-markdown-dark.css', 'browse.html'].includes(libFile)) {
+      // Only allow known lib files (no path traversal). Derived from
+      // SEA_ASSETS rather than repeating it: adding an asset used to mean
+      // editing three lists (this one, SEA_ASSETS, sea-config.json), and
+      // missing this one fails as a 404 at runtime rather than at build.
+      if (!SEA_ASSETS.has(libFile)) {
         res.writeHead(404, { 'content-type': 'text/plain' });
         return res.end('Not found');
       }

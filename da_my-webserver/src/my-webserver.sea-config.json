@@ -5,6 +5,7 @@
   "assets": {
     "marked.min.js": "lib/marked.min.js",
     "github-markdown-dark.css": "lib/github-markdown-dark.css",
-    "browse.html": "lib/browse.html"
+    "browse.html": "lib/browse.html",
+    "js-yaml.min.js": "lib/js-yaml.min.js"
   }
 }
