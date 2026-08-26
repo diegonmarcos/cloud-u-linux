@@ -1,0 +1,1 @@
+/data/data/com.termux.nix/files/home/git/cloud/b_infra/home-manager/_engine.sh

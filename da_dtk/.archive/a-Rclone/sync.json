@@ -1,0 +1,25 @@
+[
+  {
+    "_comment": "Sample sync rules - edit this file to add your own rules",
+    "_schema": {
+      "name": "Unique rule name",
+      "local_path": "Source path (local folder)",
+      "remote": "Destination (Gdrive_dnm:path or local path)",
+      "sync_type": "bisync | sync_to_remote | sync_to_local | local_to_local | local_bisync",
+      "conflict_resolve": "newer | larger | path1 | path2",
+      "delete_extra": "true | false (delete files in dest not in source)",
+      "enabled": "true | false"
+    }
+  },
+  {
+    "name": "Example_Docs",
+    "local_path": "/home/diego/Documents/Example",
+    "remote": "Gdrive_dnm:Backups/Example",
+    "sync_type": "bisync",
+    "conflict_resolve": "newer",
+    "delete_extra": true,
+    "enabled": false,
+    "last_run": null,
+    "created": "2024-01-01T00:00:00"
+  }
+]

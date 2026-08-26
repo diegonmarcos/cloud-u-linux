@@ -1,0 +1,1 @@
+/data/data/com.termux.nix/files/home/git/front/build.sh

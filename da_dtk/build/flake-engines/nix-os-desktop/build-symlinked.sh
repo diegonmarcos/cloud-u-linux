@@ -1,0 +1,1 @@
+/data/data/com.termux.nix/files/home/git/unix/aa_nixos-surface_host/build.sh

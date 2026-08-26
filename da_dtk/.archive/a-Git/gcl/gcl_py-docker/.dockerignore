@@ -1,0 +1,44 @@
+# .dockerignore - Exclude files from Docker build context
+# This makes builds faster and images smaller
+
+# Git files
+.git
+.gitignore
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation
+README.md
+*.md
+
+# Logs
+*.log
+
+# Test files
+test_*
+*_test.py
+
+# Docker files (don't need these inside the image)
+docker-compose.yml
+.dockerignore

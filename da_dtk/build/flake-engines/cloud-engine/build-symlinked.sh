@@ -1,0 +1,1 @@
+/data/data/com.termux.nix/files/home/git/cloud/a_solutions/_engine.sh

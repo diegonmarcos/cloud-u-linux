@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="30">
+    <title>Cloud Dashboard - Live</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+            background: #0c0c0c;
+            color: #cccccc;
+            min-height: 100vh;
+            padding: 0;
+        }
+        .refresh-bar {
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #888;
+        }
+        .refresh-bar .interval { color: #00d4ff; font-weight: bold; }
+        pre {
+            margin: 0;
+            padding: 8px;
+            font-family: inherit;
+            font-size: 13px;
+            line-height: 1.3;
+            overflow-x: auto;
+        }
+        /* ANSI Colors */
+        .green { color: #00ff00; }
+        .red { color: #ff5555; }
+        .yellow { color: #ffff55; }
+        .blue { color: #5555ff; }
+        .cyan { color: #00d4ff; }
+        .magenta { color: #ff55ff; }
+        .gray { color: #808080; }
+        .white { color: #ffffff; }
+        .bold { font-weight: bold; }
+        /* Links */
+        a { color: #00d4ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="refresh-bar">
+        <span>Auto refresh every: <span class="interval">30 seconds</span></span>
+        <span>Last update: 2025-12-06 11:51:45</span>
+    </div>
+    <pre><span class="cyan bold">  +======================================================================================================================+</span>
+<span class="cyan bold">  |</span><span class="cyan bold">                                        CLOUD INFRASTRUCTURE DASHBOARD v6.9.0                                         </span><span class="cyan bold">|</span>
+<span class="cyan bold">  +======================================================================================================================+</span>
+
+<span class="white bold">  +--------------------------------------------------------------------------------------------------------------+</span>
+<span class="white bold">  | VIRTUAL MACHINES                                                                                             |</span>
+  +---+---+-----+------+----------------------+-----------------+--------+--------+---------+-------+-------+----------+
+  | ☐ | # | SVC | MODE | NAME                 | IP              | RAM    | VRAM   | STORAGE | MEM%  | DISK% | STATUS   |
+  +---+---+-----+------+----------------------+-----------------+--------+--------+---------+-------+-------+----------+
+  <span class="magenta bold">| Services                                                                                                     |</span>
+  | ☐ | 0 | -   | <span class="green">ON  </span> | OCI Free Micro 1     | 130.110.251.193 | 1 GB   | -      | 47 GB B | 41%   | -     | <span class="green">● ONLINE</span> |
+  | ☐ | 1 | -   | <span class="green">ON  </span> | OCI Free Micro 2     | 129.151.228.66  | 1 GB   | -      | 47 GB B | 79%   | -     | <span class="green">● ONLINE</span> |
+  | ☐ | 2 | -   | <span class="green">ON  </span> | GCP Free Micro 1     | 34.55.55.234    | 1 GB   | -      | 30 GB   | 42%   | -     | <span class="green">● ONLINE</span> |
+  | ☐ | 3 | -   | <span class="green">ON  </span> | OCI Paid Flex 1      | 84.235.234.87   | 8 GB   | -      | 100 GB  | 9%    | -     | <span class="green">● ONLINE</span> |
+  <span class="magenta bold">| Machine Learning                                                                                             |</span>
+  | ☐ | 4 | -   | <span class="yellow">PEND</span> | OCI Free ARM 1       | pending         | 24 GB  | -      | 200 GB  | -     | -     | <span class="yellow">◐ PEND </span> |
+  +---+---+-----+------+----------------------+-----------------+--------+--------+---------+-------+-------+----------+
+
+<span class="white bold">  +--------------------------------------------------------------------------------------------------------------------+</span>
+<span class="white bold">  | SERVICES (BY VM)                                                                                                   |</span>
+  +---+----+----+------+----------------------+----------------------------+----------------------+-------+-------+----------+
+  | ☐ | #  | VM | MODE | NAME                 | URL                        | PROXY ADDRESS        | %MEM  | %DISK | STATUS   |
+  +---+----+----+------+----------------------+----------------------------+----------------------+-------+-------+----------+
+  <span class="cyan bold">| VM 0: OCI Free Micro 1                                                                                             |</span>
+  | ☐ | a  | 0  | <span class="blue">DEV </span> | mail-app             | -                          | mail-app:25          | -     | -     | <span class="blue">◑ DEV  </span> |
+  | ☐ | b  | 0  | <span class="blue">DEV </span> | mail-db              | -                          | -                    | -     | -     | <span class="blue">◑ DEV  </span> |
+  <span class="cyan bold">| VM 1: OCI Free Micro 2                                                                                             |</span>
+  | ☐ | c  | 1  | <span class="green">ON  </span> | matomo-app           | -                          | -                    | -     | -     | <span class="gray">- N/A  </span> |
+  | ☐ | d  | 1  | <span class="green">ON  </span> | matomo-db            | -                          | -                    | -     | -     | <span class="gray">- N/A  </span> |
+  <span class="cyan bold">| VM 2: GCP Free Micro 1                                                                                             |</span>
+  | ☐ | e  | 2  | <span class="green">ON  </span> | npm-gcloud           | <a href="http://34.55.55.234:81" class="cyan">34.55.55.234:81           </a> | npm-gcloud:81        | -     | -     | <span class="green">● OK   </span> |
+  <span class="cyan bold">| VM 3: OCI Paid Flex 1                                                                                              |</span>
+  | ☐ | f  | 3  | <span class="green">ON  </span> | n8n-infra-app        | -                          | n8n-infra-app:5678   | -     | -     | <span class="gray">- N/A  </span> |
+  | ☐ | g  | 3  | <span class="green">ON  </span> | sync-app             | -                          | sync-app:8384        | -     | -     | <span class="gray">- N/A  </span> |
+  | ☐ | h  | 3  | <span class="blue">DEV </span> | git-app              | -                          | git-app:3000         | -     | -     | <span class="blue">◑ DEV  </span> |
+  | ☐ | i  | 3  | <span class="green">ON  </span> | Cloud Dashboard (Fro | <a href="https://cloud.diegonmarcos.com" class="cyan">cloud.diegonmarcos.com    </a> | cloud-app:80         | -     | -     | <span class="green">● OK   </span> |
+  | ☐ | j  | 3  | <span class="green">ON  </span> | Cloud Dashboard (API | -                          | cloud-api:5000       | -     | -     | <span class="gray">- N/A  </span> |
+  | ☐ | k  | 3  | <span class="blue">DEV </span> | terminal-app         | -                          | terminal-app:7681    | -     | -     | <span class="blue">◑ DEV  </span> |
+  | ☐ | l  | 3  | <span class="blue">DEV </span> | vpn-app              | -                          | vpn-app:1194         | -     | -     | <span class="blue">◑ DEV  </span> |
+  | ☐ | m  | 3  | <span class="blue">DEV </span> | cache-app            | -                          | cache-app:6379       | -     | -     | <span class="blue">◑ DEV  </span> |
+  <span class="cyan bold">| VM 4: OCI Free ARM 1                                                                                               |</span>
+  | ☐ | n  | 4  | <span class="yellow">HOLD</span> | n8n-ai-app           | -                          | n8n-ai-app:5678      | -     | -     | <span class="yellow">◐ HOLD </span> |
+  | ☐ | o  | 4  | <span class="yellow">HOLD</span> | n8n-ai-db            | -                          | n8n-ai-db:5432       | -     | -     | <span class="yellow">◐ HOLD </span> |
+  | ☐ | p  | 4  | <span class="yellow">HOLD</span> | npm-oracle-arm       | -                          | npm-oracle-arm:81    | -     | -     | <span class="yellow">◐ HOLD </span> |
+  +---+----+----+------+----------------------+----------------------------+----------------------+-------+-------+----------+
+
+<span class="white bold">  +----------------------------------------------------------------------------------------------------------------------+</span>
+<span class="white bold">  | COMMANDS                                                                                                             |</span>
+  +----------------------------------------------------------------------------------------------------------------------+
+  |  <span class="cyan">[1]</span> VM Details    <span class="cyan">[2]</span> Containers   <span class="cyan">[3]</span> Reboot VM    <span class="cyan">[4]</span> Restart Container    <span class="cyan">[5]</span> Logs              <span class="cyan">[6]</span> Stop/Start          |
+  |  <span class="cyan">[7]</span> SSH to VM     <span class="cyan">[8]</span> Open URL     <span class="cyan">[V]</span> Toggle View  <span class="cyan">[R]</span> Refresh      <span class="cyan">[Q]</span> Quit                                       |
+  +----------------------------------------------------------------------------------------------------------------------+</pre>
+</body>
+</html>

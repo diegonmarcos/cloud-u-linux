@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║ post-merge — rebase submodules after pull/merge                  ║
+# ║                                                                  ║
+# ║ Source: cloud/1_configs/src/git/hooks/post-merge                   ║
+# ║ Active via [core] hooksPath = 1_configs/dist/hooks             ║
+# ║                                                                  ║
+# ║ Fires after `git pull` and `git merge`. Pulls each submodule     ║
+# ║ worktree onto its upstream HEAD (rebased) so local submodule     ║
+# ║ contents always reflect upstream immediately after a pull.       ║
+# ║ Non-blocking: never fails the merge result.                      ║
+# ╚══════════════════════════════════════════════════════════════════╝
+set -uo pipefail
+
+# ── Safer-alternative reminder ──────────────────────────────────────
+if [ -t 2 ]; then
+  printf '\033[33m\n┌─ git pull ─ tip ──────────────────────────────────────────────┐\n' >&2
+  printf   '│ Prefer `git sync` — safer: auto-stash + rebase + submodules.  │\n' >&2
+  printf   '│   git sync remote   (origin wins on conflict, default)        │\n' >&2
+  printf   '│   git sync local    (local commits win on conflict)           │\n' >&2
+  printf   '│   script: 1_configs/dist/scripts/cloud-git-sync.sh          │\n' >&2
+  printf   '└───────────────────────────────────────────────────────────────┘\033[0m\n' >&2
+fi
+
+[ -f .gitmodules ] || exit 0
+
+echo "[post-merge] rebasing submodules onto upstream HEAD..."
+git submodule update --init --recursive --remote --rebase \
+  || echo "[post-merge] submodule rebase reported errors (non-blocking)." >&2
+exit 0

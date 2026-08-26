@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║ post-checkout — sync submodules after branch switch              ║
+# ║                                                                  ║
+# ║ Source: cloud/1_configs/src/git/hooks/post-checkout                ║
+# ║ Active via [core] hooksPath = 1_configs/dist/hooks             ║
+# ║                                                                  ║
+# ║ Fires after `git checkout <branch>`. Args: old_ref new_ref       ║
+# ║ flag (1 = branch switch, 0 = file checkout). Only syncs on       ║
+# ║ branch switch. Rebases submodules onto upstream HEAD so the      ║
+# ║ worktree reflects fresh content for the newly-checked-out ref.   ║
+# ║ Non-blocking.                                                    ║
+# ╚══════════════════════════════════════════════════════════════════╝
+set -uo pipefail
+
+flag="${3:-0}"
+[ "$flag" = "1" ] || exit 0   # only branch/ref switch, not plain file checkout
+[ -f .gitmodules ] || exit 0
+
+echo "[post-checkout] rebasing submodules onto upstream HEAD..."
+git submodule update --init --recursive --remote --rebase \
+  || echo "[post-checkout] submodule rebase reported errors (non-blocking)." >&2
+exit 0

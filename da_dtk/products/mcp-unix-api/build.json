@@ -1,0 +1,11 @@
+{
+  "project": {
+    "name": "unix-mcp",
+    "version": "1.0.0",
+    "description": "MCP server exposing nix/unix tools, wrappers, and custom scripts"
+  },
+  "paths": {
+    "src": "src",
+    "log": "build.log"
+  }
+}
