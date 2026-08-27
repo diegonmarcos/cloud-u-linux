@@ -242,6 +242,7 @@ class MainWindow(QWidget):
         # and pinned-shortcut bar (row 2).
         self._mybar = mybar.MyBar(win_id=self.win_id, parent=self)
         self._pinbar = mybar.PinBar(win_id=self.win_id, parent=self)
+        mybar.install(self.win_id, self._pinbar, self.tabbed_browser.widget)
 
         self._add_widgets()
         self._downloadview.show()

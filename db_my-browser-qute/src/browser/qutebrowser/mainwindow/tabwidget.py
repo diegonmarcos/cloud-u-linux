@@ -17,6 +17,7 @@ from qutebrowser.qt.widgets import (QTabWidget, QTabBar, QSizePolicy, QProxyStyl
 from qutebrowser.qt.gui import QIcon, QPalette, QColor
 
 from qutebrowser.utils import qtutils, objreg, utils, usertypes, log
+from qutebrowser.mainwindow import mybar
 from qutebrowser.config import config, stylesheet
 from qutebrowser.misc import objects, debugcachestats
 from qutebrowser.browser import browsertab
@@ -42,6 +43,7 @@ class TabWidget(QTabWidget):
 
     def __init__(self, win_id, parent=None):
         super().__init__(parent)
+        self._win_id = win_id
         bar = TabBar(win_id, self)
         self.setStyle(TabBarStyle())
         self.setTabBar(bar)
@@ -243,6 +245,8 @@ class TabWidget(QTabWidget):
         with self._toggle_visibility():
             for idx in range(self.count()):
                 self.update_tab_title(idx)
+        # my-browser fork: keep row 2 (pinned tabs) in step with the real list.
+        mybar.sync_pinned(self._win_id)
 
     def tabInserted(self, idx):
         """Update titles when a tab was inserted."""
@@ -659,6 +663,11 @@ class TabBar(QTabBar):
             # want to ensure it's valid in this special case.
             return QSize()
 
+        # my-browser fork: pinned tabs live in their own row above this one
+        # (mybar.PinBar), so they take no space here.
+        if self._tab_pinned(index):
+            return QSize(0, 0)
+
         height = self._minimum_tab_height()
         if self.vertical:
             confwidth = str(config.cache['tabs.width'])
@@ -715,6 +724,9 @@ class TabBar(QTabBar):
         p = QStylePainter(self)
         selected = self.currentIndex()
         for idx in range(self.count()):
+            # my-browser fork: pinned tabs are painted by PinBar (row 2).
+            if self._tab_pinned(idx):
+                continue
             if not event.region().intersects(self.tabRect(idx)):
                 # Don't repaint if we are outside the requested region
                 continue

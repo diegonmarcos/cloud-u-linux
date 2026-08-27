@@ -204,60 +204,112 @@ class MyBar(QToolBar):
 
 class PinBar(QTabBar):
 
-    """Row 2: pinned tabs, from mybar.json's `pinned` list.
+    """Row 2: the window's PINNED TABS — real tabs, not links.
 
-    A real QTabBar, not bookmark buttons — these are tabs and must read as
-    tabs, matching row 3 (qutebrowser's own tab bar) directly below. Clicking
-    one focuses that URL's tab if it is already open, otherwise opens it, so a
-    pinned tab behaves like a tab rather than like a bookmark that spawns a
-    duplicate on every click.
+    This is a live mirror of every tab whose `data.pinned` is set, in the same
+    TabbedBrowser as row 3. TabBar (row 3) gives pinned tabs zero size and
+    skips them in paintEvent, so each tab is drawn in exactly one row: pinned
+    here, everything else below. Selecting one here selects the real tab.
 
-    No tab is shown selected: the selection state belongs to row 3, and a
-    highlight here would claim a pinned tab is current when it may not be.
+    `:tab-pin` on any tab therefore promotes it into this row and `:tab-pin`
+    again drops it back down — the row is qutebrowser's own pinned-tab model,
+    not a separate bookmark list. mybar.json's `pinned` entries only SEED the
+    row on window creation (see seed_pinned).
     """
 
     def __init__(self, win_id, parent=None):
         super().__init__(parent)
         self.setObjectName('PinBar')
         self._win_id = win_id
-        self._urls = []
+        self._indices = []
         self.setDrawBase(False)
         self.setExpanding(False)
         self.setMovable(False)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.tabBarClicked.connect(self._on_clicked)
-        self.rebuild()
+        self.currentChanged.connect(self._on_selected)
+        self.setVisible(False)
 
-    def rebuild(self):
-        """(Re)populate from mybar.json. Hidden when there is nothing pinned."""
-        while self.count():
-            self.removeTab(0)
-        self._urls = []
-        for entry in _load()['pinned']:
-            url = entry.get('url')
-            if not url:
-                continue
-            self.addTab(entry.get('name') or url)
-            self._urls.append(url)
-        self.setCurrentIndex(-1)
-        self.setVisible(bool(self._urls))
+    def _widget(self):
+        return objreg.get('tabbed-browser', scope='window',
+                          window=self._win_id).widget
 
-    def _on_clicked(self, idx):
-        if not 0 <= idx < len(self._urls):
-            return
-        url = QUrl(self._urls[idx])
+    def sync(self):
+        """Rebuild from the real tab list. Cheap; called on every tab change."""
         try:
-            tabbed = objreg.get('tabbed-browser', scope='window',
-                                window=self._win_id)
-            for i in range(tabbed.widget.count()):
-                # ponytail: exact URL match. A pinned page that redirects or
-                # grows a fragment opens a second tab; compare hosts if that
-                # ever bites.
-                if tabbed.widget.tab_url(i) == url:
-                    tabbed.widget.setCurrentIndex(i)
-                    return
-            tabbed.tabopen(url)
-        except Exception:
-            log.misc.exception("my-browser bar: failed to open pinned %s" % url)
+            widget = self._widget()
+        except KeyError:
+            return  # window still being constructed
+        self.blockSignals(True)  # rebuilding must not re-enter _on_selected
+        try:
+            while self.count():
+                self.removeTab(0)
+            self._indices = []
+            for i in range(widget.count()):
+                tab = widget.widget(i)
+                if tab is not None and tab.data.pinned:
+                    self.addTab(widget.page_title(i) or '')
+                    self._indices.append(i)
+            cur = widget.currentIndex()
+            self.setCurrentIndex(
+                self._indices.index(cur) if cur in self._indices else -1)
         finally:
-            self.setCurrentIndex(-1)
+            self.blockSignals(False)
+        self.setVisible(bool(self._indices))
+
+    def _on_selected(self, idx):
+        if 0 <= idx < len(self._indices):
+            try:
+                self._widget().setCurrentIndex(self._indices[idx])
+            except KeyError:
+                pass
+
+
+def sync_pinned(win_id):
+    """Refresh a window's PinBar. Safe to call before the bar exists."""
+    win = objreg.window_registry.get(win_id)
+    bar = getattr(win, '_pinbar', None)
+    if bar is not None:
+        bar.sync()
+
+
+def seed_pinned(win_id):
+    """Open mybar.json's `pinned` URLs as real pinned tabs, once per window.
+
+    ponytail: seeds by URL only — a seeded tab the user later unpins stays
+    unpinned for that window's life, but comes back in the next window. Persist
+    per-window state only if that turns out to matter.
+    """
+    entries = [e for e in _load()['pinned'] if e.get('url')]
+    if not entries:
+        return
+    try:
+        tabbed = objreg.get('tabbed-browser', scope='window', window=win_id)
+    except KeyError:
+        return
+    open_urls = {tabbed.widget.tab_url(i).toString()
+                 for i in range(tabbed.widget.count())}
+    for entry in entries:
+        if entry['url'] in open_urls:
+            continue
+        try:
+            tab = tabbed.tabopen(QUrl(entry['url']), background=True)
+            tab.set_pinned(True)
+        except Exception:
+            log.misc.exception(
+                "my-browser bar: failed to seed pinned %s" % entry['url'])
+    sync_pinned(win_id)
+
+
+def install(win_id, pinbar, tabbed_widget):
+    """Wire a window's PinBar: follow tab selection, then seed the pinned row.
+
+    ponytail: seeding is deferred by SEED_DELAY_MS so a restored session's tabs
+    are already open and the URL dedupe in seed_pinned can see them — otherwise
+    a restored pinned tab would be duplicated. If a slow session restore ever
+    outruns it, hook the session-load-finished path instead of waiting.
+    """
+    tabbed_widget.currentChanged.connect(lambda _idx: pinbar.sync())
+    QTimer.singleShot(SEED_DELAY_MS, functools.partial(seed_pinned, win_id))
+
+
+SEED_DELAY_MS = 500
