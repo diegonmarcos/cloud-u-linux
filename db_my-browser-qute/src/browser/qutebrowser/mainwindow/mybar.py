@@ -286,8 +286,14 @@ def seed_pinned(win_id):
         tabbed = objreg.get('tabbed-browser', scope='window', window=win_id)
     except KeyError:
         return
+    # Dedupe against PINNED tabs only. url.start_pages opens the bookmarks page
+    # as an ordinary row-3 tab, and counting that as "already open" would
+    # suppress the row-2 pinned copy of the same page. A restored *pinned* tab
+    # still dedupes, which is the case this guard exists for.
     open_urls = {tabbed.widget.tab_url(i).toString()
-                 for i in range(tabbed.widget.count())}
+                 for i in range(tabbed.widget.count())
+                 if getattr(tabbed.widget.widget(i), 'data', None) is not None
+                 and tabbed.widget.widget(i).data.pinned}
     for entry in entries:
         if entry['url'] in open_urls:
             continue
