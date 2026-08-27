@@ -57,7 +57,7 @@ use data::{arr, flag, kill_path, now_secs, num, read_json, snapshot_path, text, 
 use export::{exe_dir, export_snapshot, open_dir, proc_comm};
 use input::cmd;
 use model::columns::{
-    UnitRow, CTR_ACTIONS, CTR_SORT, FLEET_SORT, IMG_ACTIONS, IMG_SORT, UNIT_ACTIONS,
+    UnitRow, CMP_ACTIONS, CTR_ACTIONS, CTR_SORT, FLEET_SORT, IMG_ACTIONS, IMG_SORT, UNIT_ACTIONS,
 };
 use model::keys::{
     ACTIONS, BOX_NAMES, B_MESH, B_NET, B_PSI, B_SLICES, B_STORAGE, CMD_HELP, FRAME_RESERVED, FREE,
@@ -80,6 +80,10 @@ use view::fmt::{
 /// and every modal here closes back to None — so Esc is never a way out of the
 /// program, which is the whole point of ^c/^d being the only exit.
 #[derive(Clone, Copy, PartialEq, Debug)]
+/// One row of the compose table: project, service, container, state, file,
+/// and whether compose itself labelled it.
+type CmpRow = (String, String, String, String, String, bool);
+
 enum Overlay {
     None,
     Menu,
@@ -99,6 +103,8 @@ enum Overlay {
     Ctr,
     /// One image, with the verbs that act on it.
     Img,
+    /// One compose service, with its verbs and the daemon's underneath.
+    Cmp,
     /// Pick which machine the whole dashboard is measuring.
     Target,
     /// The `:` command line.
@@ -219,6 +225,15 @@ pub struct Monitor {
     target_sel: usize,
     free_sel: usize,
     unit_sel: usize,
+    /// The compose row the modal is open on, pinned by (file, service) so a
+    /// re-sort on the next tick cannot slide a different service under it.
+    cmp_pin: Option<(String, String)>,
+    /// The last complaint the transport made, kept verbatim so it can be
+    /// un-said. Without this the mesh's own status latches into `msg` and
+    /// stays there: "fetching…" is a live condition, not an event, and a
+    /// panel that shows it forever after the data landed reads as a fetch
+    /// loop that never ends.
+    mesh_msg: Option<String>,
     fleet_sel: usize,
     /// The row Enter has already been pressed on once. A command that stops a
     /// production VM does not run on one keystroke.
@@ -288,6 +303,8 @@ impl Monitor {
             img_desc: true,
             ctr_pin: None,
             img_pin: None,
+            cmp_pin: None,
+            mesh_msg: None,
             about: false,
             firewall: false,
             sel: 0,
@@ -945,6 +962,7 @@ impl Monitor {
             Overlay::FleetAct => self.render_fleet_act(f, area),
             Overlay::Ctr => self.render_ctr(f, area),
             Overlay::Img => self.render_img(f, area),
+            Overlay::Cmp => self.render_cmp(f, area),
             Overlay::None => {}
         }
     }
@@ -1548,6 +1566,56 @@ impl Monitor {
         });
     }
 
+    /// The compose table, flat and ordered.
+    ///
+    /// `(project, service, container, state, file, declared)`. Declared first,
+    /// grouped by project so a stack reads together; the undeclared ones last,
+    /// because they are the finding and the bottom of a list is where a
+    /// finding survives being scrolled past. One row per container, which is
+    /// what the cursor can act on — a project header is not a thing you can
+    /// start.
+    fn cmp_rows(s: &Value) -> Vec<CmpRow> {
+        let mut v: Vec<CmpRow> = arr(s, "compose")
+            .iter()
+            .map(|r| {
+                (
+                    text(r, "project"),
+                    text(r, "service"),
+                    text(r, "container"),
+                    text(r, "state"),
+                    text(r, "file"),
+                    flag(r, "declared"),
+                )
+            })
+            .collect();
+        v.sort_by(|a, b| {
+            b.5.cmp(&a.5).then(a.0.cmp(&b.0)).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2))
+        });
+        v
+    }
+
+    /// One compose verb against one declared service.
+    ///
+    /// The panel never builds the command: it names the file compose itself
+    /// recorded and the service compose itself named, and the daemon re-checks
+    /// both before running anything.
+    fn request_compose_verb(&mut self, file: &str, service: &str, verb: &str) {
+        if file.is_empty() || service.is_empty() {
+            self.msg = Some(("that row carries no compose file — nothing declares it".into(), true));
+            return;
+        }
+        let path = kill_path();
+        let res = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .and_then(|mut f| writeln!(f, "0 CMP {verb} {file} {service}"));
+        self.msg = Some(match res {
+            Ok(()) => (format!("{verb} {service} (from {file}) → queued for the daemon"), false),
+            Err(e) => (format!("could not write {path}: {e}"), true),
+        });
+    }
+
     /// "start the service this image belongs to".
     ///
     /// The compose file is never guessed. It is joined out of what docker
@@ -1576,16 +1644,96 @@ impl Monitor {
         }
         // The daemon re-checks all of this; it does not trust the panel, and
         // the panel does not get to name a path the daemon then runs blind.
-        let path = kill_path();
-        let res = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .and_then(|mut f| writeln!(f, "0 CMP up {file} {service}"));
-        self.msg = Some(match res {
-            Ok(()) => (format!("up {service} (from {file}) → queued for the daemon"), false),
-            Err(e) => (format!("could not write {path}: {e}"), true),
-        });
+        self.request_compose_verb(&file, &service, "up");
+    }
+
+    /// One compose service, with its verbs and the daemon's underneath.
+    ///
+    /// Two lists in one modal on purpose: when a service will not come up the
+    /// next question is almost always whether dockerd itself is healthy, and
+    /// making that a separate key on a separate page is how you end up
+    /// restarting the wrong thing. The separator is not decoration — the
+    /// second block acts on the whole engine, not on this row.
+    fn render_cmp(&self, f: &mut Frame, area: Rect) {
+        let Some((file, service)) = self.cmp_pin.clone() else { return };
+        let accent = Color::Rgb(120, 200, 255);
+        let h = (CMP_ACTIONS.len() + UNIT_ACTIONS.len()) as u16 + 8;
+        let inner = Self::modal(f, area, 84, h, "act on compose service", accent);
+        let mut l: Vec<Line> = vec![
+            Line::from(vec![
+                Span::styled(
+                    trunc(&service, 40),
+                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("  in  ", Style::default().fg(DIM)),
+                Span::styled(trunc(&file, 60), Style::default().fg(LABEL)),
+            ]),
+            Line::from(""),
+        ];
+        for (i, (verb, why)) in CMP_ACTIONS.iter().chain(UNIT_ACTIONS.iter()).enumerate() {
+            if i == CMP_ACTIONS.len() {
+                l.push(Line::from(Span::styled(
+                    "  ── docker.service — the engine under every row here ──",
+                    Style::default().fg(DIM),
+                )));
+            }
+            let sel = i == self.act_sel;
+            l.push(Line::from(vec![
+                Span::styled(if sel { "▶ " } else { "  " }, Style::default().fg(accent)),
+                Span::styled(format!(" {}  ", i + 1), Style::default().fg(DIM)),
+                Span::styled(
+                    format!("{verb:<14}"),
+                    if sel {
+                        Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::Gray)
+                    },
+                ),
+                Span::styled(why.to_string(), Style::default().fg(LABEL)),
+            ]));
+        }
+        l.push(Line::from(Span::styled(
+            "  ↑↓ pick · enter or a digit sends it · any other key cancels",
+            Style::default().fg(DIM),
+        )));
+        f.render_widget(Paragraph::new(l), inner);
+    }
+
+    fn cmp_key(&mut self, k: KeyCode) {
+        let Some((file, service)) = self.cmp_pin.clone() else {
+            self.overlay = Overlay::None;
+            return;
+        };
+        let n = CMP_ACTIONS.len() + UNIT_ACTIONS.len();
+        let fire = |me: &mut Self, i: usize| {
+            if i < CMP_ACTIONS.len() {
+                me.request_compose_verb(&file, &service, CMP_ACTIONS[i].0);
+            } else {
+                // The engine block. Same mailbox, different addressee: this one
+                // is aimed at the machine, not at the row under the cursor.
+                me.request_unit("docker.service", "system", UNIT_ACTIONS[i - CMP_ACTIONS.len()].0);
+            }
+            me.cmp_pin = None;
+            me.overlay = Overlay::None;
+        };
+        match k {
+            KeyCode::Down | KeyCode::Char('j') => self.act_sel = (self.act_sel + 1) % n,
+            KeyCode::Up => self.act_sel = (self.act_sel + n - 1) % n,
+            KeyCode::Char(c) if c.is_ascii_digit() => {
+                let i = c.to_digit(10).unwrap_or(0) as usize;
+                if i >= 1 && i <= n {
+                    fire(self, i - 1);
+                }
+            }
+            KeyCode::Enter => {
+                let i = self.act_sel;
+                fire(self, i);
+            }
+            _ => {
+                self.cmp_pin = None;
+                self.overlay = Overlay::None;
+            }
+        }
     }
 
     /// What can be done to a declared unit. Same mailbox as the signals, so
@@ -2728,7 +2876,15 @@ impl Dashboard for Monitor {
             Some(_) => self.mesh.remote_snapshot(),
         };
         if !err.is_empty() {
-            self.msg = Some((err, true));
+            self.msg = Some((err.clone(), true));
+            self.mesh_msg = Some(err);
+        } else if let Some(prev) = self.mesh_msg.take() {
+            // Cleared only if the footer is still showing OUR line — anything
+            // the user did since (a queued verb, a kill) outranks a stale
+            // transport status and must survive the recovery.
+            if self.msg.as_ref().is_some_and(|(m, _)| *m == prev) {
+                self.msg = None;
+            }
         }
         if s.is_null() {
             self.stale = true;
@@ -2802,6 +2958,7 @@ impl Dashboard for Monitor {
             Overlay::FleetAct => return self.fleet_act_key(k),
             Overlay::Ctr => return self.ctr_img_key(k, true),
             Overlay::Img => return self.ctr_img_key(k, false),
+            Overlay::Cmp => return self.cmp_key(k),
             Overlay::Unit => return self.unit_key(k),
             Overlay::Machine => {
                 match k {
@@ -2982,22 +3139,57 @@ impl Dashboard for Monitor {
             }
             return;
         }
+        if self.compose {
+            // The compose table is a list like the other two, and a table you
+            // cannot move a cursor through is a screenshot. Enter opens the
+            // verbs; `d` still reaches the daemon directly, as it does on the
+            // neighbouring pages.
+            let rowsv = Self::cmp_rows(&self.snap);
+            let n = rowsv.len();
+            match k {
+                KeyCode::Down | KeyCode::Char('j') => self.sel = (self.sel + 1).min(n.saturating_sub(1)),
+                KeyCode::Up => self.sel = self.sel.saturating_sub(1),
+                KeyCode::PageDown => self.sel = (self.sel + 10).min(n.saturating_sub(1)),
+                KeyCode::PageUp => self.sel = self.sel.saturating_sub(10),
+                KeyCode::Home => self.sel = 0,
+                KeyCode::End => self.sel = n.saturating_sub(1),
+                KeyCode::Char('d') => {
+                    self.acting_unit =
+                        Some(("docker.service".to_string(), "system".to_string()));
+                    self.unit_sel = 0;
+                    self.overlay = Overlay::Unit;
+                }
+                KeyCode::Enter => {
+                    // Undeclared rows carry no file, so there is no compose
+                    // command to send — that IS the finding, and offering verbs
+                    // that cannot run would bury it.
+                    if let Some(r) = rowsv.get(self.sel) {
+                        if r.5 {
+                            self.cmp_pin = Some((r.4.clone(), r.1.clone()));
+                            self.act_sel = 0;
+                            self.overlay = Overlay::Cmp;
+                        } else {
+                            self.msg = Some((
+                                format!("{}: no compose labels — nothing declares it, so nothing can compose it", r.2),
+                                true,
+                            ));
+                        }
+                    }
+                }
+                KeyCode::Char('h') | KeyCode::Char('?') | KeyCode::F(1) => self.overlay = Overlay::Help,
+                _ => {}
+            }
+            return;
+        }
         // firewall joins these: no row cursor, one scrolling page.
-        if self.history
-            || self.about
-            || self.firewall
-            || self.logs
-            || self.compose
-            || self.volumes
-            || self.networks
-        {
+        if self.history || self.about || self.firewall || self.logs || self.volumes || self.networks {
             // None of these has a row cursor; about scrolls, the rest are one
             // screen.
             match k {
                 // Every containers sub-tab can be empty for exactly one
                 // reason — dockerd is down — so every one of them offers the
                 // same way to say something about that.
-                KeyCode::Char('d') if self.compose || self.volumes || self.networks => {
+                KeyCode::Char('d') if self.volumes || self.networks => {
                     self.acting_unit = Some(("docker.service".to_string(), "system".to_string()));
                     self.unit_sel = 0;
                     self.overlay = Overlay::Unit;
@@ -4242,111 +4434,95 @@ impl Dashboard for Monitor {
         // the only drift signal available without a copy of the repo.
         if self.compose {
             let cb = self.tabs_box(&format!(
-                "compose projects · {} · d",
+                "compose · {} · ↑↓ pick · enter acts · d",
                 Self::dockerd_label(&s)
             ));
             let cin = cb.inner(rows[4]);
             f.render_widget(cb, rows[4]);
-            let rowsv = arr(&s, "compose");
-            let mut l: Vec<Line> = vec![];
-            let declared: Vec<&Value> = rowsv.iter().filter(|c| flag(c, "declared")).collect();
-            let orphans: Vec<&Value> = rowsv.iter().filter(|c| !flag(c, "declared")).collect();
+
+            // ONE ROW PER SERVICE, not a paragraph per project. The page was
+            // three lines for every service — a project header, the config
+            // file, then the service — which turns twenty services into sixty
+            // lines nobody can scan and no cursor can address. The file is the
+            // widest column and the least often read, so it goes last and is
+            // cut from the left: what matters in a path this long is its end.
+            let tail = |x: &str, n: usize| -> String {
+                if x.chars().count() <= n {
+                    x.to_string()
+                } else {
+                    format!("…{}", x.chars().skip(x.chars().count() - n + 1).collect::<String>())
+                }
+            };
+            let rowsv = Self::cmp_rows(&s);
+            // One cursor serves every list, so arriving from a 52-container
+            // page can park it past the end of a 3-service one.
+            self.sel = self.sel.min(rowsv.len().saturating_sub(1));
+            let declared = rowsv.iter().filter(|r| r.5).count();
+            let mut l: Vec<Line> = vec![Line::from(Span::styled(
+                "   PROJECT           SERVICE           CONTAINER                 STATE      FILE",
+                Style::default().fg(LABEL),
+            ))];
             if rowsv.is_empty() {
                 l.push(Line::from(Span::styled(
-                    "  no containers at all — nothing to have been declared",
+                    "  no containers — nothing to say whether anything was declared",
                     Style::default().fg(DIM),
                 )));
             }
-            // Grouped by project, because a project is the unit people deploy
-            // and restart; listing services flat would put two projects' web
-            // containers next to each other and imply they are related.
-            let mut seen: Vec<String> = vec![];
-            for c in &declared {
-                let p = text(c, "project");
-                if seen.contains(&p) {
-                    continue;
-                }
-                seen.push(p.clone());
-                let mine: Vec<&&Value> = declared.iter().filter(|x| text(x, "project") == p).collect();
+            for (i, r) in rowsv.iter().enumerate() {
+                let (proj, svc, ctr, state, file, dec) = (&r.0, &r.1, &r.2, &r.3, &r.4, r.5);
+                let on = i == self.sel;
+                let up = state == "running";
+                // Undeclared is the finding, so it is the loud one: a container
+                // with no compose labels is one nobody deployed the declared
+                // way, and a dash in the project column is easy to miss.
+                let base = if dec { Style::default() } else { Style::default().fg(Color::Rgb(240, 160, 90)) };
+                let base = if on { base.add_modifier(Modifier::REVERSED) } else { base };
                 l.push(Line::from(vec![
+                    Span::styled(if on { " ▸" } else { "  " }, base),
                     Span::styled(
-                        p.clone(),
-                        Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
+                        format!("{:<18}", trunc(if dec { proj.as_str() } else { "UNDECLARED" }, 17)),
+                        if dec { base.fg(Color::Rgb(120, 200, 255)) } else { base },
                     ),
+                    Span::styled(format!("{:<18}", trunc(svc, 17)), base),
+                    Span::styled(format!("{:<26}", trunc(ctr, 25)), base),
                     Span::styled(
-                        format!("  {} service(s)", mine.len()),
-                        Style::default().fg(DIM),
+                        format!("{:<11}", trunc(state, 10)),
+                        if up { base.fg(Color::Rgb(120, 200, 130)) } else { base.fg(DIM) },
                     ),
+                    // Cut from the LEFT: two compose files under
+                    // /opt/containers differ in their last component, not
+                    // their first, and a path truncated at the head is a path
+                    // you cannot tell apart from its neighbour.
+                    Span::styled(tail(file, 58), base.fg(DIM)),
                 ]));
-                // The config file is the answer to "where do I edit this",
-                // which is the question a project name always raises next.
-                if let Some(file) = mine.iter().map(|x| text(x, "file")).find(|x| !x.is_empty()) {
-                    l.push(Line::from(Span::styled(
-                        format!("  {}", trunc(&file, 110)),
-                        Style::default().fg(LABEL),
-                    )));
-                }
-                for x in mine {
-                    let st = text(x, "state");
-                    l.push(Line::from(vec![
-                        Span::styled(
-                            format!("    {:<22}", trunc(&text(x, "service"), 21)),
-                            Style::default().fg(Color::White),
-                        ),
-                        Span::styled(
-                            format!("{:<26}", trunc(&text(x, "container"), 25)),
-                            Style::default().fg(Color::Gray),
-                        ),
-                        Span::styled(
-                            st.clone(),
-                            Style::default().fg(if st == "running" {
-                                Color::Rgb(120, 220, 140)
-                            } else {
-                                Color::Rgb(240, 160, 90)
-                            }),
-                        ),
-                    ]));
-                }
-                l.push(Line::from(""));
             }
-            if !orphans.is_empty() {
-                l.push(Line::from(Span::styled(
-                    "undeclared",
-                    Style::default().fg(Color::Rgb(240, 160, 90)).add_modifier(Modifier::BOLD),
-                )));
-                l.push(Line::from(Span::styled(
-                    "  compose wrote no label on these — they were started by hand, by another",
-                    Style::default().fg(DIM),
-                )));
-                l.push(Line::from(Span::styled(
-                    "  tool, or by a compose old enough not to label. Nothing here re-creates them.",
-                    Style::default().fg(DIM),
-                )));
-                for x in &orphans {
-                    l.push(Line::from(vec![
-                        Span::styled(
-                            format!("    {:<26}", trunc(&text(x, "container"), 25)),
-                            Style::default().fg(Color::White),
-                        ),
-                        Span::styled(text(x, "state"), Style::default().fg(DIM)),
-                    ]));
-                }
+            // The scroll follows the cursor rather than the wheel: a list you
+            // can move a selection through but not see the selection in is
+            // worse than no cursor at all. +1 for the header row.
+            let want = self.sel as u16 + 1;
+            let h = cin.height.max(1);
+            if want < self.detail_scroll {
+                self.detail_scroll = want;
+            } else if want >= self.detail_scroll + h {
+                self.detail_scroll = want + 1 - h;
             }
-            let hmax = (l.len() as u16).saturating_sub(cin.height);
-            self.detail_scroll = self.detail_scroll.min(hmax);
+            self.detail_scroll = self.detail_scroll.min((l.len() as u16).saturating_sub(h));
             f.render_widget(Paragraph::new(l).scroll((self.detail_scroll, 0)), cin);
             f.render_widget(
                 Paragraph::new(Line::from(Span::styled(
                     match &self.msg {
                         Some((m, _)) => format!(" {m}"),
                         None => format!(
-                            " {} project(s) · {} declared · {} undeclared",
-                            seen.len(),
-                            declared.len(),
-                            orphans.len()
+                            " {} service(s) · {declared} declared · {} undeclared",
+                            rowsv.len(),
+                            rowsv.len() - declared
                         ),
                     },
-                    Style::default().fg(if orphans.is_empty() { LABEL } else { Color::Rgb(240, 160, 90) }),
+                    Style::default().fg(if declared == rowsv.len() {
+                        LABEL
+                    } else {
+                        Color::Rgb(240, 160, 90)
+                    }),
                 ))),
                 rows[5],
             );

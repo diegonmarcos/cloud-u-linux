@@ -117,3 +117,21 @@ pub(crate) const UNIT_ACTIONS: [(&str, &str); 4] = [
     ("stop", "take it down"),
     ("reset-failed", "clear the failed state so it can start again"),
 ];
+
+/// What can be done to ONE declared service, from the file that declared it.
+///
+/// Per-service, never per-project: `docker compose down` on a project takes
+/// down everything in it including the container you are not looking at, and
+/// the row under the cursor is a service. The verbs here all name that service
+/// explicitly, so the blast radius is what the cursor says it is.
+///
+/// No `down` and no `rm`. Bringing a service back up is one keypress from
+/// here; the destructive pair belongs on a page where the thing being removed
+/// is the subject, not on the one you land on to see what is declared.
+pub(crate) const CMP_ACTIONS: [(&str, &str); 5] = [
+    ("up", "create it from the file and start it"),
+    ("restart", "stop and start it, same container"),
+    ("stop", "stop it, keep the container"),
+    ("start", "start the container it already has"),
+    ("pull", "fetch the image this service pins"),
+];

@@ -3502,10 +3502,13 @@ fn drain_kill_requests() {
             let verb = it.next().unwrap_or("");
             let file = it.next().unwrap_or("");
             let service = it.next().unwrap_or("");
-            // `up` only. Nothing here removes a project, and the file has to
-            // be an absolute path to a compose file that EXISTS — this line
-            // arrives from a file any process of this user can append to.
-            if verb != "up"
+            // An ALLOW-LIST, and `down` is not on it: down takes out every
+            // service in the project, including the ones the cursor was not
+            // on. Everything here names one service. The file has to be an
+            // absolute path to a compose file that EXISTS — this line arrives
+            // from a file any process of this user can append to.
+            const VERBS: [&str; 5] = ["up", "restart", "stop", "start", "pull"];
+            if !VERBS.contains(&verb)
                 || !file.starts_with('/')
                 || !(file.ends_with(".yml") || file.ends_with(".yaml"))
                 || !std::path::Path::new(file).is_file()
@@ -3515,18 +3518,68 @@ fn drain_kill_requests() {
                 eprintln!("[watchdog] refusing compose request {verb:?} {file:?} {service:?}");
                 continue;
             }
-            match clean_command("docker")
-                .args(["compose", "-f", file, "up", "-d", service])
+            // WHERE the project lives, asked of docker rather than of the
+            // panel. `-f <file>` alone makes compose treat the file's OWN
+            // directory as the project root, so a stack deployed as
+            //   cd /opt/containers/x && compose -f compose/docker-compose.yml
+            // would come back up rooted at /opt/containers/x/compose: every
+            // relative bind mount and the .env resolve against the wrong
+            // directory, and `up` quietly recreates the container with the
+            // wrong volumes. Compose recorded the real root on the container
+            // it created; that label is the answer, and reading it here means
+            // the panel never gets to name a directory this then runs in.
+            let meta = clean_command("docker")
+                .args([
+                    "ps",
+                    "-a",
+                    "--filter",
+                    &format!("label=com.docker.compose.project.config_files={file}"),
+                    "--format",
+                    "{{.Label \"com.docker.compose.project.working_dir\"}}\t{{.Label \"com.docker.compose.project\"}}",
+                ])
                 .output()
-            {
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+                .unwrap_or_default();
+            let (wd, proj) = meta
+                .lines()
+                .find(|l| !l.trim().is_empty())
+                .and_then(|l| l.split_once('\t'))
+                .map(|(a, b)| (a.trim().to_string(), b.trim().to_string()))
+                .unwrap_or_default();
+            // An absolute directory that still exists, or nothing: a label
+            // pointing at a path that has since been deleted is not a root to
+            // run in, and falling back to compose's own default is at least a
+            // failure mode that gets reported rather than a silent wrong mount.
+            let wd_ok = wd.starts_with('/') && std::path::Path::new(&wd).is_dir();
+            let proj_ok = !proj.is_empty() && !proj.starts_with('-');
+
+            // -d belongs to `up` alone: the others do not take it, and
+            // `compose stop -d` is an error rather than a no-op.
+            let mut args = vec!["compose", "-f", file];
+            if wd_ok {
+                args.push("--project-directory");
+                args.push(&wd);
+            }
+            if proj_ok {
+                args.push("-p");
+                args.push(&proj);
+            }
+            args.push(verb);
+            if verb == "up" {
+                args.push("-d");
+            }
+            args.push(service);
+            match clean_command("docker").args(&args).output() {
                 Ok(o) if o.status.success() => {
-                    eprintln!("[watchdog] docker compose -f {file} up -d {service}: ok")
+                    eprintln!("[watchdog] docker compose -f {file} {verb} {service}: ok")
                 }
                 Ok(o) => eprintln!(
-                    "[watchdog] docker compose up {service} failed: {}",
+                    "[watchdog] docker compose {verb} {service} failed: {}",
                     String::from_utf8_lossy(&o.stderr).trim()
                 ),
-                Err(e) => eprintln!("[watchdog] docker compose up {service}: {e}"),
+                Err(e) => eprintln!("[watchdog] docker compose {verb} {service}: {e}"),
             }
             continue;
         }
