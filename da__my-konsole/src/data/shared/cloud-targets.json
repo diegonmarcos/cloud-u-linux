@@ -1,0 +1,9 @@
+{
+  "_note": "Fleet for the Cloud dashboard — data-driven. Synced to ~/.local/share/my-konsole/ by build.sh; the my-konsole-dash cloud TUI reads it and SSH-probes each VM.",
+  "vms": [
+    { "alias": "gcp-proxy",     "wg": "10.0.0.1", "label": "GCloud E2 — proxy/control", "pub": "proxy.diegonmarcos.com" },
+    { "alias": "oci-mail",      "wg": "10.0.0.3", "label": "Oracle E2 — mail",          "pub": "mail.diegonmarcos.com" },
+    { "alias": "oci-analytics", "wg": "10.0.0.4", "label": "Oracle E2 — analytics",     "pub": "analytics.diegonmarcos.com" },
+    { "alias": "oci-apps",      "wg": "10.0.0.6", "label": "Oracle A1 — apps",          "pub": "app.diegonmarcos.com" }
+  ]
+}

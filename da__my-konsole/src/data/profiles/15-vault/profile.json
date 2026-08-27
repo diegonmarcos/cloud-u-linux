@@ -1,0 +1,39 @@
+{
+  "order": 10,
+  "name": "vault",
+  "menu": "Unix-Envs",
+  "display_name": "Vault",
+  "theme": {
+    "accent": "#8e44ad"
+  },
+  "sections": [
+    {
+      "title": "Vault",
+      "items": [
+        {
+          "label": "status",
+          "cmd": "$HOME/git/cloud-vault/build.sh status"
+        },
+        {
+          "label": "open in file manager",
+          "cmd": "dolphin $HOME/git/cloud-vault"
+        },
+        {
+          "label": "edit secrets (sops)",
+          "cmd": "sops $HOME/git/cloud-unix/ba_flakes_desktop/src/secrets/secrets.yaml"
+        },
+        {
+          "label": "list secret keys (no values)",
+          "cmd": "sops -d --output-type json $HOME/git/cloud-unix/ba_flakes_desktop/src/secrets/secrets.yaml | jq keys"
+        }
+      ]
+    }
+  ],
+  "configs": [
+    {
+      "title": "Secrets (sops-encrypted)",
+      "paths": ["~/git/cloud-unix/ba_flakes_desktop/src/secrets/secrets.yaml"]
+    }
+  ],
+  "group": "g3"
+}

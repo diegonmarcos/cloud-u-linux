@@ -1,0 +1,147 @@
+{
+  "order": 5,
+  "name": "git",
+  "menu": "Data",
+  "display_name": "Git",
+  "theme": {
+    "accent": "#f67400"
+  },
+  "sections": [
+    {
+      "title": "GIT BASICS",
+      "items": [
+        {
+          "label": "status",
+          "cmd": "git status"
+        },
+        {
+          "label": "log (oneline -20)",
+          "cmd": "git log --oneline -20"
+        },
+        {
+          "label": "diff",
+          "cmd": "git diff"
+        },
+        {
+          "label": "add all",
+          "cmd": "git add -A"
+        },
+        {
+          "label": "commit",
+          "cmd": "git commit"
+        },
+        {
+          "label": "pull --rebase",
+          "cmd": "git pull --rebase"
+        },
+        {
+          "label": "push (main)",
+          "cmd": "git push origin main"
+        }
+      ]
+    },
+    {
+      "title": "INSPECT",
+      "items": [
+        {
+          "label": "branch list (read)",
+          "cmd": "git branch -a"
+        },
+        {
+          "label": "remote -v",
+          "cmd": "git remote -v"
+        },
+        {
+          "label": "stash list",
+          "cmd": "git stash list"
+        },
+        {
+          "label": "status all repos",
+          "cmd": "for d in ~/git/*/; do echo \"== $d\"; git -C $d status -s; end"
+        }
+      ]
+    },
+    {
+      "title": "GH CLI",
+      "items": [
+        {
+          "label": "run list",
+          "cmd": "gh run list -L 15"
+        },
+        {
+          "label": "run view (latest)",
+          "cmd": "gh run view"
+        },
+        {
+          "label": "pr list",
+          "cmd": "gh pr list"
+        },
+        {
+          "label": "release list",
+          "cmd": "gh release list"
+        },
+        {
+          "label": "repo status all",
+          "cmd": "gh repo list diegonmarcos"
+        }
+      ]
+    },
+    {
+      "title": "GITHUB ACTIONS",
+      "items": [
+        {
+          "label": "workflow list",
+          "cmd": "gh workflow list"
+        },
+        {
+          "label": "run watch",
+          "cmd": "gh run watch"
+        },
+        {
+          "label": "run rerun (failed)",
+          "cmd": "gh run rerun --failed"
+        },
+        {
+          "label": "runs (cloud)",
+          "cmd": "gh run list -R diegonmarcos/cloud-infra -L 15"
+        },
+        {
+          "label": "runs (unix)",
+          "cmd": "gh run list -R diegonmarcos/cloud-unix -L 15"
+        },
+        {
+          "label": "runs (front)",
+          "cmd": "gh run list -R diegonmarcos/front -L 15"
+        }
+      ]
+    },
+    {
+      "title": "GHCR REGISTRY",
+      "items": [
+        {
+          "label": "list packages",
+          "cmd": "gh api /user/packages?package_type=container --jq '.[].name'"
+        },
+        {
+          "label": "pull image (vm-pilot)",
+          "cmd": "docker pull ghcr.io/diegonmarcos/vm-pilot:latest"
+        },
+        {
+          "label": "package versions",
+          "cmd": "bash ~/git/cloud-mykonsole-dtk/dtk.sh fleet.gh-registry"
+        }
+      ]
+    }
+  ],
+  "configs": [
+    {
+      "title": "Git config",
+      "paths": ["~/.config/git/config", "~/.config/git/ignore"]
+    },
+    {
+      "title": "GitHub CLI config",
+      "paths": ["~/.config/gh/config.yml"]
+    }
+  ],
+  "group": "g2"
+}

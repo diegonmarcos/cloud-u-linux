@@ -1,0 +1,351 @@
+{
+  "name": "home",
+  "display_name": "Home",
+  "theme": {
+    "accent": "#3daee9"
+  },
+  "sections": [
+    {
+      "title": "NAVIGATION",
+      "items": [
+        {
+          "label": "Home (~)",
+          "cmd": "cd ~"
+        },
+        {
+          "label": "Git root (~/git)",
+          "cmd": "cd ~/git"
+        },
+        {
+          "label": "List all (ll)",
+          "cmd": "ls -lah"
+        },
+        {
+          "label": "cloud repo",
+          "cmd": "cd ~/git/cloud-infra"
+        },
+        {
+          "label": "unix repo",
+          "cmd": "cd ~/git/cloud-unix"
+        },
+        {
+          "label": "front repo",
+          "cmd": "cd ~/git/front"
+        },
+        {
+          "label": "vault repo",
+          "cmd": "cd ~/git/cloud-vault"
+        },
+        {
+          "label": "tools repo",
+          "cmd": "cd ~/git/cloud-mykonsole-dtk"
+        }
+      ]
+    },
+    {
+      "title": "SYSTEM",
+      "items": [
+        {
+          "label": "Disk usage",
+          "cmd": "df -h"
+        },
+        {
+          "label": "Memory",
+          "cmd": "free -h"
+        },
+        {
+          "label": "Processes (btop)",
+          "cmd": "btop"
+        },
+        {
+          "label": "Boot errors",
+          "cmd": "journalctl -b -p err"
+        }
+      ]
+    },
+    {
+      "title": "QUICK",
+      "items": [
+        {
+          "label": "Clear screen",
+          "cmd": "clear"
+        },
+        {
+          "label": "Reload fish",
+          "cmd": "exec fish"
+        }
+      ]
+    },
+    {
+      "title": "Alias / Functions",
+      "items": [
+        {
+          "label": "gs → git status -sb",
+          "cmd": "gs"
+        },
+        {
+          "label": "ga → git add",
+          "cmd": "ga"
+        },
+        {
+          "label": "gaa → git add --all",
+          "cmd": "gaa"
+        },
+        {
+          "label": "gc → git commit",
+          "cmd": "gc"
+        },
+        {
+          "label": "gcm → git commit -m",
+          "cmd": "gcm "
+        },
+        {
+          "label": "gp → git push",
+          "cmd": "gp"
+        },
+        {
+          "label": "gl → git log --oneline --graph",
+          "cmd": "gl"
+        },
+        {
+          "label": "gd → git diff",
+          "cmd": "gd"
+        },
+        {
+          "label": "gco → git checkout",
+          "cmd": "gco "
+        },
+        {
+          "label": "gpl → git pull",
+          "cmd": "gpl"
+        },
+        {
+          "label": "gcl → git clone",
+          "cmd": "gcl "
+        },
+        {
+          "label": "dps → docker ps",
+          "cmd": "dps"
+        },
+        {
+          "label": "dpsa → docker ps -a",
+          "cmd": "dpsa"
+        },
+        {
+          "label": "dcu → docker compose up",
+          "cmd": "dcu"
+        },
+        {
+          "label": "dcd → docker compose down",
+          "cmd": "dcd"
+        },
+        {
+          "label": "ls → eza --icons",
+          "cmd": "ls"
+        },
+        {
+          "label": "ll → eza -alF",
+          "cmd": "ll"
+        },
+        {
+          "label": "la → eza -A",
+          "cmd": "la"
+        },
+        {
+          "label": "l → eza -CF",
+          "cmd": "l"
+        },
+        {
+          "label": "lh → eza -lh",
+          "cmd": "lh"
+        },
+        {
+          "label": "lt → eza --tree -L2",
+          "cmd": "lt"
+        },
+        {
+          "label": "cat → bat",
+          "cmd": "cat "
+        },
+        {
+          "label": "grep → rg",
+          "cmd": "grep "
+        },
+        {
+          "label": "find → fd",
+          "cmd": "find "
+        },
+        {
+          "label": ".. → cd ..",
+          "cmd": ".."
+        },
+        {
+          "label": "... → cd ../..",
+          "cmd": "..."
+        },
+        {
+          "label": ".... → cd ../../..",
+          "cmd": "...."
+        },
+        {
+          "label": "rm → rm -i",
+          "cmd": "rm "
+        },
+        {
+          "label": "cp → cp -i",
+          "cmd": "cp "
+        },
+        {
+          "label": "mv → mv -i",
+          "cmd": "mv "
+        },
+        {
+          "label": "py → python3",
+          "cmd": "py "
+        },
+        {
+          "label": "pip → pip3",
+          "cmd": "pip "
+        },
+        {
+          "label": "ppy → poetry run python3",
+          "cmd": "ppy "
+        },
+        {
+          "label": "du → ncdu",
+          "cmd": "du"
+        },
+        {
+          "label": "free → free -h",
+          "cmd": "free"
+        },
+        {
+          "label": "ports → ss -tulanp",
+          "cmd": "ports"
+        },
+        {
+          "label": "myip → public IP",
+          "cmd": "myip"
+        },
+        {
+          "label": "top-batch → system snapshot",
+          "cmd": "top-batch"
+        },
+        {
+          "label": "path → PATH lines",
+          "cmd": "path"
+        },
+        {
+          "label": "reload → source config.fish",
+          "cmd": "reload"
+        },
+        {
+          "label": "dtk → tools/dtk.sh",
+          "cmd": "dtk"
+        },
+        {
+          "label": "gdrive → rclone mount",
+          "cmd": "gdrive"
+        },
+        {
+          "label": "welcome → show welcome",
+          "cmd": "welcome"
+        },
+        {
+          "label": "reboot → reboot-with-session",
+          "cmd": "reboot"
+        },
+        {
+          "label": "reboot-fresh → logout+reboot",
+          "cmd": "reboot-fresh"
+        },
+        {
+          "label": "poweroff → logout+shutdown",
+          "cmd": "poweroff"
+        },
+        {
+          "label": "chrome_no_CORS",
+          "cmd": "chrome_no_CORS"
+        },
+        {
+          "label": "fn: ai-cli",
+          "cmd": "ai-cli "
+        },
+        {
+          "label": "fn: cloud-ai-cli",
+          "cmd": "cloud-ai-cli "
+        },
+        {
+          "label": "fn: backup",
+          "cmd": "backup "
+        },
+        {
+          "label": "fn: cpucap",
+          "cmd": "cpucap "
+        },
+        {
+          "label": "fn: duh (dir sizes)",
+          "cmd": "duh"
+        },
+        {
+          "label": "fn: extract <file>",
+          "cmd": "extract "
+        },
+        {
+          "label": "fn: fish-e",
+          "cmd": "fish-e"
+        },
+        {
+          "label": "fn: fish-e-stop",
+          "cmd": "fish-e-stop"
+        },
+        {
+          "label": "fn: gacp (add+commit+push)",
+          "cmd": "gacp "
+        },
+        {
+          "label": "fn: gcam",
+          "cmd": "gcam "
+        },
+        {
+          "label": "fn: gpsh",
+          "cmd": "gpsh"
+        },
+        {
+          "label": "fn: hg (history grep)",
+          "cmd": "hg "
+        },
+        {
+          "label": "fn: hhelp",
+          "cmd": "hhelp"
+        },
+        {
+          "label": "fn: localip",
+          "cmd": "localip"
+        },
+        {
+          "label": "fn: mkcd <dir>",
+          "cmd": "mkcd "
+        },
+        {
+          "label": "fn: mkd <dir>",
+          "cmd": "mkd "
+        },
+        {
+          "label": "fn: myhelp",
+          "cmd": "myhelp"
+        },
+        {
+          "label": "fn: qfind <name>",
+          "cmd": "qfind "
+        },
+        {
+          "label": "fn: serve (http.server)",
+          "cmd": "serve"
+        }
+      ]
+    }
+  ],
+  "home": true,
+  "homepage": true
+}

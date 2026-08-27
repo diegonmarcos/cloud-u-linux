@@ -1,0 +1,83 @@
+{
+  "order": 1,
+  "name": "my-ai",
+  "display_name": "my-AI",
+  "theme": {
+    "accent": "#a29bfe"
+  },
+  "sections": [
+    {
+      "title": "Daemon",
+      "items": [
+        {
+          "label": "Status",
+          "cmd": "systemctl --user status my-ai-usage-daemon --no-pager"
+        },
+        {
+          "label": "Restart",
+          "cmd": "systemctl --user restart my-ai-usage-daemon"
+        },
+        {
+          "label": "Logs (follow)",
+          "cmd": "journalctl --user -u my-ai-usage-daemon -f"
+        },
+        {
+          "label": "Usage JSON",
+          "cmd": "jq . \"$XDG_RUNTIME_DIR/my-ai-usage.json\""
+        }
+      ]
+    },
+    {
+      "title": "Claude",
+      "items": [
+        {
+          "label": "Claude",
+          "cmd": "claude "
+        },
+        {
+          "label": "Sessions",
+          "cmd": "ls -lt ~/.claude/projects"
+        },
+        {
+          "label": "Statusline (render once)",
+          "cmd": "STATUSLINE_RENDER=1 bash ~/.claude/statusline-command.sh < /dev/null"
+        }
+      ]
+    },
+    {
+      "title": "Goose",
+      "items": [
+        {
+          "label": "Goose session",
+          "cmd": "goose session "
+        },
+        {
+          "label": "Goose serve",
+          "cmd": "goose serve "
+        }
+      ]
+    }
+  ],
+  "configs": [
+    {
+      "title": "my-ai (repo)",
+      "paths": [
+        "~/git/cloud-unix/da_my-ai/**/*.nix",
+        "~/git/cloud-unix/da_my-ai/**/*.toml",
+        "~/git/cloud-unix/da_my-ai/**/*.json",
+        "~/git/cloud-unix/da_my-ai/**/*.md",
+        "~/git/cloud-unix/da_my-ai/**/*.lock"
+      ]
+    },
+    {
+      "title": "Claude Code",
+      "paths": [
+        "~/.claude/settings.json",
+        "~/.claude/settings.local.json",
+        "~/.claude/statusline-command.sh",
+        "~/.claude/CLAUDE.md"
+      ]
+    }
+  ],
+  "group": "g1"
+}

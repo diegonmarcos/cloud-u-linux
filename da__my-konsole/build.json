@@ -1,0 +1,48 @@
+{
+  "name": "my-konsole",
+  "description": "my-konsole — Rust (Tauri v2) KDE Konsole alternative: tabbed terminal with a profile top-nav, command search, and per-profile command sections. Own project, cloud-terminal-inspired UI.",
+  "app": {
+    "identifier": "com.diegonmarcos.my-konsole",
+    "product_name": "my-konsole",
+    "wm_class": "com.diegonmarcos.my-konsole",
+    "bin": "my-konsole",
+    "shell": "fish"
+  },
+  "build": {
+    "engine": "cargo tauri build",
+    "bundle": "deb",
+    "remote": true,
+    "_remote_note": "Rust/Tauri compile is heavy — built on GHA (ship-my-konsole-app.yml), published to GH release + GHCR, pulled on the laptop. Never compiled locally (freeze-guard).",
+    "release_tag": "my-konsole-latest",
+    "repo": "diegonmarcos/cloud-unix",
+    "subdir": "da_my-konsole",
+    "vendor": {
+      "@xterm/xterm": "^5",
+      "@xterm/addon-fit": "^0.10",
+      "@xterm/addon-search": "^0.15"
+    },
+    "vendor_map": {
+      "@xterm/xterm/lib/xterm.js": "xterm.js",
+      "@xterm/xterm/css/xterm.css": "xterm.css",
+      "@xterm/addon-fit/lib/addon-fit.js": "xterm-addon-fit.js",
+      "@xterm/addon-search/lib/addon-search.js": "xterm-addon-search.js"
+    }
+  },
+  "runtime": {
+    "store_subdir": ".local/share/my-konsole",
+    "env": {
+      "WEBKIT_DISABLE_COMPOSITING_MODE": "1",
+      "WEBKIT_DISABLE_DMABUF_RENDERER": "1"
+    }
+  },
+  "desktop": {
+    "generic_name": "Terminal",
+    "comment": "Rust KDE Konsole alternative — tabbed terminal, profiles, command sections",
+    "categories": "System;TerminalEmulator;Utility;",
+    "icon_svg": "icon.svg"
+  },
+  "kde": {
+    "set_default_terminal": true,
+    "terminal_service": "com.diegonmarcos.my-konsole.desktop"
+  }
+}

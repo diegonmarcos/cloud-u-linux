@@ -1,0 +1,180 @@
+{
+  "order": 7,
+  "name": "nix-flakes",
+  "menu": "Unix-Infra",
+  "display_name": "Nix Flakes",
+  "theme": {
+    "accent": "#7ebae4"
+  },
+  "sections": [
+    {
+      "title": "NIXOS HOST",
+      "items": [
+        {
+          "label": "switch",
+          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh switch"
+        },
+        {
+          "label": "boot (next reboot)",
+          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh boot"
+        },
+        {
+          "label": "test",
+          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh test"
+        },
+        {
+          "label": "check",
+          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh check"
+        },
+        {
+          "label": "update",
+          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh update"
+        },
+        {
+          "label": "diff",
+          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh diff"
+        }
+      ]
+    },
+    {
+      "title": "DESKTOP HOME-MANAGER",
+      "items": [
+        {
+          "label": "switch",
+          "cmd": "~/git/cloud-unix/ba_flakes_desktop/build.sh switch"
+        },
+        {
+          "label": "build",
+          "cmd": "~/git/cloud-unix/ba_flakes_desktop/build.sh build"
+        },
+        {
+          "label": "pull (GHCR image)",
+          "cmd": "~/git/cloud-unix/ba_flakes_desktop/build.sh pull"
+        }
+      ]
+    },
+    {
+      "title": "TERMUX HOME-MANAGER",
+      "items": [
+        {
+          "label": "build",
+          "cmd": "~/git/cloud-unix/bb_flakes_termux/build.sh build"
+        },
+        {
+          "label": "switch",
+          "cmd": "~/git/cloud-unix/bb_flakes_termux/build.sh switch"
+        }
+      ]
+    },
+    {
+      "title": "BOOTLOADER",
+      "items": [
+        {
+          "label": "deploy (rEFInd/GRUB)",
+          "cmd": "~/git/cloud-unix/aa_bootloader/build.sh deploy"
+        }
+      ]
+    },
+    {
+      "title": "ARTEFACTS",
+      "items": [
+        {
+          "label": "build ISO",
+          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh build iso"
+        },
+        {
+          "label": "build qcow",
+          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh build qcow"
+        },
+        {
+          "label": "build vm",
+          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh build vm"
+        },
+        {
+          "label": "burn USB",
+          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh burn"
+        }
+      ]
+    },
+    {
+      "title": "CLOUD SERVICE FLAKES",
+      "items": [
+        {
+          "label": "ship (cwd service)",
+          "cmd": "./build.sh ship"
+        },
+        {
+          "label": "build (cwd service)",
+          "cmd": "./build.sh build"
+        },
+        {
+          "label": "all (build+secrets)",
+          "cmd": "./build.sh all"
+        }
+      ]
+    },
+    {
+      "title": "GENERIC NIX",
+      "items": [
+        {
+          "label": "flake update",
+          "cmd": "nix flake update"
+        },
+        {
+          "label": "flake check",
+          "cmd": "nix flake check"
+        },
+        {
+          "label": "dev shell",
+          "cmd": "nix develop"
+        },
+        {
+          "label": "store gc",
+          "cmd": "nix store gc"
+        },
+        {
+          "label": "list generations",
+          "cmd": "nix profile history"
+        }
+      ]
+    }
+  ],
+  "configs": [
+    {
+      "title": "NixOS host",
+      "paths": [
+        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/**/*.nix",
+        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/**/*.json",
+        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/**/*.md",
+        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/**/*.lock"
+      ]
+    },
+    {
+      "title": "Desktop flake (Home-Manager)",
+      "paths": [
+        "~/git/cloud-unix/ba_flakes_desktop/**/*.nix",
+        "~/git/cloud-unix/ba_flakes_desktop/**/*.json",
+        "~/git/cloud-unix/ba_flakes_desktop/**/*.md",
+        "~/git/cloud-unix/ba_flakes_desktop/**/*.lock"
+      ]
+    },
+    {
+      "title": "Termux flake (Home-Manager)",
+      "paths": [
+        "~/git/cloud-unix/bb_flakes_termux/**/*.nix",
+        "~/git/cloud-unix/bb_flakes_termux/**/*.json",
+        "~/git/cloud-unix/bb_flakes_termux/**/*.md",
+        "~/git/cloud-unix/bb_flakes_termux/**/*.lock"
+      ]
+    },
+    {
+      "title": "Bootloader",
+      "paths": [
+        "~/git/cloud-unix/aa_bootloader/**/*.nix",
+        "~/git/cloud-unix/aa_bootloader/**/*.json",
+        "~/git/cloud-unix/aa_bootloader/**/*.md"
+      ]
+    }
+  ],
+  "group": "g3"
+}

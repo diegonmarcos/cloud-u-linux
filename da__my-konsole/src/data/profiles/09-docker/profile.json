@@ -1,0 +1,39 @@
+{
+  "order": 8,
+  "name": "docker",
+  "menu": "Unix-Infra",
+  "display_name": "Containers",
+  "theme": {
+    "accent": "#2496ed"
+  },
+  "sections": [
+    {
+      "title": "Docker",
+      "items": [
+        {
+          "label": "Status",
+          "cmd": "systemctl status docker.service --no-pager | head -30"
+        },
+        {
+          "label": "Containers",
+          "cmd": "docker ps -a"
+        },
+        {
+          "label": "Live stats",
+          "cmd": "docker stats"
+        },
+        {
+          "label": "RESET daemon",
+          "cmd": "sudo systemctl restart docker.service"
+        }
+      ]
+    }
+  ],
+  "configs": [
+    {
+      "title": "Docker daemon (NixOS module)",
+      "paths": ["~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/src/modules/docker-daemon*.nix", "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/src/modules/configuration_containers.nix"]
+    }
+  ],
+  "group": "g3"
+}

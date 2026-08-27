@@ -1,0 +1,150 @@
+{
+  "order": 15,
+  "name": "watchdog",
+  "menu": "Unix-Dev",
+  "display_name": "Watchdog",
+  "theme": {
+    "accent": "#c0392b"
+  },
+  "sections": [
+    {
+      "title": "SLICES — live",
+      "items": [
+        {
+          "label": "user slice: used / max",
+          "cmd": "for f in memory.current memory.high memory.max; do printf \"%-16s %s\\n\" $f \"$(cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/$f 2>/dev/null)\"; done"
+        },
+        {
+          "label": "user slice: pressure",
+          "cmd": "cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/memory.pressure /sys/fs/cgroup/user.slice/user-$(id -u).slice/cpu.pressure"
+        },
+        {
+          "label": "user slice: oom events",
+          "cmd": "cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/memory.events"
+        },
+        {
+          "label": "top cgroups by memory",
+          "cmd": "systemd-cgtop -m --iterations=1 -n1"
+        },
+        {
+          "label": "top cgroups by cpu (live)",
+          "cmd": "systemd-cgtop"
+        },
+        {
+          "label": "every slice: current vs max",
+          "cmd": "find /sys/fs/cgroup -maxdepth 3 -name memory.current 2>/dev/null | while read -r f; do d=$(dirname \"$f\"); m=$(cat \"$d/memory.max\" 2>/dev/null); c=$(cat \"$f\"); [ \"$c\" -gt 104857600 ] && printf \"%8.0fM / %-10s %s\\n\" \"$(echo $c | awk \"{print \\$1/1048576}\")\" \"$m\" \"${d#/sys/fs/cgroup/}\"; done | sort -rn"
+        },
+        {
+          "label": "who is biggest right now",
+          "cmd": "ps -eo rss,pid,comm --sort=-rss | head -15"
+        }
+      ]
+    },
+    {
+      "title": "OOM — who died",
+      "items": [
+        {
+          "label": "oom kills (this boot)",
+          "cmd": "journalctl -b --no-pager | grep -i \"killed process\""
+        },
+        {
+          "label": "oomd decisions",
+          "cmd": "journalctl -u systemd-oomd -b --no-pager | tail -40"
+        },
+        {
+          "label": "oomd config",
+          "cmd": "systemd-analyze cat-config systemd/oomd.conf"
+        },
+        {
+          "label": "units stopped by oomd",
+          "cmd": "journalctl -b --no-pager | grep -iE \"oomd|oom-kill|Killed process\" | tail -30"
+        }
+      ]
+    },
+    {
+      "title": "Status",
+      "items": [
+        {
+          "label": "Status / PSI",
+          "cmd": "watchdog-status"
+        },
+        {
+          "label": "🔴 Trigger OOM (Alt+SysRq+F)",
+          "cmd": "watchdog-oom"
+        },
+        {
+          "label": "Watch guard logs",
+          "cmd": "watchdog-logs"
+        }
+      ]
+    },
+    {
+      "title": "Units",
+      "items": [
+        {
+          "label": "freeze-guard",
+          "cmd": "journalctl -u freeze-guard.service -f"
+        },
+        {
+          "label": "disk-watchdog-v2",
+          "cmd": "journalctl -u disk-watchdog-v2.service -f"
+        },
+        {
+          "label": "battery-watchdog",
+          "cmd": "journalctl -u battery-watchdog.service -f"
+        },
+        {
+          "label": "systemd-oomd",
+          "cmd": "journalctl -u systemd-oomd.service -f"
+        }
+      ]
+    },
+    {
+      "title": "Nix Daemon",
+      "items": [
+        {
+          "label": "status",
+          "cmd": "systemctl status nix-daemon.service --no-pager | head -30"
+        },
+        {
+          "label": "RESET (restart)",
+          "cmd": "sudo systemctl restart nix-daemon.service"
+        }
+      ]
+    }
+  ],
+  "secondary": true,
+  "configs": [
+    {
+      "title": "Slice + OOM policy",
+      "paths": [
+        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/src/modules/configuration_system-protection*.nix",
+        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/src/modules/configuration_observability.nix",
+        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/src/modules/docker-daemon-resources.nix"
+      ]
+    },
+    {
+      "title": "Desktop-session guards",
+      "paths": [
+        "~/git/cloud-unix/ba_flakes_desktop/src/modules/desktop-session/*.nix",
+        "~/git/cloud-unix/ba_flakes_desktop/src/modules/programs/hm-auto-update.nix"
+      ]
+    },
+    {
+      "title": "Per-unit caps",
+      "paths": [
+        "~/git/cloud-unix/ba_flakes_desktop/src/app_especific/my-ai/claude-superset.nix",
+        "~/git/cloud-unix/ba_flakes_desktop/src/modules/wireguard-wstunnel.nix"
+      ]
+    },
+    {
+      "title": "Live cgroup + oomd",
+      "paths": [
+        "/etc/systemd/oomd.conf",
+        "/etc/systemd/system.conf",
+        "/etc/systemd/user.conf"
+      ]
+    }
+  ],
+  "group": "g3"
+}

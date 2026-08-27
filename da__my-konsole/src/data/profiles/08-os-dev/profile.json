@@ -1,0 +1,230 @@
+{
+  "order": 13,
+  "name": "os-dev",
+  "menu": "Unix-Dev",
+  "display_name": "OS Dev",
+  "theme": {
+    "accent": "#e67e22"
+  },
+  "sections": [
+    {
+      "title": "Nix — ephemeral tools",
+      "items": [
+        {
+          "label": "Search nixpkgs",
+          "cmd": "nix search nixpkgs "
+        },
+        {
+          "label": "Run a tool once",
+          "cmd": "nix run nixpkgs#PKG -- --help"
+        },
+        {
+          "label": "Shell with tools",
+          "cmd": "nix shell nixpkgs#PKG1 nixpkgs#PKG2"
+        },
+        {
+          "label": "Dev shell (flake)",
+          "cmd": "nix develop"
+        },
+        {
+          "label": "Store GC",
+          "cmd": "nix store gc"
+        },
+        {
+          "label": "Why depends",
+          "cmd": "nix why-depends /run/current-system nixpkgs#PKG"
+        },
+        {
+          "label": "Path info (closure size)",
+          "cmd": "nix path-info -Sh /run/current-system"
+        }
+      ]
+    },
+    {
+      "title": "NixOS system (via engines)",
+      "items": [
+        {
+          "label": "Host: test (dry)",
+          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh test"
+        },
+        {
+          "label": "Host: switch",
+          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh switch"
+        },
+        {
+          "label": "List generations",
+          "cmd": "nix profile history --profile /nix/var/nix/profiles/system"
+        },
+        {
+          "label": "Current system pkgs",
+          "cmd": "ls -l /run/current-system/sw/bin | wc -l"
+        }
+      ]
+    },
+    {
+      "title": "System debug",
+      "items": [
+        {
+          "label": "Journal (errors, boot)",
+          "cmd": "journalctl -b -p err --no-pager"
+        },
+        {
+          "label": "Journal follow",
+          "cmd": "journalctl -f"
+        },
+        {
+          "label": "Failed units",
+          "cmd": "systemctl --failed"
+        },
+        {
+          "label": "Unit status",
+          "cmd": "systemctl status UNIT"
+        },
+        {
+          "label": "Boot blame",
+          "cmd": "systemd-analyze blame | head -30"
+        },
+        {
+          "label": "Critical chain",
+          "cmd": "systemd-analyze critical-chain"
+        },
+        {
+          "label": "dmesg follow",
+          "cmd": "sudo dmesg -wH"
+        }
+      ]
+    },
+    {
+      "title": "Trace / inspect a process",
+      "items": [
+        {
+          "label": "strace a command",
+          "cmd": "strace -f -e trace=file CMD"
+        },
+        {
+          "label": "ltrace a command",
+          "cmd": "ltrace CMD"
+        },
+        {
+          "label": "gdb attach",
+          "cmd": "sudo gdb -p PID"
+        },
+        {
+          "label": "Open files (lsof)",
+          "cmd": "lsof -p PID"
+        },
+        {
+          "label": "Shared libs (ldd)",
+          "cmd": "ldd $(command -v BIN)"
+        },
+        {
+          "label": "What owns a port",
+          "cmd": "sudo ss -ltnp | grep :PORT"
+        },
+        {
+          "label": "Live top (btop)",
+          "cmd": "btop"
+        }
+      ]
+    },
+    {
+      "title": "Boot / kernel",
+      "items": [
+        {
+          "label": "Kernel cmdline",
+          "cmd": "cat /proc/cmdline"
+        },
+        {
+          "label": "Loaded modules",
+          "cmd": "lsmod | head -40"
+        },
+        {
+          "label": "Module info",
+          "cmd": "modinfo MODULE"
+        },
+        {
+          "label": "Kernel version",
+          "cmd": "uname -a"
+        },
+        {
+          "label": "Boot entries (rEFInd)",
+          "cmd": "~/git/cloud-unix/aa_bootloader/build.sh info"
+        },
+        {
+          "label": "EFI vars / boot order",
+          "cmd": "efibootmgr -v"
+        }
+      ]
+    },
+    {
+      "title": "Hardware",
+      "items": [
+        {
+          "label": "PCI devices",
+          "cmd": "lspci -nnk"
+        },
+        {
+          "label": "USB devices",
+          "cmd": "lsusb -t"
+        },
+        {
+          "label": "Full hardware (inxi)",
+          "cmd": "inxi -Fxxxz"
+        },
+        {
+          "label": "Sensors",
+          "cmd": "sensors"
+        },
+        {
+          "label": "Block devices",
+          "cmd": "lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT,MODEL"
+        }
+      ]
+    },
+    {
+      "title": "Debian/Kali rescue (apt)",
+      "items": [
+        {
+          "label": "Update index",
+          "cmd": "sudo apt update"
+        },
+        {
+          "label": "Search pkg",
+          "cmd": "apt search "
+        },
+        {
+          "label": "Install pkg",
+          "cmd": "sudo apt install -y PKG"
+        },
+        {
+          "label": "What provides file",
+          "cmd": "dpkg -S /path/to/file"
+        },
+        {
+          "label": "List installed",
+          "cmd": "dpkg -l | less"
+        }
+      ]
+    }
+  ],
+  "configs": [
+    {
+      "title": "NixOS host",
+      "paths": [
+        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/**/*.nix",
+        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/**/*.json",
+        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/**/*.md",
+        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/**/*.lock"
+      ]
+    },
+    {
+      "title": "Bootloader",
+      "paths": [
+        "~/git/cloud-unix/aa_bootloader/**/*.nix",
+        "~/git/cloud-unix/aa_bootloader/**/*.json",
+        "~/git/cloud-unix/aa_bootloader/**/*.md"
+      ]
+    }
+  ],
+  "group": "g3"
+}

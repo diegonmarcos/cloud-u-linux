@@ -1,0 +1,227 @@
+{
+  "order": 3,
+  "name": "cloud-infra",
+  "menu": "Cloud",
+  "display_name": "Cloud Infra",
+  "theme": {
+    "accent": "#1d99f3"
+  },
+  "sections": [
+    {
+      "title": "OCI-MAIL (10.0.0.3)",
+      "items": [
+        {
+          "label": "docker ps",
+          "cmd": "ssh oci-mail docker ps"
+        },
+        {
+          "label": "docker stats",
+          "cmd": "ssh oci-mail docker stats"
+        },
+        {
+          "label": "htop",
+          "cmd": "ssh -t oci-mail htop"
+        },
+        {
+          "label": "journal -f",
+          "cmd": "ssh oci-mail journalctl -f"
+        },
+        {
+          "label": "systemctl status",
+          "cmd": "ssh oci-mail systemctl status"
+        },
+        {
+          "label": "oci start",
+          "cmd": "bash ~/git/cloud-mykonsole-dtk/dtk.sh fleet.oci-mail"
+        }
+      ]
+    },
+    {
+      "title": "OCI-ANALYTICS (10.0.0.4)",
+      "items": [
+        {
+          "label": "docker ps",
+          "cmd": "ssh oci-analytics docker ps"
+        },
+        {
+          "label": "docker stats",
+          "cmd": "ssh oci-analytics docker stats"
+        },
+        {
+          "label": "htop",
+          "cmd": "ssh -t oci-analytics htop"
+        },
+        {
+          "label": "journal -f",
+          "cmd": "ssh oci-analytics journalctl -f"
+        },
+        {
+          "label": "caddy logs",
+          "cmd": "ssh oci-analytics docker logs -f --tail 50 caddy"
+        }
+      ]
+    },
+    {
+      "title": "OCI-APPS (10.0.0.6)",
+      "items": [
+        {
+          "label": "docker ps",
+          "cmd": "ssh oci-apps docker ps"
+        },
+        {
+          "label": "docker stats",
+          "cmd": "ssh oci-apps docker stats"
+        },
+        {
+          "label": "htop",
+          "cmd": "ssh -t oci-apps htop"
+        },
+        {
+          "label": "journal errors",
+          "cmd": "ssh oci-apps journalctl -b -p err --no-pager -n 40"
+        },
+        {
+          "label": "disk usage",
+          "cmd": "ssh oci-apps df -h"
+        }
+      ]
+    },
+    {
+      "title": "GCP-PROXY (10.0.0.1)",
+      "items": [
+        {
+          "label": "docker ps",
+          "cmd": "ssh gcp-proxy docker ps"
+        },
+        {
+          "label": "caddy logs",
+          "cmd": "ssh gcp-proxy docker logs -f --tail 50 caddy"
+        },
+        {
+          "label": "authelia logs",
+          "cmd": "ssh gcp-proxy docker logs -f --tail 50 authelia"
+        },
+        {
+          "label": "wg status",
+          "cmd": "ssh gcp-proxy wg show"
+        },
+        {
+          "label": "htop",
+          "cmd": "ssh -t gcp-proxy htop"
+        }
+      ]
+    },
+    {
+      "title": "BUILD / SHIP",
+      "items": [
+        {
+          "label": "ship service (cwd)",
+          "cmd": "./build.sh ship"
+        },
+        {
+          "label": "build only",
+          "cmd": "./build.sh build"
+        },
+        {
+          "label": "secrets",
+          "cmd": "./build.sh secrets"
+        },
+        {
+          "label": "deploy",
+          "cmd": "./build.sh deploy"
+        },
+        {
+          "label": "compose up",
+          "cmd": "./build.sh compose"
+        },
+        {
+          "label": "clean",
+          "cmd": "./build.sh clean"
+        }
+      ]
+    },
+    {
+      "title": "VPS",
+      "items": [
+        {
+          "label": "oci — list instances",
+          "cmd": "oci compute instance list --output table"
+        },
+        {
+          "label": "oci — vnic/IP list",
+          "cmd": "bash ~/git/cloud-mykonsole-dtk/dtk.sh fleet.vps-cloud"
+        },
+        {
+          "label": "gcloud — list instances",
+          "cmd": "gcloud compute instances list"
+        },
+        {
+          "label": "gcloud — billing",
+          "cmd": "gcloud billing accounts list"
+        }
+      ]
+    },
+    {
+      "title": "CLOUDFLARE",
+      "items": [
+        {
+          "label": "cloudflared tunnel list",
+          "cmd": "cloudflared tunnel list"
+        },
+        {
+          "label": "cloudflared status",
+          "cmd": "cloudflared tunnel info"
+        },
+        {
+          "label": "dig wildcard DNS",
+          "cmd": "dig +short proxy.diegonmarcos.com"
+        }
+      ]
+    },
+    {
+      "title": "GCLOUD",
+      "items": [
+        {
+          "label": "auth login",
+          "cmd": "gcloud auth login"
+        },
+        {
+          "label": "auth list",
+          "cmd": "gcloud auth list"
+        },
+        {
+          "label": "config list",
+          "cmd": "gcloud config list"
+        }
+      ]
+    },
+    {
+      "title": "GH CLI",
+      "items": [
+        {
+          "label": "auth status",
+          "cmd": "gh auth status"
+        },
+        {
+          "label": "runs (cloud)",
+          "cmd": "gh run list -R diegonmarcos/cloud-infra -L 15"
+        },
+        {
+          "label": "runs (unix)",
+          "cmd": "gh run list -R diegonmarcos/cloud-unix -L 15"
+        },
+        {
+          "label": "watch latest run",
+          "cmd": "gh run watch"
+        }
+      ]
+    }
+  ],
+  "configs": [
+    {
+      "title": "Cloud hub config",
+      "paths": ["~/git/cloud-infra/config.json", "~/git/cloud-infra/git.yaml", "~/git/cloud-infra/2_configs/build.json", "~/git/cloud-infra/2_configs/manifest.json"]
+    }
+  ],
+  "group": "g2"
+}

@@ -1,0 +1,48 @@
+{
+  "order": 9,
+  "name": "web-server",
+  "display_name": "WebServer",
+  "menu": "Unix-Infra",
+  "theme": { "accent": "#00b894" },
+  "_doc": "my-webserver — the file server home-manager deploys (ba_flakes_desktop/src/modules/my-webserver/default.nix): a POSIX wrapper at ~/.local/bin/my-webserver around a prebuilt, per-arch Node SEA binary fetched from the rolling GitHub Release (<port> <dir> args), plus a systemd --user unit that wants the same :8000. The unit ships disabled and the wrapper is what actually runs, so these bookmarks drive the wrapper and keep the unit's state one click away — when the two do fight over the port, that has to be visible rather than a mystery. Source now lives in da_my-webserver/.",
+  "sections": [
+    {
+      "title": "SERVER",
+      "items": [
+        { "label": "status", "cmd": "my-webserver status" },
+        { "label": "start", "cmd": "my-webserver start" },
+        { "label": "stop", "cmd": "my-webserver stop" },
+        { "label": "restart", "cmd": "my-webserver restart" },
+        { "label": "open in browser", "cmd": "xdg-open http://127.0.0.1:8000" }
+      ]
+    },
+    {
+      "title": "SERVE A ROOT",
+      "items": [
+        { "label": "$HOME (default)", "cmd": "my-webserver restart 8000 $HOME" },
+        { "label": "~/git/cloud-unix", "cmd": "my-webserver restart 8000 $HOME/git/cloud-unix" },
+        { "label": "~/git/cloud-infra", "cmd": "my-webserver restart 8000 $HOME/git/cloud-infra" },
+        { "label": "~/git/front", "cmd": "my-webserver restart 8000 $HOME/git/front" },
+        { "label": "custom port + dir", "cmd": "my-webserver restart " }
+      ]
+    },
+    {
+      "title": "DIAGNOSE",
+      "items": [
+        { "label": "who holds :8000", "cmd": "ss -tulpn | grep :8000" },
+        { "label": "server process", "cmd": "ps -eo pid,etime,rss,args | grep '[m]y-webserver'" },
+        { "label": "pid file", "cmd": "cat ~/.cache/my-webserver.pid" },
+        { "label": "run in foreground (logs)", "cmd": "my-webserver stop; $(grep -oP '(?<=SERVER=\")[^\"]+' ~/.local/bin/my-webserver) 8001 $HOME" }
+      ]
+    },
+    {
+      "title": "SYSTEMD UNIT",
+      "items": [
+        { "label": "unit status", "cmd": "systemctl --user status my-webserver.service --no-pager" },
+        { "label": "unit logs", "cmd": "journalctl --user -u my-webserver.service -n 200 --no-pager" },
+        { "label": "unit enabled?", "cmd": "systemctl --user is-enabled my-webserver.service" }
+      ]
+    }
+  ],
+  "group": "g3"
+}

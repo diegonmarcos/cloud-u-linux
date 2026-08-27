@@ -1,0 +1,351 @@
+{
+  "_doc": "my-konsole IS the systray daemon for its OWN trays. The watchdog tray is NOT here any more: my-watchdog is a separate product and ships its own StatusNotifierItem, so a machine that runs only the sampler still gets a tray and a machine running both does not get two. Each entry here becomes a real StatusNotifierItem tray icon, created natively by src-tauri/src/main.rs's setup_systrays() (Tauri's tray-icon feature) when my-konsole runs with --tray-daemon. `menu` items shell-exec `command` on click. `profile` names the my-konsole profile this tray's content mirrors (for the future --initial-profile jump-to-tab support — see _TODO). build.sh install copies this file to ~/.local/share/my-konsole/systrays.json and installs+starts a systemd --user service running `my-konsole --tray-daemon` (Restart=always) — no nix module, no separate python/GTK process. Icons are the SVGs in configs/systray-icons/ — `icon` is that basename; they are rasterised at load, so every tray has its OWN icon (they all shared the app icon before).",
+  "_TODO": "my-konsole has no CLI/env initial-profile support yet — `profile` here is documentation only until that lands.",
+  "trays": [
+    {
+      "id": "nix-flakes-systray",
+      "icon": "nix-flakes",
+      "title": "Nix Flakes",
+      "profile": "nix-flakes",
+      "enable": true,
+      "default_command": "konsole --hold -e bash -lc '$HOME/git/cloud-unix/ba_flakes_desktop/build.sh status'",
+      "menu": [
+        {
+          "label": "Switch (pull latest, isolated)",
+          "command": "konsole --hold -e bash -lc '$HOME/git/cloud-unix/ba_flakes_desktop/build.sh switch'"
+        },
+        {
+          "label": "Generations",
+          "command": "konsole --hold -e bash -lc 'home-manager generations; read'"
+        },
+        {
+          "label": "Status",
+          "command": "konsole --hold -e bash -lc '$HOME/git/cloud-unix/ba_flakes_desktop/build.sh status; read'"
+        },
+        {
+          "label": "Nix Daemon: status",
+          "command": "konsole --hold -e bash -lc 'systemctl status nix-daemon.service --no-pager | head -30'"
+        },
+        {
+          "label": "Nix Daemon: RESET (restart)",
+          "command": "bash -lc 'sudo systemctl restart nix-daemon.service && notify-send \"NixOS\" \"nix-daemon reset\"'"
+        }
+      ]
+    },
+    {
+      "id": "docker-systray",
+      "icon": "docker",
+      "title": "Docker",
+      "profile": "docker",
+      "enable": true,
+      "default_command": "konsole --hold -e bash -lc 'docker ps -a; read'",
+      "menu": [
+        {
+          "label": "Status",
+          "command": "konsole --hold -e bash -lc 'systemctl status docker.service --no-pager | head -30'"
+        },
+        {
+          "label": "Containers",
+          "command": "konsole --hold -e bash -lc 'docker ps -a; read'"
+        },
+        {
+          "label": "Live stats",
+          "command": "konsole --hold -e bash -lc 'docker stats'"
+        },
+        {
+          "label": "RESET daemon",
+          "command": "bash -lc 'sudo systemctl restart docker.service && notify-send \"Docker\" \"docker daemon reset\"'"
+        }
+      ]
+    },
+    {
+      "id": "cloud-systray",
+      "icon": "cloud",
+      "title": "Cloud — Mesh VPN / VMs",
+      "profile": "ssh-manager",
+      "enable": true,
+      "default_command": "konsole --hold -e bash -lc 'sudo wg-tunnel status; echo; sudo wg show; read'",
+      "menu": [
+        {
+          "label": "Tunnel  —  split / full",
+          "submenu": [
+            {
+              "label": "Tunnel: status (split/full per iface)",
+              "command": "konsole --hold -e bash -lc 'sudo wg-tunnel status; read'"
+            },
+            {
+              "label": "Tunnel: status JSON",
+              "command": "konsole --hold -e bash -lc 'sudo wg-tunnel json | jq .; read'"
+            },
+            {
+              "label": "Tunnel: TOGGLE wg0  (split <-> full)",
+              "command": "sudo wg-tunnel toggle wg0 && notify-send \"wg0 tunnel\" \"$(sudo wg-tunnel status | head -1)\""
+            },
+            {
+              "label": "Tunnel: TOGGLE wg-public  (split <-> full)",
+              "command": "sudo wg-tunnel toggle wg-public && notify-send \"wg-public tunnel\" \"$(sudo wg-tunnel status | tail -1)\""
+            },
+            {
+              "label": "Tunnel: wg0 -> FULL (all traffic via hub; IPv4 only)",
+              "command": "sudo wg-tunnel full wg0 && notify-send \"wg0\" \"full tunnel\""
+            },
+            {
+              "label": "Tunnel: wg0 -> SPLIT (mesh only)",
+              "command": "sudo wg-tunnel split wg0 && notify-send \"wg0\" \"split tunnel\""
+            },
+            {
+              "label": "Tunnel: wg-public -> FULL",
+              "command": "sudo wg-tunnel full wg-public && notify-send \"wg-public\" \"full tunnel\""
+            },
+            {
+              "label": "Tunnel: wg-public -> SPLIT",
+              "command": "sudo wg-tunnel split wg-public && notify-send \"wg-public\" \"split tunnel\""
+            }
+          ]
+        },
+        {
+          "label": "Mesh  —  state",
+          "submenu": [
+            {
+              "label": "Mesh: peers (wg show)",
+              "command": "konsole --hold -e bash -lc 'sudo wg show; read'"
+            },
+            {
+              "label": "Mesh: handshakes + transfer",
+              "command": "konsole --hold -e bash -lc 'for i in wg0 wg-public; do echo \"== $i\"; sudo wg show $i latest-handshakes; sudo wg show $i transfer; done; read'"
+            },
+            {
+              "label": "Mesh: addresses (v4 + v6)",
+              "command": "konsole --hold -e bash -lc 'ip -brief addr show wg0; ip -brief addr show wg-public; read'"
+            },
+            {
+              "label": "Mesh: routes (v4)",
+              "command": "konsole --hold -e bash -lc 'ip route show table all | grep -E \"wg0|wg-public|^default\"; read'"
+            },
+            {
+              "label": "Mesh: routes (v6)",
+              "command": "konsole --hold -e bash -lc 'ip -6 route show table all | grep -E \"wg0|wg-public|^default\"; read'"
+            },
+            {
+              "label": "Mesh: endpoints (hub IP:port)",
+              "command": "konsole --hold -e bash -lc 'sudo wg show wg0 endpoints; sudo wg show wg-public endpoints; read'"
+            }
+          ]
+        },
+        {
+          "label": "Check  —  connectivity",
+          "submenu": [
+            {
+              "label": "Check: ping hubs (IPv4)",
+              "command": "konsole --hold -e bash -lc 'ping -c3 10.0.0.1; echo; ping -c3 10.1.0.1; read'"
+            },
+            {
+              "label": "Check: ping hubs (IPv6 ULA)",
+              "command": "konsole --hold -e bash -lc 'ping -c3 fd0c:1d00::1; echo; ping -c3 fd0c:1d01::1; read'"
+            },
+            {
+              "label": "Check: public egress IP (who am I)",
+              "command": "konsole --hold -e bash -lc 'echo \"v4: $(curl -s -4 -m 8 ifconfig.co || echo none)\"; echo \"v6: $(curl -s -6 -m 8 ifconfig.co || echo none)\"; read'"
+            },
+            {
+              "label": "Check: mesh DNS A + AAAA",
+              "command": "konsole --hold -e bash -lc 'for n in diegonmarcos.com auth.diegonmarcos.com maddy.app; do echo \"== $n\"; dig +short $n A; dig +short $n AAAA; done; read'"
+            },
+            {
+              "label": "Check: which stack does a name use?",
+              "command": "konsole --hold -e bash -lc 'getent ahosts diegonmarcos.com; echo; echo \"(::ffff:x = IPv4-mapped, fd0c: = mesh IPv6)\"; read'"
+            }
+          ]
+        },
+        {
+          "label": "NetworkManager  —  profiles",
+          "submenu": [
+            {
+              "label": "NM: active connections",
+              "command": "konsole --hold -e bash -lc 'nmcli -f NAME,DEVICE,TYPE,STATE connection show --active; read'"
+            },
+            {
+              "label": "NM: wireguard profiles",
+              "command": "konsole --hold -e bash -lc 'nmcli -f NAME,UUID,TYPE,AUTOCONNECT connection show | grep -iE \"wireguard|wg\"; read'"
+            },
+            {
+              "label": "NM: restart wg0",
+              "command": "sudo nmcli connection down wg0; sudo nmcli connection up wg0"
+            },
+            {
+              "label": "NM: restart wg-public",
+              "command": "sudo nmcli connection down wg-public; sudo nmcli connection up wg-public"
+            },
+            {
+              "label": "WG: endpoint primary/fallback",
+              "command": "konsole --hold -e bash -lc 'wg-fallback status; read'"
+            }
+          ]
+        },
+        {
+          "label": "VMs  —  ssh",
+          "submenu": [
+            {
+              "label": "VM: SSH gcp-proxy (10.0.0.1 / fd0c:1d00::1)",
+              "command": "konsole -e ssh gcp-proxy"
+            },
+            {
+              "label": "VM: SSH oci-mail (10.0.0.3 / fd0c:1d00::3)",
+              "command": "konsole -e ssh oci-mail"
+            },
+            {
+              "label": "VM: SSH oci-analytics (10.0.0.4 / fd0c:1d00::4)",
+              "command": "konsole -e ssh oci-analytics"
+            },
+            {
+              "label": "VM: SSH oci-apps (10.0.0.6 / fd0c:1d00::6)",
+              "command": "konsole -e ssh oci-apps"
+            },
+            {
+              "label": "VM: SSH gcp-t4 (10.0.0.8)",
+              "command": "konsole -e ssh gcp-t4"
+            }
+          ]
+        },
+        {
+          "label": "Containers",
+          "submenu": [
+            {
+              "label": "Containers: all peers (docker ps -a)",
+              "command": "konsole --hold -e bash -lc 'docker ps -a; read'"
+            },
+            {
+              "label": "Containers: live stats",
+              "command": "konsole --hold -e bash -lc 'docker stats'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vault-systray",
+      "icon": "vault",
+      "title": "Vault",
+      "profile": "vault",
+      "enable": true,
+      "default_command": "konsole --hold -e bash -lc '$HOME/git/cloud-vault/build.sh status; read'",
+      "menu": [
+        {
+          "label": "Status",
+          "command": "konsole --hold -e bash -lc '$HOME/git/cloud-vault/build.sh status; read'"
+        },
+        {
+          "label": "Open in file manager",
+          "command": "dolphin $HOME/git/cloud-vault"
+        },
+        {
+          "label": "Edit secrets (sops)",
+          "command": "konsole --hold -e sops $HOME/git/cloud-unix/ba_flakes_desktop/src/secrets/secrets.yaml"
+        },
+        {
+          "label": "List secret keys (no values)",
+          "command": "konsole --hold -e bash -lc 'sops -d --output-type json $HOME/git/cloud-unix/ba_flakes_desktop/src/secrets/secrets.yaml | jq keys; read'"
+        }
+      ]
+    },
+    {
+      "id": "workflow-systray",
+      "icon": "workflow",
+      "title": "Workflow — GHA / Dagu",
+      "profile": "cloud-infra",
+      "enable": true,
+      "default_command": "konsole --hold -e bash -lc 'gh run list -R diegonmarcos/cloud-unix -L 15; read'",
+      "menu": [
+        {
+          "label": "GHA: recent runs (unix)",
+          "command": "konsole --hold -e bash -lc 'gh run list -R diegonmarcos/cloud-unix -L 15; read'"
+        },
+        {
+          "label": "GHA: recent runs (cloud)",
+          "command": "konsole --hold -e bash -lc 'gh run list -R diegonmarcos/cloud-infra -L 15; read'"
+        },
+        {
+          "label": "GHA: watch latest run",
+          "command": "konsole -e gh run watch"
+        },
+        {
+          "label": "GHA: auth status",
+          "command": "konsole --hold -e bash -lc 'gh auth status; read'"
+        }
+      ]
+    },
+    {
+      "id": "my-ai-systray",
+      "icon": "my-ai",
+      "title": "my-AI — usage daemon",
+      "profile": "my-ai",
+      "enable": true,
+      "default_command": "konsole --hold -e bash -lc \"systemctl --user status my-ai-usage-daemon --no-pager; read\"",
+      "menu": [
+        {
+          "label": "Daemon: status",
+          "command": "konsole --hold -e bash -lc \"systemctl --user status my-ai-usage-daemon --no-pager; read\""
+        },
+        {
+          "label": "Daemon: restart",
+          "command": "bash -lc \"systemctl --user restart my-ai-usage-daemon && notify-send my-AI \\\"usage daemon restarted\\\"\""
+        },
+        {
+          "label": "Daemon: logs",
+          "command": "konsole --hold -e bash -lc \"journalctl --user -u my-ai-usage-daemon -n 200 --no-pager; read\""
+        },
+        {
+          "label": "Usage JSON",
+          "command": "konsole --hold -e bash -lc \"jq . \\\"$XDG_RUNTIME_DIR/my-ai-usage.json\\\"; read\""
+        },
+        {
+          "label": "Statusline (render once)",
+          "command": "konsole --hold -e bash -lc \"STATUSLINE_RENDER=1 bash ~/.claude/statusline-command.sh </dev/null; echo; read\""
+        }
+      ]
+    },
+    {
+      "id": "my-webserver-systray",
+      "icon": "my-webserver",
+      "title": "my-webserver — local file server",
+      "profile": "my-webserver",
+      "enable": true,
+      "default_command": "konsole --hold -e bash -lc \"my-webserver status; read\"",
+      "_doc": "my-webserver is deployed by home-manager (ba_flakes_desktop/src/modules/my-webserver/default.nix) as BOTH a PID-file wrapper (~/.local/bin/my-webserver) and a systemd --user unit, which both want :8000. This menu drives the wrapper, because that is the one actually running today (the unit ships disabled), and shows the unit state next to it so the split is visible rather than a mystery when the two fight over the port.",
+      "menu": [
+        {
+          "label": "Status",
+          "command": "konsole --hold -e bash -lc \"my-webserver status; read\""
+        },
+        {
+          "label": "Start",
+          "command": "bash -lc \"my-webserver start && notify-send my-webserver \\\"serving :8000\\\"\""
+        },
+        {
+          "label": "Stop",
+          "command": "bash -lc \"my-webserver stop && notify-send my-webserver stopped\""
+        },
+        {
+          "label": "Restart",
+          "command": "bash -lc \"my-webserver restart && notify-send my-webserver restarted\""
+        },
+        {
+          "label": "Open http://127.0.0.1:8000",
+          "command": "xdg-open http://127.0.0.1:8000"
+        },
+        {
+          "label": "Who holds :8000",
+          "command": "konsole --hold -e bash -lc \"ss -tulpn | grep :8000 || echo \\\"nothing listening on 8000\\\"; read\""
+        },
+        {
+          "label": "systemd unit: status",
+          "command": "konsole --hold -e bash -lc \"systemctl --user status my-webserver.service --no-pager; read\""
+        },
+        {
+          "label": "systemd unit: logs",
+          "command": "konsole --hold -e bash -lc \"journalctl --user -u my-webserver.service -n 200 --no-pager; read\""
+        }
+      ]
+    }
+  ]
+}
