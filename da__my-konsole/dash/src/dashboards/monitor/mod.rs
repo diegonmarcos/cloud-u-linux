@@ -76,14 +76,14 @@ use view::fmt::{
 
 
 
-/// Which modal owns the keyboard. btop's Esc opens a menu rather than quitting,
-/// and every modal here closes back to None — so Esc is never a way out of the
-/// program, which is the whole point of ^c/^d being the only exit.
-#[derive(Clone, Copy, PartialEq, Debug)]
 /// One row of the compose table: project, service, container, state, file,
 /// and whether compose itself labelled it.
 type CmpRow = (String, String, String, String, String, bool);
 
+/// Which modal owns the keyboard. btop's Esc opens a menu rather than quitting,
+/// and every modal here closes back to None — so Esc is never a way out of the
+/// program, which is the whole point of ^c/^d being the only exit.
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum Overlay {
     None,
     Menu,
