@@ -2,7 +2,7 @@
   "bookmarks": [
     {
       "name": "bookmarks",
-      "url": "file:///home/diego/.config/qutebrowser/qute-bookmarks.html"
+      "url": "file:///home/diego/.config/my-browser-qute/qute-bookmarks.html"
     },
     {
       "name": "git",
@@ -99,217 +99,20 @@
         "ddg": "https://duckduckgo.com",
         "wikipedia": "https://www.wikipedia.org"
       }
+    }
+  ],
+  "pinned": [
+    {
+      "name": "Bookmarks",
+      "url": "file:///home/diego/.config/my-browser-qute/qute-bookmarks.html"
     },
     {
-      "name": "Agi",
-      "links": {
-        "claude-superset-api": "https://claude-superset-api.app",
-        "ollama": "https://ollama.app",
-        "ollama-arm": "https://ollama-arm.app",
-        "rig-agentic-sonn-14bq8": "https://rig-agentic-sonn-14bq8.app",
-        "session-memory": "https://session-memory.app"
-      }
+      "name": "Home Files",
+      "url": "http://localhost:8000"
     },
     {
-      "name": "App",
-      "links": {
-        "calendar-radicale": "https://cal.diegonmarcos.com",
-        "chat-mattermost": "https://chat.diegonmarcos.com",
-        "code-server": "https://ide.diegonmarcos.com",
-        "contacts-radicale": "https://contacts.diegonmarcos.com",
-        "etherpad": "https://app.diegonmarcos.com/etherpad",
-        "filebrowser": "https://app.diegonmarcos.com/filebrowser",
-        "google-personal-mcp": "https://mcp.diegonmarcos.com",
-        "google-workspace-mcp": "https://mcp.diegonmarcos.com",
-        "grist": "https://sheets.diegonmarcos.com",
-        "hedgedoc": "https://app.diegonmarcos.com/hedgedoc",
-        "maddy": "https://mail.diegonmarcos.com",
-        "mail-mcp": "https://mcp.diegonmarcos.com",
-        "mail-puller": "https://mail-puller.diegonmarcos.com",
-        "matrix-continuwuity": "https://matrix.diegonmarcos.com",
-        "matrix-element": "https://messenger.diegonmarcos.com",
-        "matrix-mautrix-whatsapp": "https://matrix-mautrix-whatsapp.app",
-        "mattermost-mcp": "https://mattermost-mcp.app",
-        "paca": "https://paca.diegonmarcos.com",
-        "photoprism": "https://photos.diegonmarcos.com",
-        "send": "https://send.diegonmarcos.com",
-        "snappymail": "https://webmail.diegonmarcos.com",
-        "stalwart": "https://jmap.diegonmarcos.com"
-      }
-    },
-    {
-      "name": "Cloud",
-      "links": {
-        "hickory-dns": "https://dns.internal"
-      }
-    },
-    {
-      "name": "Data",
-      "links": {
-        "gitea": "https://git.diegonmarcos.com",
-        "redis": "https://redis.app",
-        "scrappers-api": "https://api.diegonmarcos.com"
-      }
-    },
-    {
-      "name": "Fin",
-      "links": {
-        "fin-api": "https://api.diegonmarcos.com/fin-api"
-      }
-    },
-    {
-      "name": "Mic",
-      "links": {
-        "vaultwarden": "https://vault.diegonmarcos.com"
-      }
-    },
-    {
-      "name": "Obs",
-      "links": {
-        "c3-analytics-api": "https://api.diegonmarcos.com/c3a",
-        "c3-public-api": "https://api.diegonmarcos.com/pub",
-        "c3-services-api": "https://api.diegonmarcos.com/c3-services-api",
-        "c3-services-mcp": "https://c3-services-mcp.app",
-        "cloud-cgc-mcp": "https://cloud-cgc-mcp.app"
-      }
-    },
-    {
-      "name": "Sec",
-      "links": {
-        "authelia": "https://auth.diegonmarcos.com",
-        "c3-infra-api": "https://api.diegonmarcos.com/c3-infra-api",
-        "c3-infra-mcp": "https://mcp.diegonmarcos.com/c3-infra-mcp",
-        "caddy": "https://proxy.diegonmarcos.com",
-        "caddy-public": "https://caddy-public.app",
-        "crowdsec": "https://crowdsec.diegonmarcos.com",
-        "introspect-proxy": "https://introspect-proxy.app"
-      }
-    },
-    {
-      "name": "Tools",
-      "links": {
-        "cloud-spec": "https://c3-spec.app",
-        "dagu": "https://workflows.diegonmarcos.com",
-        "dbgate": "https://db.diegonmarcos.com",
-        "matomo": "https://analytics.diegonmarcos.com/matomo",
-        "news-gdelt": "https://news-gdelt.app",
-        "ntfy": "https://rss.diegonmarcos.com",
-        "openobserve": "https://analytics.diegonmarcos.com/openobserve",
-        "umami": "https://analytics.diegonmarcos.com",
-        "wireguard-mesh": "https://mesh.diegonmarcos.com",
-        "wireguard-mesh-ws-tunnel": "https://vpn.diegonmarcos.com"
-      }
-    },
-    {
-      "name": "a-Companies",
-      "links": {
-        "Leafy": "file:///home/diego/git/front/a-Companies/leafy/dist/index.html",
-        "Nexus": "file:///home/diego/git/front/a-Companies/nexus/dist/index.html",
-        "Stark": "file:///home/diego/git/front/a-Companies/stark/dist/index.html"
-      }
-    },
-    {
-      "name": "a-Individual",
-      "links": {
-        "CV PDF": "file:///home/diego/git/front/a-Individual/cv_pdf/dist/index.html",
-        "CV Web": "file:///home/diego/git/front/a-Individual/cv_web/dist/index.html",
-        "Landpage": "file:///home/diego/git/front/a-Individual/landpage/dist/index.html"
-      }
-    },
-    {
-      "name": "a-Portals",
-      "links": {
-        "Cloud": "file:///home/diego/git/front/a-Portals/cloud/dist/index.html",
-        "Linktree": "file:///home/diego/git/front/a-Portals/linktree/dist/index.html",
-        "Linktree Mindmap": "file:///home/diego/git/front/a-Portals/linktree_mindmap/dist/index.html",
-        "Linktree Pixel World": "file:///home/diego/git/front/a-Portals/linktree_pixel-world/dist/index.html"
-      }
-    },
-    {
-      "name": "a-Projects",
-      "links": {
-        "SlabTwin 3D Warehouse": "file:///home/diego/git/front/a-Projects/Warehouse/dist/index.html"
-      }
-    },
-    {
-      "name": "b-Data",
-      "links": {
-        "myAstro": "file:///home/diego/git/front/b-Data/myAstro/dist/index.html",
-        "MyFeed": "file:///home/diego/git/front/b-Data/myfeed/dist/index.html"
-      }
-    },
-    {
-      "name": "b-Media",
-      "links": {
-        "mySocials": "file:///home/diego/git/front/b-Media/mySocials/dist/index.html"
-      }
-    },
-    {
-      "name": "b-MyData",
-      "links": {
-        "My Financials": "file:///home/diego/git/front/b-MyData/my-fin/dist/index.html",
-        "MyHealth": "file:///home/diego/git/front/b-MyData/myhealth/dist/index.html",
-        "MyHealth Profile": "file:///home/diego/git/front/b-MyData/myhealth-profile/dist/index.html",
-        "MyHealth Tracker": "file:///home/diego/git/front/b-MyData/myhealth-tracker/dist/index.html",
-        "myID": "file:///home/diego/git/front/b-MyData/myid/dist/index.html",
-        "MyMaps MyTrips": "file:///home/diego/git/front/b-MyData/mymaps-mytrips/dist/index.html",
-        "MyPhotos": "file:///home/diego/git/front/b-MyData/myphotos/dist/index.html"
-      }
-    },
-    {
-      "name": "b-Profiles",
-      "links": {
-        "MyProfile": "file:///home/diego/git/front/b-Profiles/myprofile/dist/index.html"
-      }
-    },
-    {
-      "name": "b-Projects",
-      "links": {
-        "Leafy2": "file:///home/diego/git/front/b-Projects/galaxy/index.html"
-      }
-    },
-    {
-      "name": "c-Circus",
-      "links": {
-        "Carto": "file:///home/diego/git/front/c-Circus/carto/dist/index.html",
-        "Games": "file:///home/diego/git/front/c-Circus/games/dist/index.html",
-        "Movies": "file:///home/diego/git/front/c-Circus/movies/dist/index.html",
-        "Music": "file:///home/diego/git/front/c-Circus/music/dist/index.html"
-      }
-    },
-    {
-      "name": "c-Cloud",
-      "links": {
-        "API": "file:///home/diego/git/front/c-Cloud/api/dist/index.html",
-        "mcp-api-swagger": "file:///home/diego/git/front/c-Cloud/mcp-api-swagger/dist/index.html",
-        "Skills MCP": "file:///home/diego/git/front/c-Cloud/skills_mcp/dist/index.html"
-      }
-    },
-    {
-      "name": "c-LabTools",
-      "links": {
-        "LMMS": "file:///home/diego/git/front/c-LabTools/Music_DAW_LLMS/dist/index.html",
-        "Mixxx": "file:///home/diego/git/front/c-LabTools/Music_DJ-Mixer_Mixxx/dist/index.html",
-        "CentralBank": "file:///home/diego/git/front/c-LabTools/central_bank/dist/index.html",
-        "FinTerminal": "file:///home/diego/git/front/c-LabTools/fin-terminal/dist/index.html",
-        "MarketWatch": "file:///home/diego/git/front/c-LabTools/market_watch/dist/index.html",
-        "GDELTNews": "file:///home/diego/git/front/c-LabTools/news/dist/index.html",
-        "Sailyng": "file:///home/diego/git/front/c-LabTools/sailytics/dist/index.html"
-      }
-    },
-    {
-      "name": "c-Suite",
-      "links": {
-        "Sheets (Grist)": "file:///home/diego/git/front/c-Suite/grist/dist/index.html",
-        "JSON Vision": "file:///home/diego/git/front/c-Suite/json-vision/dist/index.html",
-        "MyHealth FeedYourself": "file:///home/diego/git/front/c-Suite/myhealth-feedyourself/dist/index.html",
-        "MyMail": "file:///home/diego/git/front/c-Suite/mymail/dist/index.html",
-        "MyMaps": "file:///home/diego/git/front/c-Suite/mymaps/dist/index.html",
-        "MyMaps Maps": "file:///home/diego/git/front/c-Suite/mymaps-maps/dist/index.html",
-        "MyMaps Navigation": "file:///home/diego/git/front/c-Suite/mymaps-navigation/dist/index.html",
-        "Suite": "file:///home/diego/git/front/c-Suite/suite/dist/index.html",
-        "tldraw": "file:///home/diego/git/front/c-Suite/tldraw/dist/index.html"
-      }
+      "name": "Web Search",
+      "url": "https://www.qwant.com"
     }
   ],
   "plugins": [

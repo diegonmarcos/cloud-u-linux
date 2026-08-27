@@ -1,9 +1,9 @@
 {
   "_description": "qutebrowser declarative settings, projected into home-manager's programs.qutebrowser.settings attrset.",
   "url": {
-    "_note": "Homepage + every new tab open the generated bookmark dashboard (da_my-browser/src/dashboard). Installed at ~/.config/qutebrowser/qute-bookmarks.html by the home-module.",
-    "default_page": "file:///home/diego/.config/qutebrowser/qute-bookmarks.html",
-    "start_pages": ["file:///home/diego/.config/qutebrowser/qute-bookmarks.html"]
+    "_note": "Homepage + every new tab open the generated bookmark dashboard (da_my-browser/src/dashboard). Installed at ~/.config/my-browser-qute/qute-bookmarks.html by the home-module.",
+    "default_page": "file:///home/diego/.config/my-browser-qute/qute-bookmarks.html",
+    "start_pages": ["file:///home/diego/.config/my-browser-qute/qute-bookmarks.html"]
   },
   "window": {
     "_note": "Brand the window/taskbar title 'my-browser' (display brand; project dir is da_my-browser, GHCR image keeps the qutebrowser-standalone identity).",

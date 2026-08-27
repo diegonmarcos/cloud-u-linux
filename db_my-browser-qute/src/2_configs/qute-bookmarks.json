@@ -1,51 +1,135 @@
 {
-  "_description": "qutebrowser bookmarks — SECTION source of truth for the dashboard start page (Icons + List views) AND flattened `Folder/name` quickmarks. Model: sections[] → each has direct `links` and/or `folders[]` → each folder has `links`. DATA-DRIVEN sources resolved by gen-dashboard.sh: section source:\"history\" → last 5 from qutebrowser history.sqlite (merged live with localStorage clicks); section source:\"front\" → one folder per front git category (a-/b-/c-) from front-topology.json; folder source:\"cloud:public\"|\"cloud:app\" → services from cloud-data build-flakes_desktop.json (wg_only split). Hand-curated links live inline here. Edit this file (or the cloud/front SoTs); never edit generated qute-bookmarks.html. Order = array order.",
+  "_description": "qutebrowser bookmarks \u2014 SECTION source of truth for the dashboard start page (Icons + List views) AND flattened `Folder/name` quickmarks. Model: sections[] \u2192 each has direct `links` and/or `folders[]` \u2192 each folder has `links`. DATA-DRIVEN sources resolved by gen-dashboard.sh: section source:\"history\" \u2192 last 5 from qutebrowser history.sqlite (merged live with localStorage clicks); section source:\"front\" \u2192 one folder per front git category (a-/b-/c-) from front-topology.json; folder source:\"cloud:public\"|\"cloud:app\" \u2192 services from cloud-data build-flakes_desktop.json (wg_only split). Hand-curated links live inline here. Edit this file (or the cloud/front SoTs); never edit generated qute-bookmarks.html. Order = array order.",
+  "pinned": [
+    {
+      "name": "Bookmarks",
+      "url": "file:///home/diego/.config/my-browser-qute/qute-bookmarks.html"
+    },
+    {
+      "name": "Home Files",
+      "url": "http://localhost:8000"
+    },
+    {
+      "name": "Web Search",
+      "url": "https://www.qwant.com"
+    }
+  ],
   "sections": [
     {
       "name": "Last Sessions",
-      "desc": "recent · live",
+      "desc": "recent \u00b7 live",
       "source": "history",
       "links": {
         "Full History": "qute://history"
       },
-      "_note": "source:history bakes last-5 from history.sqlite AT BUILD TIME, but sqlite3 is absent in CI (and CI never has your history.sqlite), so the baked part is empty in shipped bundles — the dashboard JS merges LIVE recents from localStorage (bm-recent, dashboard-link clicks) on top. The static 'Full History' link always points at qutebrowser's real qute://history so this section is never empty and real history is one click away."
+      "_note": "source:history bakes last-5 from history.sqlite AT BUILD TIME, but sqlite3 is absent in CI (and CI never has your history.sqlite), so the baked part is empty in shipped bundles \u2014 the dashboard JS merges LIVE recents from localStorage (bm-recent, dashboard-link clicks) on top. The static 'Full History' link always points at qutebrowser's real qute://history so this section is never empty and real history is one click away."
     },
     {
       "name": "QuickMarks",
       "desc": "pinned",
       "links": {
-        "bookmarks": "file:///home/diego/.config/qutebrowser/qute-bookmarks.html",
-        "git":       "http://localhost:8000/git",
-        "linktree":  "https://linktree.diegonmarcos.com",
-        "cloud":     "https://cloud.diegonmarcos.com",
-        "proxy":     "https://proxy.diegonmarcos.com"
+        "bookmarks": "file:///home/diego/.config/my-browser-qute/qute-bookmarks.html",
+        "git": "http://localhost:8000/git",
+        "linktree": "https://linktree.diegonmarcos.com",
+        "cloud": "https://cloud.diegonmarcos.com",
+        "proxy": "https://proxy.diegonmarcos.com"
       }
     },
     {
       "name": "Bookmarks",
       "desc": "categories",
       "folders": [
-        { "name": "Dev",      "links": { "github": "https://github.com/diegonmarcos", "mdn": "https://developer.mozilla.org", "stackoverflow": "https://stackoverflow.com", "nixpkgs": "https://search.nixos.org/packages" } },
-        { "name": "AI",       "links": { "claude": "https://claude.ai/new", "claude-usage": "https://claude.ai/new#settings/usage", "gemini": "https://gemini.google.com", "chatgpt": "https://chatgpt.com" } },
-        { "name": "News",     "links": { "hn": "https://news.ycombinator.com", "lobsters": "https://lobste.rs", "reuters": "https://www.reuters.com", "arstechnica": "https://arstechnica.com" } },
-        { "name": "Mail",     "links": { "webmail": "https://webmail.diegonmarcos.com", "gmail": "https://mail.google.com", "proton": "https://mail.proton.me" } },
-        { "name": "Media",    "links": { "youtube": "https://youtube.com", "spotify": "https://open.spotify.com", "photos": "https://photos.diegonmarcos.com" } },
-        { "name": "Social",   "links": { "matrix": "https://messenger.diegonmarcos.com", "mattermost": "https://chat.diegonmarcos.com", "linkedin": "https://www.linkedin.com", "reddit": "https://www.reddit.com" } },
-        { "name": "Docs",     "links": { "hedgedoc": "https://app.diegonmarcos.com/hedgedoc", "etherpad": "https://app.diegonmarcos.com/etherpad", "grist": "https://sheets.diegonmarcos.com" } },
-        { "name": "Finance",  "links": { "fin-api": "https://api.diegonmarcos.com/fin-api" } },
-        { "name": "Shopping", "links": { "amazon": "https://www.amazon.com" } },
-        { "name": "Search",   "links": { "google": "https://www.google.com", "ddg": "https://duckduckgo.com", "wikipedia": "https://www.wikipedia.org" } }
+        {
+          "name": "Dev",
+          "links": {
+            "github": "https://github.com/diegonmarcos",
+            "mdn": "https://developer.mozilla.org",
+            "stackoverflow": "https://stackoverflow.com",
+            "nixpkgs": "https://search.nixos.org/packages"
+          }
+        },
+        {
+          "name": "AI",
+          "links": {
+            "claude": "https://claude.ai/new",
+            "claude-usage": "https://claude.ai/new#settings/usage",
+            "gemini": "https://gemini.google.com",
+            "chatgpt": "https://chatgpt.com"
+          }
+        },
+        {
+          "name": "News",
+          "links": {
+            "hn": "https://news.ycombinator.com",
+            "lobsters": "https://lobste.rs",
+            "reuters": "https://www.reuters.com",
+            "arstechnica": "https://arstechnica.com"
+          }
+        },
+        {
+          "name": "Mail",
+          "links": {
+            "webmail": "https://webmail.diegonmarcos.com",
+            "gmail": "https://mail.google.com",
+            "proton": "https://mail.proton.me"
+          }
+        },
+        {
+          "name": "Media",
+          "links": {
+            "youtube": "https://youtube.com",
+            "spotify": "https://open.spotify.com",
+            "photos": "https://photos.diegonmarcos.com"
+          }
+        },
+        {
+          "name": "Social",
+          "links": {
+            "matrix": "https://messenger.diegonmarcos.com",
+            "mattermost": "https://chat.diegonmarcos.com",
+            "linkedin": "https://www.linkedin.com",
+            "reddit": "https://www.reddit.com"
+          }
+        },
+        {
+          "name": "Docs",
+          "links": {
+            "hedgedoc": "https://app.diegonmarcos.com/hedgedoc",
+            "etherpad": "https://app.diegonmarcos.com/etherpad",
+            "grist": "https://sheets.diegonmarcos.com"
+          }
+        },
+        {
+          "name": "Finance",
+          "links": {
+            "fin-api": "https://api.diegonmarcos.com/fin-api"
+          }
+        },
+        {
+          "name": "Shopping",
+          "links": {
+            "amazon": "https://www.amazon.com"
+          }
+        },
+        {
+          "name": "Search",
+          "links": {
+            "google": "https://www.google.com",
+            "ddg": "https://duckduckgo.com",
+            "wikipedia": "https://www.wikipedia.org"
+          }
+        }
       ]
     },
     {
       "name": "Cloud",
-      "desc": "self-hosted · by category",
+      "desc": "self-hosted \u00b7 by category",
       "source": "cloud:categories",
       "_note": "gen-dashboard.sh expands this into one folder per service category (agi/app/cloud/data/fin/mic/net/obs/sec/tools) from cloud-data build-flakes_desktop.json's .category field, URL = public domain else internal .app. Replaces the old flat Pub/Priv split."
     },
     {
       "name": "Front",
-      "desc": "front monorepo · a/b/c tree",
+      "desc": "front monorepo \u00b7 a/b/c tree",
       "source": "front"
     }
   ]

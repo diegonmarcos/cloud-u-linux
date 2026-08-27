@@ -45,8 +45,8 @@ import json
 import time
 import functools
 
-from qutebrowser.qt.core import QUrl, QTimer
-from qutebrowser.qt.widgets import QToolBar, QToolButton, QMenu
+from qutebrowser.qt.core import QUrl, QTimer, Qt
+from qutebrowser.qt.widgets import QToolBar, QToolButton, QMenu, QTabBar
 from qutebrowser.commands import runners
 from qutebrowser.browser import history
 from qutebrowser.utils import objreg, standarddir, log
@@ -202,26 +202,62 @@ class MyBar(QToolBar):
             log.misc.exception("my-browser bar: failed to run '%s'" % cmd)
 
 
-class PinBar(MyBar):
+class PinBar(QTabBar):
 
-    """Row 2: pinned tabs — fixed shortcuts from mybar.json's `pinned` list.
+    """Row 2: pinned tabs, from mybar.json's `pinned` list.
 
-    Row 1 is MyBar (bookmarks + plugins), row 3 is qutebrowser's own tab bar,
-    which already sits directly below us when tabs.position is 'top'.
+    A real QTabBar, not bookmark buttons — these are tabs and must read as
+    tabs, matching row 3 (qutebrowser's own tab bar) directly below. Clicking
+    one focuses that URL's tab if it is already open, otherwise opens it, so a
+    pinned tab behaves like a tab rather than like a bookmark that spawns a
+    duplicate on every click.
 
-    ponytail: these are shortcut buttons, not real pinned tabs — clicking one
-    opens it in a new tab like any bookmark. Promote to genuine pinned tabs
-    (tabbed_browser.widget.set_tab_pinned) only if the always-open-and-reused
-    semantics are actually wanted.
+    No tab is shown selected: the selection state belongs to row 3, and a
+    highlight here would claim a pinned tab is current when it may not be.
     """
 
     def __init__(self, win_id, parent=None):
-        super().__init__(win_id, parent)
+        super().__init__(parent)
         self.setObjectName('PinBar')
+        self._win_id = win_id
+        self._urls = []
+        self.setDrawBase(False)
+        self.setExpanding(False)
+        self.setMovable(False)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.tabBarClicked.connect(self._on_clicked)
+        self.rebuild()
 
     def rebuild(self):
-        pinned = _load()['pinned']
-        self.clear()
-        for entry in pinned:
-            self._add_bookmark(entry)
-        self.setVisible(bool(pinned))
+        """(Re)populate from mybar.json. Hidden when there is nothing pinned."""
+        while self.count():
+            self.removeTab(0)
+        self._urls = []
+        for entry in _load()['pinned']:
+            url = entry.get('url')
+            if not url:
+                continue
+            self.addTab(entry.get('name') or url)
+            self._urls.append(url)
+        self.setCurrentIndex(-1)
+        self.setVisible(bool(self._urls))
+
+    def _on_clicked(self, idx):
+        if not 0 <= idx < len(self._urls):
+            return
+        url = QUrl(self._urls[idx])
+        try:
+            tabbed = objreg.get('tabbed-browser', scope='window',
+                                window=self._win_id)
+            for i in range(tabbed.widget.count()):
+                # ponytail: exact URL match. A pinned page that redirects or
+                # grows a fragment opens a second tab; compare hosts if that
+                # ever bites.
+                if tabbed.widget.tab_url(i) == url:
+                    tabbed.widget.setCurrentIndex(i)
+                    return
+            tabbed.tabopen(url)
+        except Exception:
+            log.misc.exception("my-browser bar: failed to open pinned %s" % url)
+        finally:
+            self.setCurrentIndex(-1)

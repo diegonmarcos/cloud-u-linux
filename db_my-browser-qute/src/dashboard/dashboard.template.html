@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <!--
-  qutebrowser start-page dashboard — TEMPLATE.
+  my-browser-qute start-page dashboard — TEMPLATE.
   Generator (gen-dashboard.sh) replaces __BOOKMARKS_JSON__ (folders), __KEYBINDINGS_JSON__,
   __PLUGINS_JSON__, and __SEARCH_URL__ (Qwant web-search template, from qute-search-engines.json).
   The #q search box double-duties: typing filters the bookmarks below live; Enter opens
-  a Qwant results tab for the typed query (window.open → new qutebrowser tab).
+  a Qwant results tab for the typed query (window.open → new my-browser-qute tab).
   Two views (persisted in localStorage):
     • Icons — ANDROID LAUNCHER: home screen of folder icons (squircle w/ 2x2 preview);
               tap a folder to open it and reveal the app icons inside.
     • List  — traditional folder/file tree.
-  Keys: v = toggle view · / = search · Esc = close folder / clear · qutebrowser hints on every link.
+  Keys: v = toggle view · / = search · Esc = close folder / clear · my-browser-qute hints on every link.
 -->
 <html lang="en">
 <head>
@@ -181,7 +181,7 @@
   <div id="list"></div>
 
   <div id="scrim"><div class="sheet" id="sheet"></div></div>
-  <footer><kbd>v</kbd> view · <kbd>/</kbd> search · <kbd>Esc</kbd> close · qutebrowser <kbd>f</kbd> to follow</footer>
+  <footer><kbd>v</kbd> view · <kbd>/</kbd> search · <kbd>Esc</kbd> close · my-browser-qute <kbd>f</kbd> to follow</footer>
 
 <!-- Fork-written real browsing history (window.QUTE_HISTORY_RECENT), refreshed live
      by mybar.py off history.web_history.changed. A plain <script src> load across
@@ -195,7 +195,7 @@ const DATA = __BOOKMARKS_JSON__;
 const KEYBINDINGS = __KEYBINDINGS_JSON__;   // [{key,cmd,desc,group}] — SoT: qute-keybindings.json
 const PLUGINS = __PLUGINS_JSON__;           // [{id,name,category,surface,enabled,...}] — SoT: qute-plugins.json
 const SEARCH_URL = "__SEARCH_URL__";        // web-search template ({} = query) — SoT: qute-search-engines.json "qw"
-const HISTORY_RECENT = window.QUTE_HISTORY_RECENT || [];  // real qutebrowser history, see script tag above
+const HISTORY_RECENT = window.QUTE_HISTORY_RECENT || [];  // real my-browser-qute history, see script tag above
 // sections[] → { name, desc, recent, links{}, folders:[{name,desc,links{}}] }
 const SECTIONS = (DATA.sections||[]).map(s=>({
   name:s.name, desc:s.desc||'', recent:!!s.recent,
@@ -221,7 +221,7 @@ function pushRecent(name,url){
   r.unshift({name:name||host(url),url}); r=r.slice(0,5);
   try{ localStorage.setItem(RECENT_KEY,JSON.stringify(r)); }catch(e){}
 }
-// resolve a section's links for "recent" sections: real qutebrowser history
+// resolve a section's links for "recent" sections: real my-browser-qute history
 // (HISTORY_RECENT, fork-written, most authoritative) first, then dashboard
 // click-throughs (localStorage), then any baked/static links — deduped by
 // URL, capped so this stays a "recent" glance, not a full history browser
@@ -315,7 +315,7 @@ function showCfgTab(t){
     const ns=SECTIONS.length, nf=FOLDERS.length, nl=SECTIONS.reduce((a,s)=>a+secCount(s),0);
     body.innerHTML=`<div class="about">
       <h3>◆ my-browser (qute) — cloud dashboard</h3>
-      <p>A declarative, data-driven start page for <b>qutebrowser</b>. Cloud folders are
+      <p>A declarative, data-driven start page for <b>my-browser-qute</b>. Cloud folders are
       generated from <code>cloud-data → build-flakes_desktop.json</code>; the Front tree from
       <code>front-topology.json</code>; Last Sessions from <code>history.sqlite</code> (merged live).
       Curated links live in <code>qute-bookmarks.json</code>. Rendered by <code>gen-dashboard.sh</code>.</p>

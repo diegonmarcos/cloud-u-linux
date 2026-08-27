@@ -1,22 +1,56 @@
-# home-manager module for da_my-browser.
+# home-manager module for my-browser-qute.
 #
 # Reads four JSON files (settings / search-engines / keybindings / bookmarks)
-# and projects them into home-manager's `programs.qutebrowser` declarative
-# surface. The JSON files are the SoT — edit them, run home-manager switch,
-# qutebrowser config rewrites itself.
+# and renders them into my-browser-qute's config.py. The JSON files are the SoT
+# — edit them, run home-manager switch, the config rewrites itself.
+#
+# It no longer goes through home-manager's `programs.qutebrowser`: that module
+# hard-codes ~/.config/qutebrowser, and my-browser-qute's config dir is
+# ~/.config/my-browser-qute (standarddir.APPNAME). The ~40 lines of config.py
+# formatting it provided are inlined below instead, so this module owns the
+# whole projection and has no upstream-qutebrowser dependency left.
 #
 # Operator integration (in your home.nix):
 #
-#     imports = [ inputs.da_my-browser.homeManagerModules.default ];
+#     imports = [ inputs.my-browser-qute.homeManagerModules.default ];
 #     programs.my-browser = {
 #       enable = true;
-#       defaultBrowser = true;   # set xdg.mime defaults to qutebrowser
+#       defaultBrowser = true;   # set xdg.mime defaults to my-browser-qute
 #     };
 
 { config, lib, pkgs, ... }:
 
 let
   cfg = config.programs.my-browser;
+
+  # ── config.py formatters ────────────────────────────────────────────────
+  # Lifted verbatim (behaviour-wise) from home-manager's
+  # modules/programs/qutebrowser.nix. Inlined because that module writes to
+  # ~/.config/qutebrowser and we need ~/.config/my-browser-qute.
+  formatValue = v:
+    if v == null then "None"
+    else if builtins.isBool v then (if v then "True" else "False")
+    else if builtins.isString v then ''"${v}"''
+    else if builtins.isList v then "[${lib.concatStringsSep ", " (map formatValue v)}]"
+    else builtins.toString v;
+
+  formatLine = o: n: v:
+    if builtins.isAttrs v
+    then lib.concatStringsSep "\n" (lib.mapAttrsToList (formatLine "${o}${n}.") v)
+    else "${o}${n} = ${formatValue v}";
+
+  # Dict settings (aliases, searchengines) MUST serialize as c.x['k'] = "v" —
+  # attribute-style (c.aliases.default-window = ...) is invalid Python for
+  # hyphenated keys AND the wrong qutebrowser API.
+  formatDictLine = o: n: v: ''${o}['${n}'] = "${v}"'';
+
+  formatKeyBindings = m: b:
+    lib.concatStringsSep "\n" (lib.mapAttrsToList (k: c:
+      if c == null
+      then ''config.unbind("${k}", mode="${m}")''
+      else ''config.bind("${k}", "${lib.escape [ ''"'' ] c}", mode="${m}")'') b);
+
+  formatQuickmarks = n: url: "${n} ${url}";
 
   # Resolve JSON config paths relative to this module's directory.
   configsDir = ../2_configs;
@@ -82,8 +116,8 @@ let
   #   Fresh       → one empty about:blank window (no restore).
   #   Saved Tabs  → the qute-default-window.json tab set, opened in a new window.
   savedTabsArgs      = lib.concatStringsSep " " (map (t: t.url) dwTabs);
-  freshDesktopExec   = "qutebrowser --target window about:blank";
-  savedTabsDesktopExec = "qutebrowser --target window ${savedTabsArgs}";
+  freshDesktopExec   = "my-browser-qute --target window about:blank";
+  savedTabsDesktopExec = "my-browser-qute --target window ${savedTabsArgs}";
 
   # "1 Open Last Session Tabs" — restore the auto-saved session (qutebrowser
   # saves `_autosave` on quit when content.auto_save.session is true, which
@@ -96,7 +130,7 @@ let
 
   # "Config-shortcuts" — deep-link the dashboard's Shortcuts reference tab. The
   # dashboard JS auto-opens that tab when the URL ends in #shortcuts.
-  dashboardHtml = "file:///home/diego/.config/qutebrowser/qute-bookmarks.html";
+  dashboardHtml = "file:///home/diego/.config/my-browser-qute/qute-bookmarks.html";
   configShortcutsCmd = "open ${dashboardHtml}#shortcuts";
 
   # ── PLUGIN REGISTRY (qute-plugins.json) — see PLAN_plugins-vaultwarden.md ──
@@ -160,19 +194,20 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = import ./fork.nix { inherit pkgs; };
-      defaultText = lib.literalExpression "import ./fork.nix { inherit pkgs; }";
+      default = import ./package.nix { inherit pkgs; };
+      defaultText = lib.literalExpression "import ./package.nix { inherit pkgs; }";
       description = ''
-        Browser package. Defaults to the my-browser FORK — upstream qutebrowser
-        with our patch series (the native bookmark + plugin chrome bar). Set to
-        `pkgs.qutebrowser` to run stock qutebrowser without the bar.
+        Browser package. Defaults to my-browser-qute, built from the vendored
+        source in src/browser/ (native bookmark + plugin chrome bar included).
+        Set to `pkgs.qutebrowser` to run stock upstream qutebrowser instead —
+        note that reverts the config dir to ~/.config/qutebrowser.
       '';
     };
 
     defaultBrowser = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "Set xdg.mime so qutebrowser handles http(s) links by default.";
+      description = "Set xdg.mime so my-browser-qute handles http(s) links by default.";
     };
 
     extraSettings = lib.mkOption {
@@ -183,53 +218,59 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    programs.qutebrowser = {
-      enable = true;
-      package = cfg.package;
-      # base JSON settings, then registry-owned plugin defaults, then operator escape hatch.
-      settings = lib.recursiveUpdate (lib.recursiveUpdate cleanSettings pluginSettings) cfg.extraSettings;
-      # `default_window` alias (New Default Window). MUST go through the dedicated
-      # `aliases` option — it serializes via formatDictLine to
-      #   c.aliases['default_window'] = "..."
-      # which is valid Python AND the correct qutebrowser API (aliases is a Dict
-      # setting). Putting it in `settings` serialized it attribute-style
-      # (c.aliases.default-window = ...) — invalid Python (hyphen) and wrong API.
-      # Numeric-prefixed aliases sort to the top of the `:` command completion.
-      aliases = {
-        default_window   = defaultWindowCmd;
-        open_saved_tabs  = openSavedTabsCmd;
-        fresh_window     = freshWindowCmd;         # New Window (Fresh) — empty
-        "0-default-tabs"   = defaultWindowCmd;    # "0 Open Default Tabs"
-        "1-last-session"   = lastSessionCmd;      # "1 Open Last Session Tabs"
-        "config-shortcuts" = configShortcutsCmd;  # Shortcuts reference (,s)
-      } // pluginPageAliases     # :plugins, :plugins-vaultwarden (manager page)
-        // pluginToggleAliases;  # :plugin-toggle-<id> (live :config-cycle)
-      searchEngines = cleanSearchEngines;
-      # Ctrl-Shift-N → New Default Window; Ctrl-Shift-T → Open Saved Tabs
-      # (same list, opened as tabs in the current window instead of a new
-      # one); Ctrl-Shift-B → Vaultwarden autofill (qute-bitwarden userscript,
-      # ships bundled with qutebrowser — see build.json::integrations).
-      # ONE merged `normal` set. NB: `//` between two attrsets that BOTH have a
-      # `normal` key is SHALLOW — it replaces the whole set, not merges it. The
-      # previous form (`{normal=…} // optionalAttrs {normal.<C-S-b>=…}`) silently
-      # dropped every other normal bind whenever vaultwarden was enabled. Merge
-      # all leaf keys into a single `normal` instead, then recursiveUpdate onto
-      # the JSON binds (cleanKeyBindings) which is a proper deep merge.
-      keyBindings = lib.recursiveUpdate cleanKeyBindings {
-        normal = {
-          "<Ctrl-Shift-n>" = "default_window";
-          "<Ctrl-Shift-t>" = "open_saved_tabs";
-          ",pp"            = "plugins";   # open the Plugins manager page
-        }
-        // pluginKeybinds   # ,pa ,pj ,pd ,pf ,pm — live config-plugin toggles
-        // lib.optionalAttrs (vwCfg.enabled or false) {
-             "<Ctrl-Shift-b>" = "spawn --userscript qute-bitwarden --totp";
-           };
-      };
-      quickmarks = flatQuickmarks;
-    };
+    home.packages = [ cfg.package ]
+      ++ lib.optionals (vwCfg.enabled or false) [ pkgs.bitwarden-cli pkgs.keyutils ];
 
-    home.packages = lib.optionals (vwCfg.enabled or false) [ pkgs.bitwarden-cli pkgs.keyutils ];
+    # config.py — rendered here (see the formatters above), written to
+    # ~/.config/my-browser-qute/. Assembly order matters: settings, then dict
+    # settings (aliases / searchengines), then keybindings, so a later bind can
+    # reference an alias defined earlier.
+    xdg.configFile."my-browser-qute/config.py".text =
+      let
+        allSettings = lib.recursiveUpdate
+          (lib.recursiveUpdate cleanSettings pluginSettings) cfg.extraSettings;
+
+        # Numeric-prefixed aliases sort to the top of the `:` command completion.
+        allAliases = {
+          default_window   = defaultWindowCmd;
+          open_saved_tabs  = openSavedTabsCmd;
+          fresh_window     = freshWindowCmd;        # New Window (Fresh) — empty
+          "0-default-tabs"   = defaultWindowCmd;    # "0 Open Default Tabs"
+          "1-last-session"   = lastSessionCmd;      # "1 Open Last Session Tabs"
+          "config-shortcuts" = configShortcutsCmd;  # Shortcuts reference (,s)
+        } // pluginPageAliases     # :plugins, :plugins-vaultwarden (manager page)
+          // pluginToggleAliases;  # :plugin-toggle-<id> (live :config-cycle)
+
+        # Ctrl-Shift-N → New Default Window; Ctrl-Shift-T → Open Saved Tabs
+        # (same list, as tabs in the current window); Ctrl-Shift-B → Vaultwarden
+        # autofill (qute-bitwarden userscript, bundled with the package).
+        # ONE merged `normal` set. NB: `//` between two attrsets that BOTH have a
+        # `normal` key is SHALLOW — it replaces the whole set, not merges it. The
+        # previous form (`{normal=…} // optionalAttrs {normal.<C-S-b>=…}`) silently
+        # dropped every other normal bind whenever vaultwarden was enabled. Merge
+        # all leaf keys into a single `normal` instead, then recursiveUpdate onto
+        # the JSON binds (cleanKeyBindings) which is a proper deep merge.
+        allKeyBindings = lib.recursiveUpdate cleanKeyBindings {
+          normal = {
+            "<Ctrl-Shift-n>" = "default_window";
+            "<Ctrl-Shift-t>" = "open_saved_tabs";
+            ",pp"            = "plugins";   # open the Plugins manager page
+          }
+          // pluginKeybinds   # ,pa ,pj ,pd ,pf ,pm — live config-plugin toggles
+          // lib.optionalAttrs (vwCfg.enabled or false) {
+               "<Ctrl-Shift-b>" = "spawn --userscript qute-bitwarden --totp";
+             };
+        };
+      in lib.concatStringsSep "\n" (
+        [ "config.load_autoconfig()" ]
+        ++ lib.mapAttrsToList (formatLine "c.") allSettings
+        ++ lib.mapAttrsToList (formatDictLine "c.aliases") allAliases
+        ++ lib.mapAttrsToList (formatDictLine "c.url.searchengines") cleanSearchEngines
+        ++ lib.mapAttrsToList formatKeyBindings allKeyBindings
+      );
+
+    xdg.configFile."my-browser-qute/quickmarks".text =
+      lib.concatStringsSep "\n" (lib.mapAttrsToList formatQuickmarks flatQuickmarks);
 
     # `bw config server <url>` is idempotent and carries no secret — safe to
     # run declaratively on every activation. The actual `bw login` (needs the
@@ -243,18 +284,18 @@ in
     # Bookmark dashboard start page — generated (gen-dashboard.sh) into dist/,
     # committed, installed here. qute-settings.json points url.start_pages +
     # url.default_page at this file.
-    xdg.configFile."qutebrowser/qute-bookmarks.html".source = ../../dist/qute-bookmarks.html;
+    xdg.configFile."my-browser-qute/qute-bookmarks.html".source = ../../dist/qute-bookmarks.html;
 
     # Native qutebrowser Bookmarks (the built-in :bookmark-list) — the FULL list
     # (curated + cloud-resolved), generated by gen-dashboard.sh into dist/ so it
     # matches the dashboard exactly. quickmarks above only carry the curated
     # folders (cloud:* can't be resolved in pure eval); this file carries all.
-    xdg.configFile."qutebrowser/bookmarks/urls".source = ../../dist/qute-bookmarks-urls;
+    xdg.configFile."my-browser-qute/bookmarks/urls".source = ../../dist/qute-bookmarks-urls;
 
     # mybar.json — SoT for the FORK's native chrome bar (mybar.py reads it from
     # the config dir). Generated by gen-dashboard.sh from qute-bookmarks.json +
     # qute-plugins.json. Harmless with stock qutebrowser (it just ignores it).
-    xdg.configFile."qutebrowser/mybar.json".source = ../../dist/mybar.json;
+    xdg.configFile."my-browser-qute/mybar.json".source = ../../dist/mybar.json;
 
     # Override the upstream qutebrowser desktop entry (same id →
     # ~/.local/share/applications wins over the nix-store copy via XDG_DATA_DIRS
@@ -264,28 +305,29 @@ in
     # qute-default-window.json (savedTabsDesktopExec), so editing that JSON
     # rewrites the menu on the next build. Keeps the original id so xdg.mimeApps
     # (below) and any pinned taskbar entry still resolve.
-    xdg.desktopEntries."org.qutebrowser.qutebrowser" = {
-      name = "qutebrowser";
+    xdg.desktopEntries."org.mybrowser.qute" = {
+      name = "my-browser-qute";
       genericName = "Web Browser";
-      exec = "qutebrowser --untrusted-args %u";
-      icon = "qutebrowser";
+      exec = "my-browser-qute --untrusted-args %u";
+      icon = "my-browser-qute";
       terminal = false;
       categories = [ "Network" "WebBrowser" ];
       mimeType = [
         "text/html" "text/xml" "application/xhtml+xml" "application/xml"
         "application/rdf+xml" "image/gif" "image/webp" "image/jpeg" "image/png"
         "x-scheme-handler/http" "x-scheme-handler/https" "x-scheme-handler/qute"
+        "x-scheme-handler/mybrowser"
       ];
       startupNotify = true;
       settings = {
-        StartupWMClass = "qutebrowser";
+        StartupWMClass = "my-browser-qute";
         Keywords = "Browser";
       };
       actions = {
-        "new-window"        = { name = "New Window";               exec = "qutebrowser"; };
+        "new-window"        = { name = "New Window";               exec = "my-browser-qute"; };
         "new-window-fresh"  = { name = "New Window (Fresh)";       exec = freshDesktopExec; };
         "new-window-saved"  = { name = "New Window (Saved Tabs)";  exec = savedTabsDesktopExec; };
-        "preferences"       = { name = "Preferences";             exec = "qutebrowser qute://settings"; };
+        "preferences"       = { name = "Preferences";             exec = "my-browser-qute mybrowser://settings"; };
       };
     };
 
@@ -295,11 +337,11 @@ in
     xdg.mimeApps = lib.mkIf (cfg.defaultBrowser || (buildJson.browser.default_browser or false)) {
       enable = true;
       defaultApplications = {
-        "text/html"             = "org.qutebrowser.qutebrowser.desktop";
-        "x-scheme-handler/http"  = "org.qutebrowser.qutebrowser.desktop";
-        "x-scheme-handler/https" = "org.qutebrowser.qutebrowser.desktop";
-        "x-scheme-handler/about" = "org.qutebrowser.qutebrowser.desktop";
-        "x-scheme-handler/unknown" = "org.qutebrowser.qutebrowser.desktop";
+        "text/html"             = "org.mybrowser.qute.desktop";
+        "x-scheme-handler/http"  = "org.mybrowser.qute.desktop";
+        "x-scheme-handler/https" = "org.mybrowser.qute.desktop";
+        "x-scheme-handler/about" = "org.mybrowser.qute.desktop";
+        "x-scheme-handler/unknown" = "org.mybrowser.qute.desktop";
       };
     };
   };

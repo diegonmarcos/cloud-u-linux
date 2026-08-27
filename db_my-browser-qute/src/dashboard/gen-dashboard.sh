@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# gen-dashboard.sh — render the qutebrowser dashboard start page, DATA-DRIVEN.
+# gen-dashboard.sh — render the my-browser-qute dashboard start page, DATA-DRIVEN.
 #
 # Inputs (all overridable via env for reproducible/CI builds):
 #   BOOKMARKS_JSON      section SoT (curated links/folders + source markers)
 #   CLOUD_DESKTOP_JSON  cloud-data's build-flakes_desktop.json (per-service domain + proxy.primary.wg_only)
 #   FRONT_TOPOLOGY_JSON front's I_front-data/front-topology.json (projects[] with category + path)
 #   FRONT_ROOT          front repo root for file:// links (default ~/git/front)
-#   HISTORY_SQLITE      qutebrowser history db for the "Last Sessions" section
+#   HISTORY_SQLITE      my-browser-qute history db for the "Last Sessions" section
 #   TEMPLATE            dashboard.template.html (has the __BOOKMARKS_JSON__ token)
 #   OUT                 output qute-bookmarks.html
 #
@@ -22,11 +22,11 @@ BOOKMARKS_JSON="${BOOKMARKS_JSON:-$HERE/../2_configs/qute-bookmarks.json}"
 CLOUD_DESKTOP_JSON="${CLOUD_DESKTOP_JSON:-$HOME/git/cloud-infra/2_configs/dist/build-flakes_desktop.json}"
 FRONT_TOPOLOGY_JSON="${FRONT_TOPOLOGY_JSON:-$HOME/git/front/front-topology.json}"
 FRONT_ROOT="${FRONT_ROOT:-$HOME/git/front}"
-HISTORY_SQLITE="${HISTORY_SQLITE:-$HOME/.local/share/qutebrowser/history.sqlite}"
+HISTORY_SQLITE="${HISTORY_SQLITE:-$HOME/.local/share/my-browser-qute/history.sqlite}"
 # Live history.js dumped by the fork (mybar.py, event-driven off history.web_history.changed)
 # — matches its default standarddir.data() path exactly. See dashboard.template.html's
 # __HISTORY_JS_PATH__ token for why this can't just be a fetch() of qute://history/data.
-HISTORY_JS_PATH="${HISTORY_JS_PATH:-$HOME/.local/share/qutebrowser/history-recent.js}"
+HISTORY_JS_PATH="${HISTORY_JS_PATH:-$HOME/.local/share/my-browser-qute/history-recent.js}"
 TEMPLATE="${TEMPLATE:-$HERE/dashboard.template.html}"
 OUT="${OUT:-$HERE/../../dist/qute-bookmarks.html}"
 
@@ -101,7 +101,7 @@ front_folders() {
   fi
 }
 
-# last 5 distinct URLs from qutebrowser history → { label: url }.
+# last 5 distinct URLs from my-browser-qute history → { label: url }.
 # Skips the dashboard itself; label = page title (fallback host). Empty if no db/sqlite3.
 history_links() {
   if command -v sqlite3 >/dev/null 2>&1 && [ -r "$HISTORY_SQLITE" ]; then
@@ -155,7 +155,7 @@ DATA="$(jq -n \
 ')"
 
 # Keybindings → flat array [{key,cmd,desc,group}] for the dashboard Shortcuts tab.
-# SoT is qute-keybindings.json (same file the home-module projects into qutebrowser);
+# SoT is qute-keybindings.json (same file the home-module projects into my-browser-qute);
 # skip _doc keys and any non-object value. Empty [] if the file is absent.
 KEYBINDINGS_JSON="${KEYBINDINGS_JSON:-$HERE/../2_configs/qute-keybindings.json}"
 if [ -r "$KEYBINDINGS_JSON" ]; then
@@ -168,8 +168,8 @@ else
 fi
 
 # Dashboard search bar → web-search URL template. SoT is qute-search-engines.json's
-# "qw" (Qwant) entry — the SAME engine qutebrowser itself uses for `qw <query>` in
-# the `:` bar, so the dashboard's Enter-to-search and qutebrowser's own bang stay
+# "qw" (Qwant) entry — the SAME engine my-browser-qute itself uses for `qw <query>` in
+# the `:` bar, so the dashboard's Enter-to-search and my-browser-qute's own bang stay
 # in lockstep. `{}` is replaced with the URL-encoded query client-side.
 SEARCH_ENGINES_JSON="${SEARCH_ENGINES_JSON:-$HERE/../2_configs/qute-search-engines.json}"
 if [ -r "$SEARCH_ENGINES_JSON" ]; then
@@ -179,7 +179,7 @@ else
 fi
 
 # Plugin registry → the dashboard's Plugins tab (:plugins / #plugins). SoT is
-# qute-plugins.json (same file the home-module wires into qutebrowser). Drop
+# qute-plugins.json (same file the home-module wires into my-browser-qute). Drop
 # _-prefixed doc keys from actions so the card renders cleanly.
 PLUGINS_JSON="${PLUGINS_JSON:-$HERE/../2_configs/qute-plugins.json}"
 if [ -r "$PLUGINS_JSON" ]; then
@@ -217,7 +217,7 @@ nsec=$(jq -r '.sections|length' <<<"$DATA")
 nlink=$(jq -r '[.sections[] | (.links|length) + ([.folders[].links|length]|add // 0)]|add' <<<"$DATA")
 echo "gen-dashboard: wrote $OUT ($nlink links across $nsec sections)"
 
-# Also emit qutebrowser's native bookmarks file (one "url  Section/[Folder/]name"
+# Also emit my-browser-qute's native bookmarks file (one "url  Section/[Folder/]name"
 # per line) from the SAME fully-resolved link set — so the built-in Bookmarks page
 # carries the identical list (curated + cloud + front). "Last Sessions" is skipped
 # (transient history, not a bookmark). Deployed by home-module.nix.
@@ -232,6 +232,8 @@ echo "gen-dashboard: wrote $BOOKMARKS_URLS ($(wc -l < "$BOOKMARKS_URLS") bookmar
 # lanes, both DATA-DRIVEN from the same resolved set:
 #   bookmarks[] — each section's direct links → {name,url} buttons; each folder
 #                 → {name,links} dropdown. "Last Sessions" skipped (transient).
+#   pinned[]    — row 2: fixed shortcuts, straight from qute-bookmarks.json's
+#                 top-level `pinned` array. (Row 3 is qutebrowser's own tab bar.)
 #   plugins[]   — enabled plugins from qute-plugins.json that have an in-browser
 #                 command: an explicit `command` (Vaultwarden) or, for config
 #                 plugins, the generated `plugin-toggle-<id>` alias. Daemon-only
@@ -246,6 +248,7 @@ PL_BAR="$(jq '[ .plugins // [] | .[] | select(.enabled == true)
        | if .command then { name: .name, command: .command }
          elif .surface == "config" then { name: .name, command: ("plugin-toggle-" + .id) }
          else empty end ]' "$PLUGINS_JSON" 2>/dev/null || echo '[]')"
-jq -n --argjson bookmarks "$BM_BAR" --argjson plugins "$PL_BAR" \
-   '{ bookmarks: $bookmarks, plugins: $plugins }' > "$MYBAR_JSON"
-echo "gen-dashboard: wrote $MYBAR_JSON ($(jq '.bookmarks|length' "$MYBAR_JSON") bar entries, $(jq '.plugins|length' "$MYBAR_JSON") plugins)"
+PIN_BAR="$(jq '[ .pinned // [] | .[] | { name: .name, url: .url } ]' "$BOOKMARKS_JSON")"
+jq -n --argjson bookmarks "$BM_BAR" --argjson pinned "$PIN_BAR" --argjson plugins "$PL_BAR" \
+   '{ bookmarks: $bookmarks, pinned: $pinned, plugins: $plugins }' > "$MYBAR_JSON"
+echo "gen-dashboard: wrote $MYBAR_JSON ($(jq '.bookmarks|length' "$MYBAR_JSON") bar entries, $(jq '.pinned|length' "$MYBAR_JSON") pinned, $(jq '.plugins|length' "$MYBAR_JSON") plugins)"

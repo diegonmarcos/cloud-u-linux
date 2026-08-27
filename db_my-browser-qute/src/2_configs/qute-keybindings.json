@@ -18,7 +18,7 @@
     "L":            { "cmd": "forward", "desc": "Forward", "group": "Navigate" },
     "<Alt-Left>":   { "cmd": "back", "desc": "Back (Alt-Left)", "group": "Navigate" },
     "<Alt-Right>":  { "cmd": "forward", "desc": "Forward (Alt-Right)", "group": "Navigate" },
-    "<Alt-Up>":     { "cmd": "open file:///home/diego/.config/qutebrowser/qute-bookmarks.html", "desc": "Home (dashboard, Alt-Up)", "group": "Navigate" },
+    "<Alt-Up>":     { "cmd": "open file:///home/diego/.config/my-browser-qute/qute-bookmarks.html", "desc": "Home (dashboard, Alt-Up)", "group": "Navigate" },
     "r":            { "cmd": "reload", "desc": "Reload", "group": "Navigate" },
     "R":            { "cmd": "reload -f", "desc": "Hard reload (bypass cache)", "group": "Navigate" },
     "<F5>":         { "cmd": "reload", "desc": "Reload", "group": "Navigate" },
@@ -44,7 +44,7 @@
     "<Ctrl-Shift-o>": { "cmd": "spawn --detach /home/diego/.local/bin/da_autofill-rbw-rofi totp", "desc": "Autofill: TOTP", "group": "Autofill" },
     "_comment_autofill": "spawn --detach (NOT --userscript): da_autofill-rbw-rofi is a standalone GUI helper; the browser is just a focused window to it. Trailing arg pick|user|pass|totp selects the action.",
 
-    ",d":           { "cmd": "open file:///home/diego/.config/qutebrowser/qute-bookmarks.html", "desc": "Open bookmarks (dashboard)", "group": "Leader" },
+    ",d":           { "cmd": "open file:///home/diego/.config/my-browser-qute/qute-bookmarks.html", "desc": "Open bookmarks (dashboard)", "group": "Leader" },
     ",s":           { "cmd": "config-shortcuts", "desc": "Open Shortcuts reference (Config-shortcuts)", "group": "Leader" },
     ",e":           { "cmd": "config-edit", "desc": "Edit config.py in $EDITOR (native qutebrowser command)", "group": "Leader" },
     ",v":           { "cmd": "open https://vault.diegonmarcos.com", "desc": "Vaultwarden", "group": "Leader" },

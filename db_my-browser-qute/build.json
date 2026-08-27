@@ -2,7 +2,7 @@
   "project": {
     "name": "my-browser-qute",
     "version": "0.1.0",
-    "description": "my-browser — qutebrowser-based daily-driver browser with daemon-side integrations: FIDO2 passkeys via da_fido2-vault-broker, password autofill via da_autofill-rbw-rofi. Pure-config (no fork) — qutebrowser ships from nixpkgs; this project owns home-manager wiring + JSON-driven settings. Dir is da_my-browser; image name stays qutebrowser-standalone (release-pipeline identity); 'my-browser' is the display brand."
+    "description": "my-browser-qute — daily-driver browser built from the qutebrowser source VENDORED in src/browser/ (flat snapshot of upstream v3.7.0, no patch series). Fully rebranded: binary my-browser-qute, config dir ~/.config/my-browser-qute, desktop id org.mybrowser.qute, mybrowser:// URL scheme (registered alongside qute://, which still works). Daemon-side integrations: FIDO2 passkeys via da_fido2-vault-broker, password autofill via da_autofill-rbw-rofi. Dir is db_my-browser-qute."
   },
   "paths": {
     "src": "src",
@@ -12,23 +12,27 @@
   },
   "browser": {
     "engine": "QtWebEngine",
-    "package": "qutebrowser",
-    "binary_name": "qutebrowser",
-    "config_dir": "~/.config/qutebrowser",
-    "data_dir": "~/.local/share/qutebrowser",
+    "package": "my-browser-qute",
+    "binary_name": "my-browser-qute",
+    "config_dir": "~/.config/my-browser-qute",
+    "data_dir": "~/.local/share/my-browser-qute",
     "default_browser": true,
-    "_default_browser_note": "true → home-module sets xdg.mimeApps so qutebrowser owns http(s)/html/about/unknown scheme handlers (the system default browser). Flip to false to disown. Data-driven toggle read by src/nix/home-module.nix.",
-    "comment": "Upstream qutebrowser is configured via Python config.py OR via NixOS home-manager `programs.qutebrowser`. This project uses the home-manager path so the SoT is JSON + Nix, not imperative Python."
+    "_default_browser_note": "true → home-module sets xdg.mimeApps so my-browser-qute owns http(s)/html/about/unknown scheme handlers (the system default browser). Flip to false to disown. Data-driven toggle read by src/nix/home-module.nix.",
+    "comment": "The browser is OUR source now (src/browser/), not a nixpkgs package + patches. Config is rendered to config.py by src/nix/home-module.nix, which owns the JSON→Python projection itself (home-manager's programs.qutebrowser hard-codes ~/.config/qutebrowser and is no longer used).",
+    "source": "src/browser",
+    "upstream_version": "3.7.0",
+    "desktop_id": "org.mybrowser.qute",
+    "url_scheme": "mybrowser"
   },
   "data_sources": {
     "settings": "src/2_configs/qute-settings.json",
     "search_engines": "src/2_configs/qute-search-engines.json",
     "keybindings": "src/2_configs/qute-keybindings.json",
     "bookmarks": "src/2_configs/qute-bookmarks.json",
-    "comment": "All four JSON files are read by the home-manager module at evaluation time and projected into qutebrowser's declarative options. Edit JSON, rebuild home-manager, browser picks up the new state."
+    "comment": "All four JSON files are read by the home-manager module at evaluation time and rendered into my-browser-qute's config.py. Edit JSON, rebuild home-manager, browser picks up the new state."
   },
   "release": {
-    "comment": "Standalone qutebrowser config bundle (config.py + quickmarks + bookmarks/urls + qute-bookmarks.html + --basedir launcher), independent of the ~6GB 37-module desktop home-manager closure. Built by `build.sh release` (nix build .#standalone), published to BOTH a GitHub Release (rolling tag, --clobber) and GHCR (oras, matching the repo's all-services-as-GHCR-images pattern) via `build.sh gh-release`/`build.sh ghcr-push`. install-standalone / the desktop flake pull from the GitHub Release ONLY — GHCR is a redundant/discoverable mirror, not a consumption path.",
+    "comment": "Standalone my-browser-qute config bundle (config.py + quickmarks + bookmarks/urls + qute-bookmarks.html + --basedir launcher), independent of the ~6GB 37-module desktop home-manager closure. Built by `build.sh release` (nix build .#standalone), published to BOTH a GitHub Release (rolling tag, --clobber) and GHCR (oras, matching the repo's all-services-as-GHCR-images pattern) via `build.sh gh-release`/`build.sh ghcr-push`. install-standalone / the desktop flake pull from the GitHub Release ONLY — GHCR is a redundant/discoverable mirror, not a consumption path.",
     "gh_release": {
       "enabled": true,
       "rolling_tag": "qute-standalone-latest",
@@ -38,10 +42,10 @@
       "asset_name": "qutebrowser-standalone.tar.gz"
     },
     "fork": {
-      "comment": "The my-browser (qute) FORK binary — patched qutebrowser (native bookmark + plugin chrome bar) packaged as a PORTABLE self-extracting executable via `nix bundle .#my-browser` (~640MB, QtWebEngine included, under GitHub's 2GB asset limit). Built by `build.sh fork-release`, published to its OWN rolling GitHub Release tag by `build.sh fork-gh-release`. This is the answer to 'deploy the fork in releases' — a single-file download that runs the fork without Nix. gzip'd for transfer.",
+      "comment": "The my-browser-qute binary packaged as a PORTABLE self-extracting executable via `nix bundle .#my-browser-qute` (~640MB, QtWebEngine included, under GitHub's 2GB asset limit). Built by `build.sh fork-release`, published to its own rolling GitHub Release tag by `build.sh fork-gh-release`. A single-file download that runs the browser without Nix. gzip'd for transfer.",
       "enabled": true,
       "rolling_tag": "my-browser-latest",
-      "asset_name": "my-browser-x86_64.gz"
+      "asset_name": "my-browser-qute-x86_64.gz"
     },
     "ghcr": {
       "enabled": true,
@@ -49,20 +53,22 @@
       "namespace": "diegonmarcos",
       "image": "qutebrowser-standalone",
       "media_type": "application/gzip",
-      "tags": ["latest"]
+      "tags": [
+        "latest"
+      ]
     }
   },
   "integrations": {
     "fido2_vault_broker": {
-      "comment": "WebAuthn over /dev/hidraw — qutebrowser/Chromium auto-discovers the virtual FIDO2 device when the daemon is running. No extra config needed.",
+      "comment": "WebAuthn over /dev/hidraw — my-browser-qute/Chromium auto-discovers the virtual FIDO2 device when the daemon is running. No extra config needed.",
       "enabled": true
     },
     "autofill_rbw_rofi": {
-      "comment": "Password autofill via global hotkey is OS-level (handled by da_autofill-rbw-rofi). qutebrowser sees the typed keystrokes like any other window.",
+      "comment": "Password autofill via global hotkey is OS-level (handled by da_autofill-rbw-rofi). my-browser-qute sees the typed keystrokes like any other window.",
       "enabled": true
     },
     "vaultwarden_bitwarden_cli": {
-      "comment": "In-page autofill (Ctrl-Shift-B) via qutebrowser's OFFICIAL, in-tree qute-bitwarden userscript (qutebrowser/misc/userscripts/qute-bitwarden — ships bundled with the qutebrowser package, no vendoring needed). Uses the official `bw` CLI against our self-hosted Vaultwarden server (API-compatible with real Bitwarden). Matches by the vault item's saved URL (bw list items --url <domain>) — no need to rename entries. Session persisted via keyctl (keyutils), auto-locks after runtime.auto_lock_seconds. home.packages gets bitwarden-cli + keyutils; a home.activation step idempotently runs `bw config server <server_url>` (no secrets — the interactive `bw login` step is a ONE-TIME manual step, cannot be automated declaratively since it requires the master password).",
+      "comment": "In-page autofill (Ctrl-Shift-B) via the in-tree qute-bitwarden userscript (src/browser/misc/userscripts/qute-bitwarden — vendored with the rest of the source). Uses the official `bw` CLI against our self-hosted Vaultwarden server (API-compatible with real Bitwarden). Matches by the vault item's saved URL (bw list items --url <domain>) — no need to rename entries. Session persisted via keyctl (keyutils), auto-locks after runtime.auto_lock_seconds. home.packages gets bitwarden-cli + keyutils; a home.activation step idempotently runs `bw config server <server_url>` (no secrets — the interactive `bw login` step is a ONE-TIME manual step, cannot be automated declaratively since it requires the master password).",
       "enabled": true,
       "server_url": "https://vault.diegonmarcos.com",
       "runtime": {

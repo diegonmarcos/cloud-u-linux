@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# da_my-browser — build engine
+# my-browser-qute — build engine
 #
 # This project ships no compiled artifact — it's a pure NixOS / home-manager
-# config layer on top of upstream qutebrowser. The "build" is a JSON-schema
+# config layer on top of the qutebrowser source vendored in src/browser/. The "build" is a JSON-schema
 # check + a Nix flake check; "install" is a noop (the home-manager module
 # does the real work when consumed by the user's home flake).
 #
@@ -10,7 +10,7 @@
 #   ./build.sh check      # validate JSON syntax + Nix flake evaluation
 #   ./build.sh lint-json  # JSON syntax only (fast)
 #   ./build.sh print-config  # show resolved settings/search/keybindings/quickmarks
-#   ./build.sh diff       # compare current vs deployed state in ~/.config/qutebrowser
+#   ./build.sh diff       # compare current vs deployed state in ~/.config/my-browser-qute
 #   (default = check)
 
 set -euo pipefail
@@ -80,23 +80,23 @@ case "$cmd" in
     ;;
 
   diff)
-    log "diff: src/2_configs vs ~/.config/qutebrowser/config.py (rough)"
-    if [ -f "$HOME/.config/qutebrowser/config.py" ]; then
-      log "config.py size: $(wc -l < "$HOME/.config/qutebrowser/config.py") lines"
+    log "diff: src/2_configs vs ~/.config/my-browser-qute/config.py (rough)"
+    if [ -f "$HOME/.config/my-browser-qute/config.py" ]; then
+      log "config.py size: $(wc -l < "$HOME/.config/my-browser-qute/config.py") lines"
     else
-      log "no ~/.config/qutebrowser/config.py — has home-manager switched yet?"
+      log "no ~/.config/my-browser-qute/config.py — has home-manager switched yet?"
     fi
     "$0" print-config | tail -50
     ;;
 
   fork)
-    # Build the FORK package (patched qutebrowser with the native chrome bar).
+    # Build the package (vendored qutebrowser source + the native chrome bar).
     # Proves the patch series applies + the package builds. This is what
-    # packages.x86_64-linux.my-browser evaluates to.
-    log "nix build .#my-browser (fork)"
+    # packages.x86_64-linux.my-browser-qute evaluates to.
+    log "nix build .#my-browser-qute"
     cd "$SRC"
-    nix build .#my-browser --no-write-lock-file -o "$ROOT/.result-fork"
-    log "→ $(readlink -f "$ROOT/.result-fork")/bin/qutebrowser"
+    nix build .#my-browser-qute --no-write-lock-file -o "$ROOT/.result-fork"
+    log "→ $(readlink -f "$ROOT/.result-fork")/bin/my-browser-qute"
     ;;
 
   fork-release)
@@ -107,8 +107,8 @@ case "$cmd" in
     [ "$enabled" = "true" ] || { log "fork-release: enabled=false — skip"; exit 0; }
     asset="$(node -e "const c=require('$CONFIG'); process.stdout.write(c.release.fork.asset_name)")"
     cd "$SRC"
-    log "nix bundle .#my-browser (portable fork binary)"
-    nix bundle .#my-browser --no-write-lock-file -o "$ROOT/.result-fork-bundle"
+    log "nix bundle .#my-browser-qute (portable binary)"
+    nix bundle .#my-browser-qute --no-write-lock-file -o "$ROOT/.result-fork-bundle"
     mkdir -p "$ROOT/dist"
     log "gzip → dist/$asset"
     gzip -c -n "$(readlink -f "$ROOT/.result-fork-bundle")" > "$ROOT/dist/$asset"
@@ -125,8 +125,8 @@ case "$cmd" in
     [ -f "$dst" ] || die "fork-gh-release: $dst missing — run './build.sh fork-release' first"
     log "fork-gh-release: rolling tag=$tag ← $asset"
     if ! gh release view "$tag" >/dev/null 2>&1; then
-      gh release create "$tag" --title "my-browser (qute)" --target "${GITHUB_SHA:-main}" \
-        --notes "Rolling release of the my-browser (qute) FORK — patched qutebrowser with the native bookmark + plugin chrome bar. Portable self-extracting binary: gunzip then chmod +x and run." --latest
+      gh release create "$tag" --title "my-browser-qute" --target "${GITHUB_SHA:-main}" \
+        --notes "Rolling release of my-browser-qute — vendored, rebranded qutebrowser with a native bookmark + plugin chrome bar. Portable self-extracting binary: gunzip then chmod +x and run." --latest
     fi
     gh release upload "$tag" "$dst" --clobber
     log "✓ published fork binary"
@@ -157,7 +157,7 @@ case "$cmd" in
     log "gh-release: rolling tag=$tag ← $asset"
     if ! gh release view "$tag" >/dev/null 2>&1; then
       gh release create "$tag" --title "$tag" --target "${GITHUB_SHA:-main}" \
-        --notes "Rolling qutebrowser standalone config release — overwritten on every push touching da_my-browser/." --latest
+        --notes "Rolling my-browser-qute standalone config release — overwritten on every push touching db_my-browser-qute/." --latest
     fi
     gh release upload "$tag" "$dst" --clobber
     gh release edit "$tag" --latest >/dev/null 2>&1 || true
@@ -201,14 +201,14 @@ case "$cmd" in
 
   install-standalone)
     # Pull the latest release + install to ~/.local/opt + symlink launcher.
-    # Never touches ~/.config/qutebrowser (the HM-managed one) — runs
+    # Never touches ~/.config/my-browser-qute (the HM-managed one) — runs
     # isolated via --basedir.
     tag="$(node -e "const c=require('$CONFIG'); process.stdout.write(c.release.gh_release.rolling_tag)")"
     asset="$(node -e "const c=require('$CONFIG'); process.stdout.write(c.release.gh_release.asset_name)")"
     tmp="$(mktemp -d)"
     log "install-standalone: gh release download $tag -p $asset"
     gh release download "$tag" -p "$asset" -D "$tmp" --clobber
-    target="$HOME/.local/opt/qutebrowser-standalone"
+    target="$HOME/.local/opt/my-browser-qute-standalone"
     # Extracted files carry the Nix store's read-only mode (444/555) — `rm`
     # needs write on the CONTAINING dir to unlink, not just the file, so a
     # prior install's read-only tree blocks a plain `rm -rf`. chmod first.
@@ -217,9 +217,9 @@ case "$cmd" in
     tar -xzf "$tmp/$asset" -C "$target"
     rm -rf "$tmp"
     mkdir -p "$HOME/.local/bin"
-    ln -sf "$target/qutebrowser-standalone" "$HOME/.local/bin/qutebrowser-standalone"
+    ln -sf "$target/my-browser-qute-standalone" "$HOME/.local/bin/my-browser-qute-standalone"
     log "✓ installed → $target"
-    log "  run: qutebrowser-standalone   (PATH must include ~/.local/bin)"
+    log "  run: my-browser-qute-standalone   (PATH must include ~/.local/bin)"
     ;;
 
   *)
