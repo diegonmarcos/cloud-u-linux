@@ -3815,10 +3815,10 @@ impl Dashboard for Monitor {
             // The product's own directory, not the repo root: cloud-unix holds
             // dozens of products and landing on the root leaves you to find
             // this one. The root is one click up from here anyway.
-            al.push(kv2("repo", format!("{repo}/tree/main/da_my-konsole")));
-            // Deep links: "da_my-konsole/dash" tells you where to look only if
+            al.push(kv2("repo", format!("{repo}/tree/main/da__my-konsole")));
+            // Deep links: "da__my-konsole/dash" tells you where to look only if
             // you already have the tree checked out.
-            al.push(kv2("source", format!("{repo}/tree/main/da_my-konsole/dash/src/dashboards")));
+            al.push(kv2("source", format!("{repo}/tree/main/da__my-konsole/dash/src/dashboards")));
             al.push(kv2("watchdog source", format!("{repo}/tree/main/da_watchdog")));
             al.push(kv2("releases", format!("{repo}/releases")));
             al.push(kv2("this binary", format!("{repo}/releases/tag/my-konsole-latest")));

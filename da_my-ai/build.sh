@@ -194,7 +194,7 @@ EOF
   # unit, `switch my-ai` drops a working binary but the status line still shows
   # nothing for those rows until a home-manager activation runs (which is the
   # whole reason `switch` exists — see my-konsole-tray.service in
-  # da_my-konsole/build.sh for the house pattern this follows).
+  # da__my-konsole/build.sh for the house pattern this follows).
   #
   # DUPLICATION NOTE: the unit content below is hand-kept in sync with
   # the home-manager module at
