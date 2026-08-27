@@ -1,10 +1,10 @@
 # da_my-browser-rust-chromium
 
-**Rust front-end + Chromium (CEF) backend** — the sibling to `da_my-browser-qute`.
+**Rust front-end + Chromium (CEF) backend** — the sibling to `db_my-browser-qute`.
 
 ## Why this exists
 
-`da_my-browser-qute` (QtWebEngine) has a **broken TLS fingerprint** — its
+`db_my-browser-qute` (QtWebEngine) has a **broken TLS fingerprint** — its
 ClientHello doesn't match real Chrome, so Cloudflare/Fastly/GitHub-Pages
 challenge or block it (measured: Brave passes, qute blocked, same IP). The fix
 can't come from qute config: the fingerprint is baked into QtWebEngine's
@@ -54,7 +54,7 @@ Done = its JA4 at `https://tls.peet.ws/api/all` matches a current Chrome
 profile **and** `https://diegonmarcos.github.io` loads without a challenge —
 the exact thing qute fails.
 
-## Layout (mirrors da_my-browser-qute)
+## Layout (mirrors db_my-browser-qute)
 
 ```
 da_my-browser-rust-chromium/
