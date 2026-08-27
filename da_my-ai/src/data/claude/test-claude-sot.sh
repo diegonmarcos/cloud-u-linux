@@ -37,34 +37,44 @@ done
 # recipients, un-shareable by construction) and nothing else.
 # Scoped to the flake trees: they are the only places that can vendor a second
 # copy, and a whole-monorepo walk took minutes on node_modules and .archive.
-FLAKES=$(ls -d "$REPO"/?[ab]_flakes_* 2>/dev/null)
+# The flakes are NOT in this repo. my-ai and the other d* apps split out into
+# cloud-u-linux; ba_/bb_flakes_* stayed behind in cloud-infra-desktop. So the
+# gate reaches them as a sibling checkout, the same way it reaches cloud-infra
+# below. An absent sibling must SKIP, never pass: an empty $FLAKES fed to find
+# counts zero hits and every check below would read as green.
+DESKTOP="${CLOUD_DESKTOP_REPO:-$REPO/../cloud-infra-desktop}"
+FLAKES=$(ls -d "$DESKTOP"/?[ab]_flakes_* 2>/dev/null || true)
 
-check "no flake vendors an mcp template of its own" \
-  "$(find $FLAKES -name 'mcp*.json.tpl' -print 2>/dev/null | wc -l | tr -d ' ')" 0
+if [ -n "$FLAKES" ]; then
+  check "no flake vendors an mcp template of its own" \
+    "$(find $FLAKES -name 'mcp*.json.tpl' -print 2>/dev/null | wc -l | tr -d ' ')" 0
 
-check "no flake vendors a settings.*.json of its own" \
-  "$(find $FLAKES \( -name 'settings.*.json' ! -name 'settings.local.json' \) -print 2>/dev/null | wc -l | tr -d ' ')" 0
+  check "no flake vendors a settings.*.json of its own" \
+    "$(find $FLAKES \( -name 'settings.*.json' ! -name 'settings.local.json' \) -print 2>/dev/null | wc -l | tr -d ' ')" 0
 
-# scripts/ and .sops.yaml are ENGINE, not settings — deploy/merge/debug shell
-# and the sops recipient list. Ownership follows what a file IS, not where it
-# happens to sit: data is the SoT's, code is the flake's.
-check "no settings DATA left beside a flake, only secrets.yaml" \
-  "$(find $FLAKES -path '*/src/claude/assets/*' -maxdepth 5 -type f \
-      ! -name secrets.yaml ! -name .sops.yaml ! -path '*/assets/scripts/*' \
-      2>/dev/null | wc -l | tr -d ' ')" 0
+  # scripts/ and .sops.yaml are ENGINE, not settings — deploy/merge/debug shell
+  # and the sops recipient list. Ownership follows what a file IS, not where it
+  # happens to sit: data is the SoT's, code is the flake's.
+  check "no settings DATA left beside a flake, only secrets.yaml" \
+    "$(find $FLAKES -path '*/src/claude/assets/*' -maxdepth 5 -type f \
+        ! -name secrets.yaml ! -name .sops.yaml ! -path '*/assets/scripts/*' \
+        2>/dev/null | wc -l | tr -d ' ')" 0
 
-# ── both flakes actually READ the SoT, rather than a store copy ──────────────
-for nix in "$REPO"/ba_flakes_desktop/src/claude/claude.nix \
-           "$REPO"/bb_flakes_termux/src/claude/claude.nix; do
-  check "$(basename "$(dirname "$(dirname "$(dirname "$nix")")")") no longer home.files an mcp template" \
-    "$(grep -c 'mcp.json.tpl".source' "$nix" || true)" 0
-done
+  # ── both flakes actually READ the SoT, rather than a store copy ────────────
+  for nix in "$DESKTOP"/ba_flakes_desktop/src/claude/claude.nix \
+             "$DESKTOP"/bb_flakes_termux/src/claude/claude.nix; do
+    check "$(basename "$(dirname "$(dirname "$(dirname "$nix")")")") no longer home.files an mcp template" \
+      "$(grep -c 'mcp.json.tpl".source' "$nix" || true)" 0
+  done
 
-# The template lands via an activation copy, so ~/.mcp.json must be templated
-# strictly after that copy — otherwise a switch renders last switch's servers.
-check "mcpSecrets runs after claudeAssets" \
-  "$(grep -c 'entryAfter \["linkGeneration" "claudeAssets"\]' \
-      "$REPO/ba_flakes_desktop/src/claude/claude.nix" || true)" 1
+  # The template lands via an activation copy, so ~/.mcp.json must be templated
+  # strictly after that copy — otherwise a switch renders last switch's servers.
+  check "mcpSecrets runs after claudeAssets" \
+    "$(grep -c 'entryAfter \["linkGeneration" "claudeAssets"\]' \
+        "$DESKTOP/ba_flakes_desktop/src/claude/claude.nix" || true)" 1
+else
+  echo "skip — cloud-infra-desktop checkout not found at $DESKTOP"
+fi
 
 # ── the client list has not drifted from the server list ─────────────────────
 # cloud-infra is the server-side SoT. Every MCP it declares public=true with a
