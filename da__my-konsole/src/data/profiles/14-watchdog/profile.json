@@ -118,23 +118,23 @@
     {
       "title": "Slice + OOM policy",
       "paths": [
-        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/src/modules/configuration_system-protection*.nix",
-        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/src/modules/configuration_observability.nix",
-        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/src/modules/docker-daemon-resources.nix"
+        "~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos/src/modules/configuration_system-protection*.nix",
+        "~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos/src/modules/configuration_observability.nix",
+        "~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos/src/modules/docker-daemon-resources.nix"
       ]
     },
     {
       "title": "Desktop-session guards",
       "paths": [
-        "~/git/cloud-unix/ba_flakes_desktop/src/modules/desktop-session/*.nix",
-        "~/git/cloud-unix/ba_flakes_desktop/src/modules/programs/hm-auto-update.nix"
+        "~/git/cloud-infra-desktop/ba_flakes_desktop/src/modules/desktop-session/*.nix",
+        "~/git/cloud-infra-desktop/ba_flakes_desktop/src/modules/programs/hm-auto-update.nix"
       ]
     },
     {
       "title": "Per-unit caps",
       "paths": [
-        "~/git/cloud-unix/ba_flakes_desktop/src/app_especific/my-ai/claude-superset.nix",
-        "~/git/cloud-unix/ba_flakes_desktop/src/modules/wireguard-wstunnel.nix"
+        "~/git/cloud-infra-desktop/ba_flakes_desktop/src/app_especific/my-ai/claude-superset.nix",
+        "~/git/cloud-infra-desktop/ba_flakes_desktop/src/modules/wireguard-wstunnel.nix"
       ]
     },
     {

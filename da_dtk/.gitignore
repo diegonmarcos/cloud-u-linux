@@ -6,8 +6,8 @@
 # ── Secrets & Credentials (reinforces global gitignore) ──
 # KEEP IN SYNC WITH:
 #   Pre-commit hook: 0_git/src/hooks/pre-commit  (blocks even git add -f)
-#   Global gitignore: ~/git/cloud-unix/ba_flakes_desktop/src/modules/programs/git.nix
-#   Global gitignore: ~/git/cloud-unix/bb_flakes_termux/src/modules/programs/git.nix
+#   Global gitignore: ~/git/cloud-infra-desktop/ba_flakes_desktop/src/modules/programs/git.nix
+#   Global gitignore: ~/git/cloud-infra-desktop/bb_flakes_termux/src/modules/programs/git.nix
 ## Decrypted secrets output
 .secrets
 *.secrets
@@ -60,7 +60,7 @@ terraform.tfvars
 # ── Dependencies (managed by shared ~/.node_modules) ──
 node_modules
 # ...except this one, a 120000 symlink to the shared ~/.node_modules that
-# this repo has always tracked. Kept when dtk merged into cloud-unix.
+# this repo has always tracked. Kept when dtk merged into cloud-infra-desktop.
 !products/mcp-unix-api/src/node_modules
 
 # ── Repo-specific ──

@@ -7,7 +7,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/diegonmarcos/cloud-mykonsole-dtk/main/5-infos/rebuild-flake/rebuild-flake.sh | sh
 set -eu
 
-UNIX_REPO="$HOME/git/cloud-unix"
+UNIX_REPO="$HOME/git/cloud-infra-desktop"
 FLAKE_DIR="$UNIX_REPO/bb_flakes_termux"
 BUILD_SH="$FLAKE_DIR/build.sh"
 
@@ -18,7 +18,7 @@ fail() { printf "${C_RED}[FAIL]${C_RST} %s\n" "$*"; exit 1; }
 step() { printf "\n${C_BLU}>>>${C_RST} %s\n" "$*"; }
 
 # ── 1. Sync source ────────────────────────────────────────────────────
-step "1/3  git pull ~/git/cloud-unix"
+step "1/3  git pull ~/git/cloud-infra-desktop"
 [ -d "$UNIX_REPO/.git" ] || fail "$UNIX_REPO is not a git repo"
 cd "$UNIX_REPO"
 git pull --ff-only 2>&1 | tail -5 || warn "git pull non-zero (network? local changes?)"

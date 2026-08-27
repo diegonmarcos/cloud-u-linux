@@ -28,7 +28,7 @@ sudo ./chroot-into.sh <target> [action]
 ```sh
 # Get into NixOS to fix configuration.nix
 sudo ./chroot-into.sh nixos
-cd ~/git/cloud-unix/aa_nixos-surface_host/src
+cd ~/git/cloud-infra-desktop/aa_nixos-surface_host/src
 nixos-rebuild build --flake .
 
 # Mount Debian read-write without entering it

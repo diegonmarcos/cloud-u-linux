@@ -5,7 +5,7 @@
     "remote": true,
     "_remote_note": "The Node Single Executable Application build (node --experimental-sea-config + postject injection, both architectures) is heavy and fragile across environments — built on GHA (ship-my-webserver-app.yml), published to the rolling GitHub Release, and fetched by the desktop and Termux nix modules. Never built locally.",
     "release_tag": "my-webserver-latest",
-    "repo": "diegonmarcos/cloud-unix",
+    "repo": "diegonmarcos/cloud-infra-desktop",
     "subdir": "da_my-webserver"
   },
   "runtime": {

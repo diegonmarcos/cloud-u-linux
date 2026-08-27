@@ -4267,8 +4267,8 @@ impl Dashboard for Monitor {
             let mut al: Vec<Line> = vec![sect("this app")];
             al.push(kv2("name", format!("my-konsole-dash {}", env!("CARGO_PKG_VERSION"))));
             al.push(kv2("what", "a btop-shaped panel over one JSON snapshot".into()));
-            let repo = "https://github.com/diegonmarcos/cloud-unix";
-            // The product's own directory, not the repo root: cloud-unix holds
+            let repo = "https://github.com/diegonmarcos/cloud-infra-desktop";
+            // The product's own directory, not the repo root: cloud-infra-desktop holds
             // dozens of products and landing on the root leaves you to find
             // this one. The root is one click up from here anyway.
             al.push(kv2("repo", format!("{repo}/tree/main/da__my-konsole")));

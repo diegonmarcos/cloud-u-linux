@@ -263,7 +263,7 @@ cc_build_mesh() {
         }' > "$CC_CACHE_DIR/mesh.json"
 }
 
-# Build hm-flakes.json by scanning ~/git/cloud-unix/ flake directories
+# Build hm-flakes.json by scanning ~/git/cloud-infra-desktop/ flake directories
 cc_build_hm() {
     local git_root
     git_root=$(jq -r --arg p "$CC_ENV_PROFILE" '

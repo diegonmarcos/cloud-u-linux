@@ -26,7 +26,7 @@
         },
         {
           "label": "unix repo",
-          "cmd": "cd ~/git/cloud-unix"
+          "cmd": "cd ~/git/cloud-infra-desktop"
         },
         {
           "label": "front repo",

@@ -8,11 +8,11 @@
       "title": "Nix Flakes",
       "profile": "nix-flakes",
       "enable": true,
-      "default_command": "konsole --hold -e bash -lc '$HOME/git/cloud-unix/ba_flakes_desktop/build.sh status'",
+      "default_command": "konsole --hold -e bash -lc '$HOME/git/cloud-infra-desktop/ba_flakes_desktop/build.sh status'",
       "menu": [
         {
           "label": "Switch (pull latest, isolated)",
-          "command": "konsole --hold -e bash -lc '$HOME/git/cloud-unix/ba_flakes_desktop/build.sh switch'"
+          "command": "konsole --hold -e bash -lc '$HOME/git/cloud-infra-desktop/ba_flakes_desktop/build.sh switch'"
         },
         {
           "label": "Generations",
@@ -20,7 +20,7 @@
         },
         {
           "label": "Status",
-          "command": "konsole --hold -e bash -lc '$HOME/git/cloud-unix/ba_flakes_desktop/build.sh status; read'"
+          "command": "konsole --hold -e bash -lc '$HOME/git/cloud-infra-desktop/ba_flakes_desktop/build.sh status; read'"
         },
         {
           "label": "Nix Daemon: status",
@@ -240,11 +240,11 @@
         },
         {
           "label": "Edit secrets (sops)",
-          "command": "konsole --hold -e sops $HOME/git/cloud-unix/ba_flakes_desktop/src/secrets/secrets.yaml"
+          "command": "konsole --hold -e sops $HOME/git/cloud-infra-desktop/ba_flakes_desktop/src/secrets/secrets.yaml"
         },
         {
           "label": "List secret keys (no values)",
-          "command": "konsole --hold -e bash -lc 'sops -d --output-type json $HOME/git/cloud-unix/ba_flakes_desktop/src/secrets/secrets.yaml | jq keys; read'"
+          "command": "konsole --hold -e bash -lc 'sops -d --output-type json $HOME/git/cloud-infra-desktop/ba_flakes_desktop/src/secrets/secrets.yaml | jq keys; read'"
         }
       ]
     },
@@ -254,11 +254,11 @@
       "title": "Workflow — GHA / Dagu",
       "profile": "cloud-infra",
       "enable": true,
-      "default_command": "konsole --hold -e bash -lc 'gh run list -R diegonmarcos/cloud-unix -L 15; read'",
+      "default_command": "konsole --hold -e bash -lc 'gh run list -R diegonmarcos/cloud-infra-desktop -L 15; read'",
       "menu": [
         {
           "label": "GHA: recent runs (unix)",
-          "command": "konsole --hold -e bash -lc 'gh run list -R diegonmarcos/cloud-unix -L 15; read'"
+          "command": "konsole --hold -e bash -lc 'gh run list -R diegonmarcos/cloud-infra-desktop -L 15; read'"
         },
         {
           "label": "GHA: recent runs (cloud)",

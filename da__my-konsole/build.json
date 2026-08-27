@@ -14,7 +14,7 @@
     "remote": true,
     "_remote_note": "Rust/Tauri compile is heavy — built on GHA (ship-my-konsole-app.yml), published to GH release + GHCR, pulled on the laptop. Never compiled locally (freeze-guard).",
     "release_tag": "my-konsole-latest",
-    "repo": "diegonmarcos/cloud-unix",
+    "repo": "diegonmarcos/cloud-infra-desktop",
     "subdir": "da__my-konsole",
     "vendor": {
       "@xterm/xterm": "^5",

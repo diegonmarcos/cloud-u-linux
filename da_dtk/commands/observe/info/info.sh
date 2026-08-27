@@ -4,7 +4,7 @@ set -eu
 
 REPOS="cloud:https://github.com/diegonmarcos/cloud-infra.git
 cloud-data:https://github.com/diegonmarcos/cloud-data.git
-unix:https://github.com/diegonmarcos/cloud-unix.git
+unix:https://github.com/diegonmarcos/cloud-infra-desktop.git
 front:https://github.com/diegonmarcos/front.git
 vault:https://github.com/diegonmarcos/cloud-vault.git"
 

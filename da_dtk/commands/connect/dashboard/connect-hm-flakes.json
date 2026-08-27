@@ -3,21 +3,21 @@
     {
       "name": "termux",
       "description": "Termux Home Manager",
-      "path": "~/git/cloud-unix/bb_flakes_termux",
+      "path": "~/git/cloud-infra-desktop/bb_flakes_termux",
       "type": "home-manager",
       "enabled": true
     },
     {
       "name": "desktop",
       "description": "Desktop Home Manager",
-      "path": "~/git/cloud-unix/ba_flakes_desktop",
+      "path": "~/git/cloud-infra-desktop/ba_flakes_desktop",
       "type": "home-manager",
       "enabled": true
     },
     {
       "name": "nixos-surface",
       "description": "NixOS Surface Host",
-      "path": "~/git/cloud-unix/aa_nixos-surface_host",
+      "path": "~/git/cloud-infra-desktop/aa_nixos-surface_host",
       "type": "nixos",
       "enabled": true
     }

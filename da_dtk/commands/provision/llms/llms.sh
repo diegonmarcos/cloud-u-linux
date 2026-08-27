@@ -201,7 +201,7 @@ do_malloc_termux() {
 
   if [ "$_ok" = true ]; then
     printf "  ${G}All dependencies installed.${R}\n"
-    printf "  ${D}Run:  ~/git/cloud-unix/bb_flakes_termux/build.sh switch  to apply env vars${R}\n\n"
+    printf "  ${D}Run:  ~/git/cloud-infra-desktop/bb_flakes_termux/build.sh switch  to apply env vars${R}\n\n"
   else
     printf "  ${RED}Some dependencies missing — see errors above${R}\n\n"
   fi

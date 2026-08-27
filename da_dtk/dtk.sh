@@ -534,7 +534,7 @@ printf "\n"
   _lbl() { _v=$("$DOCKER" image inspect "$IMG" --format "{{index .Config.Labels \"$1\"}}" 2>/dev/null); [ "$_v" != "<no value>" ] && [ -n "$_v" ] && echo "$_v" || echo "$2"; }
   _IMG_DIGEST=$("$DOCKER" image inspect "$IMG" --format '{{index .RepoDigests 0}}' 2>/dev/null | sed 's/.*@//' | cut -c1-19 || echo "?")
   _IMG_LAYERS=$("$DOCKER" image inspect "$IMG" --format '{{len .RootFS.Layers}}' 2>/dev/null || echo "?")
-  _IMG_SRC=$(_lbl "org.opencontainers.image.source" "github.com/diegonmarcos/cloud-unix")
+  _IMG_SRC=$(_lbl "org.opencontainers.image.source" "github.com/diegonmarcos/cloud-infra-desktop")
   _IMG_DESC=$(_lbl "org.opencontainers.image.description" "Nix dev env (nix profile install)")
   _IMG_DFILE=$(_lbl "diego.image.dockerfile.path" "ba_flakes_desktop/src/container/Containerfile")
   _IMG_COMPOSE=$(_lbl "diego.image.compose.path" "ba_flakes_desktop/src/container/compose.yaml")
@@ -772,7 +772,7 @@ do_sysmon() {
     setsid cloud-terminal home >/dev/null 2>&1 &
     echo "→ opened Cloud Terminal system monitor (Home profile)"
   else
-    echo "cloud-terminal not installed — run: ~/git/cloud-unix/da_cloud-terminal/build.sh install"
+    echo "cloud-terminal not installed — run: ~/git/cloud-infra-desktop/da_cloud-terminal/build.sh install"
   fi
 }
 
@@ -1541,9 +1541,9 @@ do_sys_paths() { set +x 2>/dev/null
   printf "\n${G}sys-paths${R} ${D}(flakes & engines)${R}\n"
   printf "${D}──────────────────────────────────────────────────────────────────────────────────${R}\n"
   _F="  ${Y}%-20s${R} ${W}%s${R}\n"
-  printf "$_F" "nixos-host" "~/git/cloud-unix/aa_nixos-surface_host/"
-  printf "$_F" "hm-desktop" "~/git/cloud-unix/ba_flakes_desktop/"
-  printf "$_F" "hm-termux" "~/git/cloud-unix/bb_flakes_termux/"
+  printf "$_F" "nixos-host" "~/git/cloud-infra-desktop/aa_nixos-surface_host/"
+  printf "$_F" "hm-desktop" "~/git/cloud-infra-desktop/ba_flakes_desktop/"
+  printf "$_F" "hm-termux" "~/git/cloud-infra-desktop/bb_flakes_termux/"
   printf "$_F" "cloud-repo" "~/git/cloud-infra/"
   printf "$_F" "front-repo" "~/git/front/"
   printf "$_F" "tools-repo" "~/git/cloud-mykonsole-dtk/"
@@ -1586,7 +1586,7 @@ do_sys_envs() { set +x 2>/dev/null
 }
 do_sys_mounts() { set +x 2>/dev/null
   R='\033[0m'; Y='\033[1;33m'; W='\033[1;37m'; G='\033[1;32m'; D='\033[0;90m'; C='\033[1;36m'
-  _nixos_src="$HOME/git/cloud-unix/aa_nixos-surface_host/src"
+  _nixos_src="$HOME/git/cloud-infra-desktop/aa_nixos-surface_host/src"
   _fs="$_nixos_src/modules/hardware_filesystems.nix"
   _boot="$_nixos_src/modules/hardware_boot.nix"
   _prot="$_nixos_src/modules/configuration_system-protection.nix"
@@ -1854,7 +1854,7 @@ do_webhooks()  { sh "$_REC_DIR/webhooks/webhooks.sh" "$@"; }
 # tools/, no dependency on the unix flake checkout being present.
 do_rescue_sshd() { sh "$_REC_DIR/rescue-sshd/rescue-sshd.sh" "$@"; }
 
-# rebuild-flake: pull ~/git/cloud-unix + run bb_flakes_termux/build.sh switch.
+# rebuild-flake: pull ~/git/cloud-infra-desktop + run bb_flakes_termux/build.sh switch.
 # One-command path to apply latest committed flake state on termux.
 do_rebuild_flake() { sh "$_REC_DIR/rebuild-flake/rebuild-flake.sh" "$@"; }
 

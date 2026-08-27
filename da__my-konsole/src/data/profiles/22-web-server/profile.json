@@ -20,7 +20,7 @@
       "title": "SERVE A ROOT",
       "items": [
         { "label": "$HOME (default)", "cmd": "my-webserver restart 8000 $HOME" },
-        { "label": "~/git/cloud-unix", "cmd": "my-webserver restart 8000 $HOME/git/cloud-unix" },
+        { "label": "~/git/cloud-infra-desktop", "cmd": "my-webserver restart 8000 $HOME/git/cloud-infra-desktop" },
         { "label": "~/git/cloud-infra", "cmd": "my-webserver restart 8000 $HOME/git/cloud-infra" },
         { "label": "~/git/front", "cmd": "my-webserver restart 8000 $HOME/git/front" },
         { "label": "custom port + dir", "cmd": "my-webserver restart " }

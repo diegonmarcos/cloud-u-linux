@@ -72,7 +72,7 @@ try:
         description=_get_constant('description'),
         long_description=read_file('README.asciidoc'),
         long_description_content_type='text/plain',
-        url='https://github.com/diegonmarcos/cloud-unix',
+        url='https://github.com/diegonmarcos/cloud-infra-desktop',
         author=_get_constant('author'),
         author_email=_get_constant('email'),
         license=_get_constant('license'),

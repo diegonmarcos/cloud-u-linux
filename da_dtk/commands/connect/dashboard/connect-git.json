@@ -2,7 +2,7 @@
   "git": {
     "public_repos": {
       "Tools": "git@github.com:diegonmarcos/ops-Tooling.git",
-      "unix": "git@github.com:diegonmarcos/cloud-unix.git",
+      "unix": "git@github.com:diegonmarcos/cloud-infra-desktop.git",
       "cloud": "git@github.com:diegonmarcos/cloud-infra.git",
       "front": "git@github.com:diegonmarcos/diegonmarcos.github.io.git",
       "front_gh-profile": "git@github.com:diegonmarcos/diegonmarcos.git",

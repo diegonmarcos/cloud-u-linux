@@ -19,7 +19,7 @@
 #   inject → fail-open: emit a minimal static reminder.
 #   nudge  → fail-open: exit 0.
 #
-# Source: ~/git/cloud-unix/ba_flakes_desktop/src/modules/dotfiles/claude/cloud-marketplace/cloud-principles-ai-plugin/scripts/
+# Source: ~/git/cloud-infra-desktop/ba_flakes_desktop/src/modules/dotfiles/claude/cloud-marketplace/cloud-principles-ai-plugin/scripts/
 # Deployed via: home.file ".claude/cloud-marketplace" + `claude plugin marketplace add`
 #   (see common.nix claudeMarketplace activation) — installed copy runs from
 #   ~/.claude/plugins/cache/cloud-marketplace/cloud-principles-ai-plugin/<version>/scripts/

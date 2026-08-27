@@ -76,7 +76,7 @@ pkgs.qutebrowser.overrideAttrs (old: {
 
   meta = (old.meta or {}) // {
     description = "my-browser-qute — keyboard-driven browser with a native bookmark/plugin bar";
-    homepage = "https://github.com/diegonmarcos/cloud-unix";
+    homepage = "https://github.com/diegonmarcos/cloud-infra-desktop";
     mainProgram = "my-browser-qute";
   };
 })

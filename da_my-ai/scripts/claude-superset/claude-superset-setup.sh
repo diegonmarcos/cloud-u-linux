@@ -96,7 +96,7 @@ case "$PLATFORM" in
     # Declarative systems — claude is provided by the flake. Imperatively
     # installing here would violate the fully-declarative rule. Guide instead.
     say "$PLATFORM is flake-managed — claude is declarative, don't hand-install."
-    say "  permanent : ~/git/cloud-unix/<flake>/build.sh switch   (rebuild the flake)"
+    say "  permanent : ~/git/cloud-infra-desktop/<flake>/build.sh switch   (rebuild the flake)"
     say "  temporary : claude-superset setup --shell         (ephemeral nix-shell)"
     exit 0 ;;
   deb|linux|macos)

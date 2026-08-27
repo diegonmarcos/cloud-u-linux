@@ -7,8 +7,8 @@
 # - No flake rebuild needed — only requires that openssh is already in the profile
 #
 # Usage on termux:
-#   sh ~/git/cloud-unix/bb_flakes_termux/rescue-sshd.sh
-#   curl -fsSL https://raw.githubusercontent.com/diegonmarcos/cloud-unix/main/bb_flakes_termux/rescue-sshd.sh | sh
+#   sh ~/git/cloud-infra-desktop/bb_flakes_termux/rescue-sshd.sh
+#   curl -fsSL https://raw.githubusercontent.com/diegonmarcos/cloud-infra-desktop/main/bb_flakes_termux/rescue-sshd.sh | sh
 set -eu
 
 # Port — sourced from build.json defaults.ssh_port, fallback 8023.
@@ -16,7 +16,7 @@ set -eu
 # (kernel TIME_WAIT or app sandbox lock that doesn't show in /proc/net/tcp).
 # 8023 is verified working; change build.json to override.
 PORT=""
-_PORT_BJ="$HOME/git/cloud-unix/bb_flakes_termux/build.json"
+_PORT_BJ="$HOME/git/cloud-infra-desktop/bb_flakes_termux/build.json"
 [ -f "$_PORT_BJ" ] && PORT=$(awk -F'[":, ]+' '/"ssh_port"/{print $3; exit}' "$_PORT_BJ" 2>/dev/null)
 [ -z "$PORT" ] && PORT=8023
 KEY_DIR="$HOME/.ssh"
@@ -33,7 +33,7 @@ SSH_KEYGEN_BIN="$HOME/.nix-profile/bin/ssh-keygen"
 #   1. build.json defaults.wg_ip (data-driven, declarative)
 #   2. live wg0 interface (in case build.json missing or outdated)
 LISTEN_IP=""
-_BUILD_JSON="$HOME/git/cloud-unix/bb_flakes_termux/build.json"
+_BUILD_JSON="$HOME/git/cloud-infra-desktop/bb_flakes_termux/build.json"
 if [ -f "$_BUILD_JSON" ]; then
   LISTEN_IP=$(awk -F'"' '/"wg_ip"/{print $4; exit}' "$_BUILD_JSON" 2>/dev/null)
 fi
@@ -60,7 +60,7 @@ ok "sshd=$SSHD_BIN"
 
 # Bootstrap authorized_keys from repo if missing
 if [ ! -s "$AUTH_KEYS" ]; then
-  REPO_KEYS="$HOME/git/cloud-unix/bb_flakes_termux/src/modules/data/authorized-keys.json"
+  REPO_KEYS="$HOME/git/cloud-infra-desktop/bb_flakes_termux/src/modules/data/authorized-keys.json"
   if [ -f "$REPO_KEYS" ]; then
     awk '/"ssh-/ { gsub(/^[[:space:]]*"|",?$/, ""); print }' "$REPO_KEYS" > "$AUTH_KEYS"
     chmod 600 "$AUTH_KEYS"

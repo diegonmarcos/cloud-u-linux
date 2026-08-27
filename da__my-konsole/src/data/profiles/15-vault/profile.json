@@ -20,11 +20,11 @@
         },
         {
           "label": "edit secrets (sops)",
-          "cmd": "sops $HOME/git/cloud-unix/ba_flakes_desktop/src/secrets/secrets.yaml"
+          "cmd": "sops $HOME/git/cloud-infra-desktop/ba_flakes_desktop/src/secrets/secrets.yaml"
         },
         {
           "label": "list secret keys (no values)",
-          "cmd": "sops -d --output-type json $HOME/git/cloud-unix/ba_flakes_desktop/src/secrets/secrets.yaml | jq keys"
+          "cmd": "sops -d --output-type json $HOME/git/cloud-infra-desktop/ba_flakes_desktop/src/secrets/secrets.yaml | jq keys"
         }
       ]
     }
@@ -32,7 +32,7 @@
   "configs": [
     {
       "title": "Secrets (sops-encrypted)",
-      "paths": ["~/git/cloud-unix/ba_flakes_desktop/src/secrets/secrets.yaml"]
+      "paths": ["~/git/cloud-infra-desktop/ba_flakes_desktop/src/secrets/secrets.yaml"]
     }
   ],
   "group": "g3"

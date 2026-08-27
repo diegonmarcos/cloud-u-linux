@@ -10,7 +10,7 @@
     "remote": true,
     "_remote_note": "Rust compile is heavy — built on GHA, published to the rolling GitHub Release, fetched by the desktop nix module. Never compiled locally (freeze-guard).",
     "release_tag": "my-watchdog-latest",
-    "repo": "diegonmarcos/cloud-unix",
+    "repo": "diegonmarcos/cloud-infra-desktop",
     "subdir": "da_watchdog"
   },
   "runtime": {

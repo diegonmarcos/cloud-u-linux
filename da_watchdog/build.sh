@@ -6,7 +6,7 @@ set -euo pipefail
 C='\033[0;36m'; N='\033[0m'
 say() { printf "${C}[my-watchdog]${N} %s\n" "$*"; }
 
-REPO=diegonmarcos/cloud-unix
+REPO=diegonmarcos/cloud-infra-desktop
 TAG=my-watchdog-latest
 BIN=my-watchdog
 DEST="${XDG_DATA_HOME:-$HOME/.local/share}/my-konsole"

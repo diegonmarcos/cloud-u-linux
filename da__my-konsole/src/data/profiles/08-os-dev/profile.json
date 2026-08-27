@@ -45,11 +45,11 @@
       "items": [
         {
           "label": "Host: test (dry)",
-          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh test"
+          "cmd": "~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos/build.sh test"
         },
         {
           "label": "Host: switch",
-          "cmd": "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/build.sh switch"
+          "cmd": "~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos/build.sh switch"
         },
         {
           "label": "List generations",
@@ -148,7 +148,7 @@
         },
         {
           "label": "Boot entries (rEFInd)",
-          "cmd": "~/git/cloud-unix/aa_bootloader/build.sh info"
+          "cmd": "~/git/cloud-infra-desktop/aa_bootloader/build.sh info"
         },
         {
           "label": "EFI vars / boot order",
@@ -211,18 +211,18 @@
     {
       "title": "NixOS host",
       "paths": [
-        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/**/*.nix",
-        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/**/*.json",
-        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/**/*.md",
-        "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/**/*.lock"
+        "~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos/**/*.nix",
+        "~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos/**/*.json",
+        "~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos/**/*.md",
+        "~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos/**/*.lock"
       ]
     },
     {
       "title": "Bootloader",
       "paths": [
-        "~/git/cloud-unix/aa_bootloader/**/*.nix",
-        "~/git/cloud-unix/aa_bootloader/**/*.json",
-        "~/git/cloud-unix/aa_bootloader/**/*.md"
+        "~/git/cloud-infra-desktop/aa_bootloader/**/*.nix",
+        "~/git/cloud-infra-desktop/aa_bootloader/**/*.json",
+        "~/git/cloud-infra-desktop/aa_bootloader/**/*.md"
       ]
     }
   ],

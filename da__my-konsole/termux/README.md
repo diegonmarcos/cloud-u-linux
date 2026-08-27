@@ -7,7 +7,7 @@ on-device in Termux, so the my-konsole WebView app can connect to
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/diegonmarcos/cloud-unix/main/da_my-konsole/termux/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/diegonmarcos/cloud-infra-desktop/main/da_my-konsole/termux/install.sh | bash
 ```
 
 This fetches `my-konsole-engine-aarch64` from the rolling `my-konsole-latest`

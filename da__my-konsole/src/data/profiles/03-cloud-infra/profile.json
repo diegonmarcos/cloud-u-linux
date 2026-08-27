@@ -208,7 +208,7 @@
         },
         {
           "label": "runs (unix)",
-          "cmd": "gh run list -R diegonmarcos/cloud-unix -L 15"
+          "cmd": "gh run list -R diegonmarcos/cloud-infra-desktop -L 15"
         },
         {
           "label": "watch latest run",

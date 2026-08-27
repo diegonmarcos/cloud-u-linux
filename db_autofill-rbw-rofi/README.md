@@ -12,7 +12,7 @@ typed straight into the focused field via `wtype` (Wayland) or `xdotool`
 invoked on a hotkey by `systemd --user`.
 
 Companion: passkey/WebAuthn signing is handled separately by
-`~/git/cloud-unix/da_fido2-vault-broker/` (virtual FIDO2 device on /dev/uhid).
+`~/git/cloud-u-linux/da_fido2-vault-broker/` (virtual FIDO2 device on /dev/uhid).
 Together the two replace both halves of the Bitwarden browser extension.
 
 All runtime behaviour is declarative — the picker, typer, clipboard, action

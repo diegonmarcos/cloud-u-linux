@@ -1,0 +1,60 @@
+name: "Ship → my-browser-rust-chromium (Rust + CEF) release"
+
+# Builds a real Rust + Chromium (CEF/BoringSSL → clean fingerprint) browser on a
+# GHA runner (the Surface can't build CEF). MVP baseline = upstream cef-rs
+# `cefsimple` built in-workspace: build.sh clones cef-rs@ref (build.json),
+# `export-cef-dir` fetches the matching CEF, cargo builds the example, and we
+# tarball binary+CEF-runtime → rolling GitHub Release (pullable) + GHCR mirror.
+# All logic in db_my-browser-rust-chromium/build.sh. Thin YAML.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "db_my-browser-rust-chromium/build.sh"
+      - "db_my-browser-rust-chromium/build.json"
+      - "db_my-browser-rust-chromium/src/**"
+      - ".github/workflows/ship_my-browser-rust-chromium.yaml"
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: ship-my-browser-rust-chromium
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90   # CEF download + libcef_dll_wrapper build needs headroom
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CEF build + runtime deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build clang libclang-dev pkg-config jq \
+            libgtk-3-dev libnss3 libnspr4-dev \
+            libx11-dev libxcomposite-dev libxdamage-dev libxrandr-dev \
+            libasound2-dev libcups2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build (clone cef-rs, export CEF, cargo build cefsimple)
+        run: ./db_my-browser-rust-chromium/build.sh release
+
+      - name: Publish to rolling GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./db_my-browser-rust-chromium/build.sh gh-release
+
+      - uses: oras-project/setup-oras@v1
+      - name: Mirror to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GITHUB_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          ./db_my-browser-rust-chromium/build.sh ghcr-push

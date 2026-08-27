@@ -5,7 +5,7 @@ set -u
 
 FISH_DIR="${HOME}/.config/fish"
 STARSHIP_DIR="${HOME}/.config"
-RAW="https://raw.githubusercontent.com/diegonmarcos/cloud-unix/main/ba_flakes_desktop/src/modules/programs/shells/fish"
+RAW="https://raw.githubusercontent.com/diegonmarcos/cloud-infra-desktop/main/ba_flakes_desktop/src/modules/programs/shells/fish"
 
 echo "=== Fish Shell Setup — lightweight (23b) ==="
 

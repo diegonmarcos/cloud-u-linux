@@ -32,7 +32,7 @@
   "configs": [
     {
       "title": "Docker daemon (NixOS module)",
-      "paths": ["~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/src/modules/docker-daemon*.nix", "~/git/cloud-unix/aa_desk-usr_x86_surface-linux_nixos/src/modules/configuration_containers.nix"]
+      "paths": ["~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos/src/modules/docker-daemon*.nix", "~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos/src/modules/configuration_containers.nix"]
     }
   ],
   "group": "g3"
