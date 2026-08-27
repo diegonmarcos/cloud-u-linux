@@ -165,6 +165,22 @@ const MIME = {
 };
 
 // Fallback: if extension not in MIME map, try to detect text vs binary
+// Web panels reachable as /app.<name>, each served out of its own project's
+// dist/. Kept as data so adding one is an entry, not a code path; overridable
+// with MY_WEBSERVER_APPS ("name=/path,name=/path") for a checkout that does not
+// live where this default expects it.
+const APPS = (() => {
+  const home = process.env.HOME || '.';
+  const apps = {
+    watchdog: join(home, 'git/cloud-unix/da_watchdog/web/dist'),
+  };
+  for (const pair of (process.env.MY_WEBSERVER_APPS || '').split(',')) {
+    const i = pair.indexOf('=');
+    if (i > 0) apps[pair.slice(0, i).trim()] = pair.slice(i + 1).trim();
+  }
+  return apps;
+})();
+
 function guessMime(ext, content) {
   if (MIME[ext]) return MIME[ext];
   // If content is provided and looks like text, serve as text/plain
@@ -1151,6 +1167,42 @@ const server = createServer(async (req, res) => {
       res.writeHead(200, {
         'content-type': guessMime(ext),
         'cache-control': 'public, max-age=86400',
+      });
+      return res.end(data);
+    }
+
+    // /app.<name> -- a short, memorable URL for a web panel that lives inside
+    // its own project's dist/, not under the served root's tree. Declared in
+    // APPS rather than matched by pattern: a rule that turns any /app.X into a
+    // filesystem path is a directory-traversal surface, and these are meant to
+    // be a handful of named things, not a namespace.
+    const appMatch = urlPath.match(/^\/app\.([a-z0-9-]+)(\/.*)?$/);
+    if (appMatch && APPS[appMatch[1]]) {
+      ctx.render = 'app';
+      const appRoot = resolve(APPS[appMatch[1]]);
+      const rel = (appMatch[2] || '/').replace(/^\/+/, '') || 'index.html';
+      const target = resolve(appRoot, rel);
+      // The same containment check the served root gets: an app root is a
+      // smaller box than $HOME, which makes escaping it worth more, not less.
+      if (target !== appRoot && !target.startsWith(appRoot + '/')) {
+        res.writeHead(403, { 'content-type': 'text/plain' });
+        return res.end('Forbidden');
+      }
+      const data = await readFile(target).catch(() => null);
+      if (!data) {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        return res.end('Not found');
+      }
+      res.writeHead(200, {
+        // *.js.json is a SCRIPT that assigns a global, not a document to be
+        // fetched -- that is the whole point of the extension. Browsers refuse
+        // to execute a <script> served as application/json, so name it what it
+        // behaves as rather than what it is spelled as.
+        'content-type': target.endsWith('.js.json')
+          ? 'text/javascript; charset=utf-8'
+          : guessMime(extname(target).toLowerCase()),
+        // A live panel that is allowed to go stale is a lying panel.
+        'cache-control': 'no-store',
       });
       return res.end(data);
     }
