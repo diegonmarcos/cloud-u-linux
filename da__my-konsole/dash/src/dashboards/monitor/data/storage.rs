@@ -79,6 +79,25 @@ pub(crate) fn firewall_declared() -> Option<Value> {
         .cloned()
 }
 
+/// Every machine the fleet declares, with the action strings the deriver
+/// built for it.
+///
+/// The panel never composes an `oci` or `gcloud` command line: it runs the
+/// string the declaration carries, and a machine whose provider the deriver
+/// did not recognise simply offers fewer verbs. One of these commands stops a
+/// production VM, and the place to decide their exact wording is the file
+/// that already knows the instance ids.
+pub(crate) fn machines_declared() -> Vec<Value> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let p = format!("{home}/git/cloud-infra/1_cloud-configs/dist/watchdog.json");
+    fs::read_to_string(&p)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .and_then(|v| v.get("machines")?.as_array().cloned())
+        .unwrap_or_default()
+}
+
+
 /// Every mountpoint this machine DECLARES, mounted or not.
 ///
 /// The first version listed /proc/mounts, which answers "what is mounted" —

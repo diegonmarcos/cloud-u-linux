@@ -91,6 +91,9 @@ enum Overlay {
     Unit,
     /// One machine's totals, opened from the fleet view.
     Machine,
+    /// Everything that can be done TO a machine: the two transports the
+    /// declaration carries, and its manageable daemons.
+    FleetAct,
     /// One container, with the verbs that act on it.
     Ctr,
     /// One image, with the verbs that act on it.
@@ -215,6 +218,10 @@ pub struct Monitor {
     target_sel: usize,
     free_sel: usize,
     unit_sel: usize,
+    fleet_sel: usize,
+    /// The row Enter has already been pressed on once. A command that stops a
+    /// production VM does not run on one keystroke.
+    fleet_armed: Option<usize>,
     /// Alias of the peer the Machine modal is describing.
     machine: Option<String>,
     /// The pid the detail modal was opened on, pinned. The modal is about
@@ -295,6 +302,8 @@ impl Monitor {
             target_sel: 0,
             free_sel: 0,
             unit_sel: 0,
+            fleet_sel: 0,
+            fleet_armed: None,
             machine: None,
             detail_pid: None,
             acting_unit: None,
@@ -932,6 +941,7 @@ impl Monitor {
             Overlay::Free => self.render_free(f, area),
             Overlay::Unit => self.render_unit(f, area),
             Overlay::Machine => self.render_machine(f, area),
+            Overlay::FleetAct => self.render_fleet_act(f, area),
             Overlay::Ctr => self.render_ctr(f, area),
             Overlay::Img => self.render_img(f, area),
             Overlay::None => {}
@@ -1096,6 +1106,152 @@ impl Monitor {
         )));
         let max = (l.len() as u16).saturating_sub(inner.height);
         f.render_widget(Paragraph::new(l).scroll((self.detail_scroll.min(max), 0)), inner);
+    }
+
+    /// Everything that can be done to the machine the fleet cursor is on.
+    ///
+    /// Read from the declaration, never composed here: the deriver knows the
+    /// instance ids and which provider CLI speaks to them, and a panel that
+    /// guessed would eventually guess `stop` at the wrong VM. The only strings
+    /// built here are systemctl ones, which are the same everywhere.
+    ///
+    /// `(group, verb, command)`. An empty result means this peer is not in the
+    /// fleet declaration, which is worth saying out loud rather than drawing
+    /// as an empty box.
+    fn fleet_actions(&self, alias: &str) -> Vec<(String, String, String)> {
+        let Some(m) = storage::machines_declared().into_iter().find(|m| text(m, "alias") == alias)
+        else {
+            return vec![];
+        };
+        let mut out = vec![];
+        // Exactly the verbs asked for, in the order of increasing violence.
+        // A verb the declaration does not carry is not offered: ssh can never
+        // start a machine, because starting is what you need precisely when
+        // nothing is listening.
+        for (group, verbs) in [("ssh", ["stop", "reboot-forced"].as_slice()), ("console", &["start", "stop", "reboot-forced"])] {
+            for v in verbs {
+                let cmd = text(&m, &format!("actions.{group}.{v}"));
+                if !cmd.is_empty() {
+                    out.push((group.to_string(), v.to_string(), cmd));
+                }
+            }
+        }
+        // The daemons list is declared too; only the systemctl line around it
+        // is built here, and that one is provider-independent.
+        for d in arr(&m, "daemons") {
+            let Some(unit) = d.as_str() else { continue };
+            for v in ["start", "stop"] {
+                out.push((
+                    "daemon".to_string(),
+                    format!("{v} {unit}"),
+                    format!("ssh {alias} sudo systemctl {v} {unit}"),
+                ));
+            }
+        }
+        out
+    }
+
+    fn render_fleet_act(&self, f: &mut Frame, area: Rect) {
+        let Some(alias) = self.machine.clone() else { return };
+        let accent = Color::Rgb(240, 100, 100);
+        let acts = self.fleet_actions(&alias);
+        let inner = Self::modal(f, area, 96, acts.len() as u16 + 8, &format!("act on {alias}"), accent);
+        let mut l: Vec<Line> = vec![];
+        if acts.is_empty() {
+            l.push(Line::from(Span::styled(
+                "  this machine is not in the fleet declaration — nothing here knows how to reach it",
+                Style::default().fg(Color::Rgb(240, 160, 90)),
+            )));
+        }
+        let mut last = String::new();
+        for (i, (group, verb, cmd)) in acts.iter().enumerate() {
+            if *group != last {
+                l.push(Line::from(Span::styled(
+                    group.clone(),
+                    Style::default().fg(accent).add_modifier(Modifier::BOLD),
+                )));
+                last = group.clone();
+            }
+            let sel = i == self.fleet_sel;
+            let armed = self.fleet_armed == Some(i);
+            l.push(Line::from(vec![
+                Span::styled(if sel { "▶ " } else { "  " }, Style::default().fg(accent)),
+                Span::styled(
+                    format!("{:<24}", verb),
+                    if sel {
+                        Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::Gray)
+                    },
+                ),
+                Span::styled(
+                    if armed { format!("enter again to run: {}", trunc(cmd, 50)) } else { trunc(cmd, 66) },
+                    Style::default().fg(if armed { accent } else { LABEL }),
+                ),
+            ]));
+        }
+        l.push(Line::from(""));
+        l.push(Line::from(Span::styled(
+            "  ↑↓ pick · enter arms, enter again runs · m for this machine's totals · any other key returns",
+            Style::default().fg(DIM),
+        )));
+        f.render_widget(Paragraph::new(l), inner);
+    }
+
+    fn fleet_act_key(&mut self, k: KeyCode) {
+        let Some(alias) = self.machine.clone() else {
+            self.overlay = Overlay::None;
+            return;
+        };
+        let acts = self.fleet_actions(&alias);
+        let n = acts.len().max(1);
+        match k {
+            KeyCode::Down => {
+                self.fleet_sel = (self.fleet_sel + 1) % n;
+                self.fleet_armed = None;
+            }
+            KeyCode::Up => {
+                self.fleet_sel = (self.fleet_sel + n - 1) % n;
+                self.fleet_armed = None;
+            }
+            // The detail view is one key away rather than gone: Enter now
+            // means "do something to this machine", which is what the fleet
+            // table's own footer promised.
+            KeyCode::Char('m') => {
+                self.detail_scroll = 0;
+                self.overlay = Overlay::Machine;
+            }
+            KeyCode::Enter => {
+                let Some((_, verb, cmd)) = acts.get(self.fleet_sel) else {
+                    self.overlay = Overlay::None;
+                    return;
+                };
+                if self.fleet_armed != Some(self.fleet_sel) {
+                    self.fleet_armed = Some(self.fleet_sel);
+                    return;
+                }
+                // Spawned, not waited on: `oci compute instance action` takes
+                // seconds and the panel must keep drawing. The result shows up
+                // in the fleet table as the machine going away, which is the
+                // only confirmation that actually means anything.
+                let res = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(cmd)
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn();
+                self.msg = Some(match res {
+                    Ok(_) => (format!("{alias}: {verb} sent"), false),
+                    Err(e) => (format!("{alias}: could not run it — {e}"), true),
+                });
+                self.fleet_armed = None;
+                self.overlay = Overlay::None;
+            }
+            _ => {
+                self.fleet_armed = None;
+                self.overlay = Overlay::None;
+            }
+        }
     }
 
     /// The container rows in the order the view shows them — ranked and, for
@@ -2599,6 +2755,7 @@ impl Dashboard for Monitor {
         match self.overlay {
             Overlay::Kill => return self.kill_key(k),
             Overlay::Free => return self.free_key(k),
+            Overlay::FleetAct => return self.fleet_act_key(k),
             Overlay::Ctr => return self.ctr_img_key(k, true),
             Overlay::Img => return self.ctr_img_key(k, false),
             Overlay::Unit => return self.unit_key(k),
@@ -2922,7 +3079,9 @@ impl Dashboard for Monitor {
                     if let Some(p) = peers.get(self.sel) {
                         self.machine = Some(p.alias.clone());
                         self.detail_scroll = 0;
-                        self.overlay = Overlay::Machine;
+                        self.fleet_sel = 0;
+                        self.fleet_armed = None;
+                        self.overlay = Overlay::FleetAct;
                     }
                 }
                 KeyCode::Char('h') | KeyCode::Char('?') | KeyCode::F(1) => self.overlay = Overlay::Help,
@@ -5148,7 +5307,7 @@ impl Dashboard for Monitor {
         if self.fleet {
             let (flabel, _) = FLEET_SORT[self.fleet_sort.min(FLEET_SORT.len() - 1)];
             let fb = self.tabs_box(&format!(
-                "{flabel}{} · ←→ rank · i inv · enter opens a machine",
+                "{flabel}{} · ←→ rank · i inv · enter acts on a machine",
                 if self.fleet_desc { "▼" } else { "▲" }
             ));
             let fin = fb.inner(rows[4]);
