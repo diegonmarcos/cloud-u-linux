@@ -66,6 +66,7 @@ cat /etc/resolv.conf > $T.resolv 2>/dev/null || : > $T.resolv
 TO=""
 command -v timeout >/dev/null 2>&1 && TO="timeout 6"
 : > $T.ctr; : > $T.ctrps; : > $T.img
+: > $T.vol; : > $T.voldang; : > $T.net; : > $T.cmp
 for engine in docker podman; do
   command -v "$engine" >/dev/null 2>&1 || continue
   # ps FIRST, and it is the authoritative list: it is fast and it always
@@ -78,6 +79,20 @@ for engine in docker podman; do
   # costing me on disk", because the images nothing is running are exactly
   # the ones nobody notices.
   $TO "$engine" images --format '{{.Repository}}	{{.Tag}}	{{.Size}}	{{.CreatedSince}}	{{.ID}}' > $T.img 2>/dev/null
+  # Volumes, networks and the compose labels. All three are cheap list calls
+  # against the daemon's own metadata — no per-container inspect — and all
+  # three were missing here, which is why the volumes/network/compose pages
+  # were blank for every peer whose my-watchdog was not running: the HTTP fast
+  # path has them, this ssh fallback did not, and a peer only ever falls back.
+  $TO "$engine" volume ls --format '{{.Name}}	{{.Driver}}	{{.Mountpoint}}' > $T.vol 2>/dev/null
+  # The dangling set is the same question docker asks: a volume no container
+  # references. Deriving it from the container list instead would miss the
+  # ones referenced by a container that no longer exists.
+  $TO "$engine" volume ls -q --filter dangling=true > $T.voldang 2>/dev/null
+  $TO "$engine" network ls --format '{{.Name}}	{{.Driver}}	{{.Scope}}	{{.ID}}' > $T.net 2>/dev/null
+  # -a, because a stopped container still carries the labels that say which
+  # file declared it, and that is exactly the row worth being able to bring up.
+  $TO "$engine" ps -a --format '{{.Label "com.docker.compose.project"}}	{{.Label "com.docker.compose.service"}}	{{.Label "com.docker.compose.project.config_files"}}	{{.Names}}	{{.State}}' > $T.cmp 2>/dev/null
   $TO "$engine" stats --no-stream \
     --format '{{.Name}}	{{.CPUPerc}}	{{.MemUsage}}	{{.MemPerc}}	{{.NetIO}}	{{.BlockIO}}	{{.PIDs}}' \
     > $T.ctr 2>/dev/null
@@ -301,6 +316,33 @@ BEGIN{
       esc(a[2]),esc(a[3]),esc(ISZ[a[3]]),esc(a[4]),esc(a[5]),esc(a[6]),esc(a[7])) }
   close(T ".ctrps")
   j("containers",sprintf("[%s]",ctj))
+
+  # ── volumes, networks, compose ──────────────────────────────────────
+  while((getline l < (T ".voldang"))>0){ gsub(/[ \t\r]+$/,"",l); if(l!="") DANG[l]=1 }
+  close(T ".voldang")
+  nv2=0; vj=""
+  while((getline l < (T ".vol"))>0){ n=split(l,a,"\t"); if(n<1 || a[1]=="") continue
+    nv2++
+    vj=vj sprintf("%s{\"name\":\"%s\",\"driver\":\"%s\",\"mount\":\"%s\",\"in_use\":%s",
+      (nv2>1?",":""),esc(a[1]),esc(a[2]),esc(a[3]),(DANG[a[1]]?"false":"true")) "}" }
+  close(T ".vol")
+  j("volumes",sprintf("[%s]",vj))
+  nn=0; nj=""
+  while((getline l < (T ".net"))>0){ n=split(l,a,"\t"); if(n<1 || a[1]=="") continue
+    nn++
+    nj=nj sprintf("%s{\"name\":\"%s\",\"driver\":\"%s\",\"scope\":\"%s\",\"id\":\"%s\"}",
+      (nn>1?",":""),esc(a[1]),esc(a[2]),esc(a[3]),esc(a[4])) }
+  close(T ".net")
+  j("networks",sprintf("[%s]",nj))
+  # declared = compose wrote a project label on it. A container with none is
+  # not a gap in this collector: it is one nobody deployed the declared way.
+  nk=0; kj=""
+  while((getline l < (T ".cmp"))>0){ n=split(l,a,"\t"); if(n<5 || a[4]=="") continue
+    nk++
+    kj=kj sprintf("%s{\"project\":\"%s\",\"service\":\"%s\",\"file\":\"%s\",\"container\":\"%s\",\"state\":\"%s\",\"declared\":%s}",
+      (nk>1?",":""),esc(a[1]),esc(a[2]),esc(a[3]),esc(a[4]),esc(a[5]),(a[1]==""?"false":"true")) }
+  close(T ".cmp")
+  j("compose",sprintf("[%s]",kj))
 
   j("slices","[]"); j("services","[]")
   # %.0f, not %d: the %d of mawk and busybox awk is a 32-bit int, so every one
