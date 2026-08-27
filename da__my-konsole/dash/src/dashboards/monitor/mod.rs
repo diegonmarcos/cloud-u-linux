@@ -42,6 +42,7 @@ use crate::frame::Dashboard;
 // of them knows about the others.
 mod data;
 mod export;
+mod html;
 mod input;
 mod model;
 mod view;

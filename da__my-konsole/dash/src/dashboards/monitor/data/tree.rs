@@ -25,12 +25,18 @@ pub(crate) fn file_tree(hidden: bool, target: Option<&str>) -> [Vec<String>; 4] 
     // The OUTPUT is the signal, not the exit code: tree returns 2 whenever any
     // directory could not be opened, which in a home directory is routine and
     // still prints everything else. `||` would have concatenated both.
+    // -l FOLLOWS SYMLINKED DIRECTORIES, and on a home-manager box that is the
+    // difference between a file tree and a list of one repo. Every top-level
+    // entry on those peers — containers/, bin/, .config/ — is a symlink into
+    // /nix/store, and `tree -d` without -l descends into none of them: the only
+    // real directory left is ~/git, which is exactly what the tab was showing.
+    // -L 4 still bounds it, and tree prints [recursive] rather than looping.
     let a = if hidden { "-a " } else { "" };
     let script = format!(
         "printf '%s\\n' \"$HOME\"; \
-         t=$(tree -d -f -i -L 4 --noreport {a}-I '.git|node_modules|.cache|target' \"$HOME\" 2>/dev/null); \
+         t=$(tree -d -f -i -l -L 4 --noreport {a}-I '.git|node_modules|.cache|target' \"$HOME\" 2>/dev/null); \
          if [ -n \"$t\" ]; then printf '%s\\n' \"$t\"; \
-         else find \"$HOME\" -maxdepth 4 -type d 2>/dev/null; fi"
+         else find -L \"$HOME\" -maxdepth 4 \\( -name .git -o -name node_modules -o -name .cache -o -name target \\) -prune -o -type d -print 2>/dev/null; fi"
     );
     let out = match target {
         // `sh -s` with the script on STDIN, not as an argument — the same

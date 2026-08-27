@@ -150,10 +150,17 @@ pub(crate) fn export_snapshot(
     // ~/.watchdog, not $HOME: exports accumulate — one pair per press — and
     // a home directory is the wrong place to accumulate anything. One
     // directory means they are findable, listable and deletable as a set.
+    // Two directories under it, not one: `exports` is the machine-readable
+    // pair plus the report, `html` is the same export as a page. They were one
+    // flat directory, which meant the thing you open and the thing you feed to
+    // a tool were interleaved and neither could be listed on its own.
     let home = std::env::var("HOME").map_err(|_| "no HOME".to_string())?;
-    let dir = format!("{home}/.watchdog");
+    let dir = format!("{home}/.watchdog/exports");
+    let html_dir = format!("{home}/.watchdog/html");
     fs::create_dir_all(&dir).map_err(|e| format!("{dir}: {e}"))?;
-    let stem = format!("{dir}/{}-{}-{stamp}", safe(&host), safe(&user));
+    fs::create_dir_all(&html_dir).map_err(|e| format!("{html_dir}: {e}"))?;
+    let name = format!("{}-{}-{stamp}", safe(&host), safe(&user));
+    let stem = format!("{dir}/{name}");
 
     // ONE MACHINE BY DEFAULT — the one being measured, whichever that is.
     // `target` picks it, so exporting while viewing a peer writes that peer's
@@ -439,7 +446,18 @@ pub(crate) fn export_snapshot(
          The YAML is the same content at roughly a third of the tokens.</sub>\n",
         if fleet.is_empty() { "" } else { " and every fleet peer" }
     ));
-    fs::write(format!("{stem}.md"), m).map_err(|e| format!("{stem}.md: {e}"))?;
+    fs::write(format!("{stem}.md"), &m).map_err(|e| format!("{stem}.md: {e}"))?;
+
+    // The page, and the listing that finds it. Written last so a failure here
+    // cannot cost the exports that already landed — it is the readable copy,
+    // not the record.
+    let title = format!("{host} · {stamp}");
+    let html = crate::dashboards::monitor::html::page(&title, &envelope, &m);
+    let hp = format!("{html_dir}/{name}.html");
+    fs::write(&hp, html).map_err(|e| format!("{hp}: {e}"))?;
+    let ix = format!("{html_dir}/index.html");
+    fs::write(&ix, crate::dashboards::monitor::html::index(&html_dir))
+        .map_err(|e| format!("{ix}: {e}"))?;
 
     Ok(stem)
 }
