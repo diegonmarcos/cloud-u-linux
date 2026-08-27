@@ -84,7 +84,11 @@ pub(crate) const CTR_ACTIONS: [(&str, &str); 7] = [
 /// What can be done to an image. `rm` is here because an unused image is dead
 /// weight and removing it is the point of looking — docker itself refuses if a
 /// container still references it, which is the guard.
-pub(crate) const IMG_ACTIONS: [(&str, &str); 3] = [
+pub(crate) const IMG_ACTIONS: [(&str, &str); 4] = [
+    // `up`, never `run`: docker run <image> is a valid command that produces
+    // a container with none of the ports, volumes or environment the service
+    // needs. The only way back up is through the file that declared it.
+    ("up", "start the service this image belongs to, from its compose file"),
     ("pull", "fetch the current version of this tag"),
     ("rm", "delete it — refused while a container uses it"),
     // Takes no image: prune is defined by what is NOT referenced, so it acts on

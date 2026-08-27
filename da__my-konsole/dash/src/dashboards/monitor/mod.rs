@@ -1504,10 +1504,13 @@ impl Monitor {
             let s = me.snap.clone();
             // The pinned one, so an action never lands on a row that moved.
             let target = if ctr { me.ctr_pin.clone() } else { me.img_pin.clone() };
-            let _ = &s;
             if let Some(t) = target {
                 let verb = if ctr { CTR_ACTIONS[i].0 } else { IMG_ACTIONS[i].0 };
-                me.request_docker(if ctr { "CTR" } else { "IMG" }, verb, &t);
+                if verb == "up" {
+                    me.request_compose(&s, &t);
+                } else {
+                    me.request_docker(if ctr { "CTR" } else { "IMG" }, verb, &t);
+                }
             }
             me.overlay = Overlay::None;
         };
@@ -1540,6 +1543,46 @@ impl Monitor {
             .and_then(|mut f| writeln!(f, "0 {kind} {verb} {target}"));
         self.msg = Some(match res {
             Ok(()) => (format!("{verb} {target} → queued for the daemon"), false),
+            Err(e) => (format!("could not write {path}: {e}"), true),
+        });
+    }
+
+    /// "start the service this image belongs to".
+    ///
+    /// The compose file is never guessed. It is joined out of what docker
+    /// already recorded: image → the container that ran it → the compose
+    /// labels on that container → the file and service name compose itself
+    /// wrote there. If no container ever ran this image, nothing here knows
+    /// what it was FOR, and saying so is the honest answer — `docker run` on
+    /// it would produce a container with no ports, no volumes and no
+    /// environment, which is worse than doing nothing.
+    fn request_compose(&mut self, s: &Value, image: &str) {
+        let ctr = arr(s, "containers").iter().find(|c| text(c, "image") == image).map(|c| text(c, "name"));
+        let row = ctr.as_ref().and_then(|name| {
+            arr(s, "compose").iter().find(|r| text(r, "container") == *name).cloned()
+        });
+        let Some(row) = row else {
+            self.msg = Some((
+                format!("{image}: no container of this image carries compose labels — nothing knows which service it is"),
+                true,
+            ));
+            return;
+        };
+        let (file, service) = (text(&row, "file"), text(&row, "service"));
+        if file.is_empty() || service.is_empty() {
+            self.msg = Some((format!("{image}: compose recorded no config file for it"), true));
+            return;
+        }
+        // The daemon re-checks all of this; it does not trust the panel, and
+        // the panel does not get to name a path the daemon then runs blind.
+        let path = kill_path();
+        let res = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .and_then(|mut f| writeln!(f, "0 CMP up {file} {service}"));
+        self.msg = Some(match res {
+            Ok(()) => (format!("up {service} (from {file}) → queued for the daemon"), false),
             Err(e) => (format!("could not write {path}: {e}"), true),
         });
     }
@@ -4920,14 +4963,14 @@ impl Dashboard for Monitor {
         if self.logs {
             let sub = self.sub_name();
             let tgt = self.mesh.target();
-            let key = format!("{}|{sub}", tgt.unwrap_or("local"));
+            let key = format!("{}|{sub}", tgt.as_deref().unwrap_or("local"));
             let lb = self.tabs_box("L back · ←→ section · ↑↓ scrolls");
             let lin = lb.inner(rows[4]);
             f.render_widget(lb, rows[4]);
             let mut l: Vec<Line> = vec![];
             let mut foot = String::new();
             if sub == "summary" {
-                self.logs_cache.fetch_counts(key.clone(), tgt);
+                self.logs_cache.fetch_counts(key.clone(), tgt.as_deref());
                 match self.logs_cache.counts(&key) {
                     None => l.push(Line::from(Span::styled(
                         "  counting… (one journalctl per section, over the last 24h)",
@@ -4972,7 +5015,7 @@ impl Dashboard for Monitor {
                     }
                 }
             } else {
-                self.logs_cache.fetch(key.clone(), sub, tgt);
+                self.logs_cache.fetch(key.clone(), sub, tgt.as_deref());
                 let (lines, loading) = self.logs_cache.view(&key);
                 if loading {
                     l.push(Line::from(Span::styled("  reading…", Style::default().fg(DIM))));

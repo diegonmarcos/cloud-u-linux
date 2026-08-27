@@ -3489,6 +3489,47 @@ fn drain_kill_requests() {
             }
             continue;
         }
+        // "0 CMP up <file> <service>" — bring a declared service back.
+        //
+        // This is the answer to "how do I start a container from an image".
+        // `docker run <image>` is a valid command and the wrong one: it makes
+        // a container with none of the ports, volumes, environment or network
+        // the service needs, which looks like it worked and is not the thing
+        // that was deployed. So the only way back up is through the file that
+        // declared it, and the file comes from the labels compose itself wrote
+        // — never from a path the panel invented.
+        if sig.eq_ignore_ascii_case("CMP") {
+            let verb = it.next().unwrap_or("");
+            let file = it.next().unwrap_or("");
+            let service = it.next().unwrap_or("");
+            // `up` only. Nothing here removes a project, and the file has to
+            // be an absolute path to a compose file that EXISTS — this line
+            // arrives from a file any process of this user can append to.
+            if verb != "up"
+                || !file.starts_with('/')
+                || !(file.ends_with(".yml") || file.ends_with(".yaml"))
+                || !std::path::Path::new(file).is_file()
+                || service.is_empty()
+                || service.starts_with('-')
+            {
+                eprintln!("[watchdog] refusing compose request {verb:?} {file:?} {service:?}");
+                continue;
+            }
+            match clean_command("docker")
+                .args(["compose", "-f", file, "up", "-d", service])
+                .output()
+            {
+                Ok(o) if o.status.success() => {
+                    eprintln!("[watchdog] docker compose -f {file} up -d {service}: ok")
+                }
+                Ok(o) => eprintln!(
+                    "[watchdog] docker compose up {service} failed: {}",
+                    String::from_utf8_lossy(&o.stderr).trim()
+                ),
+                Err(e) => eprintln!("[watchdog] docker compose up {service}: {e}"),
+            }
+            continue;
+        }
         // "0 UNIT <scope> <verb> <name>" — a systemd verb on a declared unit.
         if sig.eq_ignore_ascii_case("UNIT") {
             let scope = it.next().unwrap_or("");
