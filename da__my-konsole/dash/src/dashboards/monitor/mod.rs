@@ -1130,14 +1130,40 @@ impl Monitor {
     }
 
     /// The image rows in the order the view shows them.
+    /// Is this image backing no running container?
+    ///
+    /// BY IMAGE ID, not by "repo:tag". `docker ps` reports the reference a
+    /// container was CREATED with, and renders it as a bare ID once that
+    /// reference stops resolving — which is the normal state here: CI pushes a
+    /// new :latest, the box pulls it, the tag moves, and the running container
+    /// is left holding an image that now shows as <none>. Comparing tags
+    /// therefore called every long-running container's image idle: on oci-apps
+    /// it flagged fourteen images that were each backing a live container, and
+    /// two <none> rows that were running two containers apiece.
+    ///
+    /// The tag comparison stays as a fallback for a peer whose watchdog is
+    /// older than the image_id field, so an out-of-date box degrades to the
+    /// previous behaviour instead of calling everything idle.
+    fn image_idle(s: &Value, img: &Value) -> bool {
+        let id = text(img, "id");
+        let full = format!("{}:{}", text(img, "repo"), text(img, "tag"));
+        !arr(s, "containers").iter().any(|c| {
+            let cid = text(c, "image_id");
+            if !cid.is_empty() && !id.is_empty() {
+                // Either may be the short form; compare on the shorter.
+                let n = cid.len().min(id.len());
+                return cid[..n] == id[..n];
+            }
+            text(c, "image") == full
+        })
+    }
+
     fn img_rows<'a>(&self, s: &'a Value) -> Vec<&'a Value> {
         let mut v: Vec<&Value> = arr(s, "images").iter().collect();
         let (label, field) = IMG_SORT[self.img_sort.min(IMG_SORT.len() - 1)];
         // The same set the IN USE column is drawn from, so the ranking and the
         // text in the cell can never disagree about which images are idle.
-        let used: std::collections::HashSet<String> =
-            arr(s, "containers").iter().map(|c| text(c, "image")).collect();
-        let idle = |x: &Value| !used.contains(&format!("{}:{}", text(x, "repo"), text(x, "tag")));
+        let idle = |x: &Value| Self::image_idle(s, x);
         v.sort_by(|a, b| {
             let ord = match label {
                 // Descending puts the idle ones on top, which is the direction
@@ -4135,8 +4161,7 @@ impl Dashboard for Monitor {
                     iin,
                 );
             } else {
-                let used: std::collections::HashSet<String> =
-                    arr(&s, "containers").iter().map(|c| text(c, "image")).collect();
+
                 let vis = (iin.height as usize).saturating_sub(1).max(1);
                 self.sel = self.sel.min(imgs.len().saturating_sub(1));
                 if self.sel < self.offset {
@@ -4161,7 +4186,7 @@ impl Dashboard for Monitor {
                             Style::default()
                         };
                         let full = format!("{}:{}", text(i, "repo"), text(i, "tag"));
-                        let idle = !used.contains(&full);
+                        let idle = Self::image_idle(&s, i);
                         Row::new(vec![
                             Cell::from(format!(
                                 "{}{}",

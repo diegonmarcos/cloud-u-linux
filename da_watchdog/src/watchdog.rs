@@ -2054,6 +2054,39 @@ fn containers_json() -> (String, String) {
     // footprint on disk is a property of its image, and "which of these is
     // costing me four gigabytes" is one of the questions this view is for.
     let imgs = run(&["images", "--format", "{{.Repository}}:{{.Tag}}\t{{.Size}}"]);
+    // WHICH IMAGE a container is actually running, by ID.
+    //
+    // `docker ps` reports {{.Image}} as the reference the container was
+    // CREATED with, and renders it as a bare image ID whenever that reference
+    // no longer resolves — which is the normal state of affairs here: CI
+    // pushes a new :latest, the box pulls it, the tag moves, and the running
+    // container is left holding an image that is now <none>. Matching images
+    // to containers by "repo:tag" therefore reports a wall of false idles:
+    // every long-running container on oci-apps looked like nothing ran it.
+    //
+    // The ID never moves. `ps -q` then one `inspect` resolves every running
+    // container to the sha256 it is actually executing, in two calls rather
+    // than one per container.
+    let running = run(&["ps", "-q"]);
+    let inspected = if running.trim().is_empty() {
+        String::new()
+    } else {
+        let mut a: Vec<&str> = vec!["inspect", "--format", "{{.Name}}\t{{.Image}}"];
+        a.extend(running.split_whitespace());
+        run(&a)
+    };
+    // name -> short image id, the same 12 characters `docker images` prints.
+    let image_id_of = |name: &str| -> String {
+        inspected
+            .lines()
+            .find_map(|l| {
+                let (n, id) = l.split_once('\t')?;
+                (n.trim_start_matches('/') == name).then(|| {
+                    id.trim().trim_start_matches("sha256:").chars().take(12).collect::<String>()
+                })
+            })
+            .unwrap_or_default()
+    };
     let size_of = |image: &str| -> String {
         imgs.lines()
             .map(|l| l.split('\t').collect::<Vec<_>>())
@@ -2083,7 +2116,7 @@ fn containers_json() -> (String, String) {
             Some(format!(
                 "{{\"name\":\"{}\",\"cpu\":\"{}\",\"mem\":\"{}\",\"mem_pct\":\"{}\",\
                   \"net\":\"{}\",\"block\":\"{}\",\"pids\":\"{}\",\"status\":\"{}\",\
-                  \"image\":\"{}\",\"image_size\":\"{}\",\"ports\":\"{}\",\"uptime\":\"{}\",\
+                  \"image\":\"{}\",\"image_id\":\"{}\",\"image_size\":\"{}\",\"ports\":\"{}\",\"uptime\":\"{}\",\
                   \"command\":\"{}\",\"state\":\"{}\"}}",
                 json_escape(name),
                 json_escape(sv(1)),
@@ -2094,6 +2127,7 @@ fn containers_json() -> (String, String) {
                 json_escape(sv(6)),
                 json_escape(g(1)),
                 json_escape(image),
+                json_escape(&image_id_of(g(0))),
                 json_escape(&size_of(image)),
                 json_escape(g(3)),
                 json_escape(g(4)),
