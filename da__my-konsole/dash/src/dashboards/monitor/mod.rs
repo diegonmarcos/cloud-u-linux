@@ -1148,6 +1148,17 @@ impl Monitor {
     /// The tag comparison stays as a fallback for a peer whose watchdog is
     /// older than the image_id field, so an out-of-date box degrades to the
     /// previous behaviour instead of calling everything idle.
+    /// "dockerd active" / "dockerd inactive", for the title of the two pages
+    /// that are empty without it.
+    ///
+    /// Named from systemd's own vocabulary rather than translated into
+    /// up/down: "failed" and "inactive" are both "not running" and only one of
+    /// them is a thing to go read a journal about.
+    fn dockerd_label(s: &Value) -> String {
+        let st = text(s, "docker_daemon.state");
+        format!("dockerd {}", if st.is_empty() { "?".into() } else { st })
+    }
+
     fn image_idle(s: &Value, img: &Value) -> bool {
         let id = text(img, "id");
         let full = format!("{}:{}", text(img, "repo"), text(img, "tag"));
@@ -2810,6 +2821,19 @@ impl Dashboard for Monitor {
                         self.img_desc = !self.img_desc;
                     }
                 }
+                // Every row on these two pages exists only while dockerd does,
+                // and an empty list is the same picture whether nothing runs or
+                // nothing CAN run. So the daemon gets a key on the pages it
+                // owns, and reuses the unit modal rather than growing a third
+                // one: start/stop/restart of a .service is what that modal is,
+                // and the daemon already applies one policy to every unit verb
+                // the panel asks for.
+                KeyCode::Char('d') => {
+                    self.acting_unit =
+                        Some(("docker.service".to_string(), "system".to_string()));
+                    self.unit_sel = 0;
+                    self.overlay = Overlay::Unit;
+                }
                 KeyCode::Enter => {
                     if n > 0 {
                         // Pin by identity, not by row. Re-ranking on the next
@@ -3980,8 +4004,9 @@ impl Dashboard for Monitor {
             let (label, _) = CTR_SORT[self.ctr_sort.min(CTR_SORT.len() - 1)];
             let cb = self.tabs_box(
                 &format!(
-                    "{label}{} · ←→ rank · i inv · enter acts",
-                    if self.ctr_desc { "▼" } else { "▲" }
+                    "{label}{} · ←→ rank · i inv · enter acts · {} · d",
+                    if self.ctr_desc { "▼" } else { "▲" },
+                    Self::dockerd_label(&s)
                 ),
             );
             let cin = cb.inner(rows[4]);
@@ -4151,8 +4176,9 @@ impl Dashboard for Monitor {
             let (ilabel, _) = IMG_SORT[self.img_sort.min(IMG_SORT.len() - 1)];
             let ib = self.tabs_box(
                 &format!(
-                    "{ilabel}{} · ←→ rank · i inv · enter acts",
-                    if self.img_desc { "▼" } else { "▲" }
+                    "{ilabel}{} · ←→ rank · i inv · enter acts · {} · d",
+                    if self.img_desc { "▼" } else { "▲" },
+                    Self::dockerd_label(&s)
                 ),
             );
             let iin = ib.inner(rows[4]);

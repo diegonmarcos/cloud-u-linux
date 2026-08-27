@@ -2218,6 +2218,34 @@ fn images_json() -> String {
     format!("[{}]", items.join(","))
 }
 
+/// Is dockerd up at all?
+///
+/// Every other line on the containers and images pages is silent about the one
+/// failure that produces all of them at once: an empty list because the daemon
+/// is down reads exactly like an empty list because nothing is running. From
+/// the outside `docker ps` cannot tell those apart -- it fails the same way it
+/// succeeds-with-nothing -- so ask systemd, which knows.
+///
+/// `is-active` exits NONZERO for every state except active, which is the whole
+/// point of it; the output is read regardless of the exit status, or an
+/// inactive daemon would report as "unknown" and lose the distinction between
+/// stopped, failed and never-installed.
+fn docker_daemon_json() -> String {
+    let state = clean_command("systemctl")
+        .args(["is-active", "docker.service"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "unknown".into());
+    format!(
+        "{{\"unit\":\"docker.service\",\"state\":\"{}\",\"active\":{}}}",
+        json_escape(&state),
+        state == "active"
+    )
+}
+
 /// A day of this machine, one line a minute.
 ///
 /// Lives under XDG_DATA_HOME, not the runtime dir: the runtime dir is tmpfs
@@ -2945,6 +2973,7 @@ fn render(
     history: &str,
     containers: &str,
     images: &str,
+    docker_daemon: &str,
     storage: &str,
     slices: &str,
     services: &str,
@@ -2977,7 +3006,7 @@ fn render(
           \"slice_gib\":{slice_cur:.2},\"slice_max_gib\":{slice_max:.2},\"slice_pct\":{slice_pct:.1},\
           \"battery\":{},\
           \"storage\":{storage},\"slices\":{slices},\"services\":{services},\"reclaim\":{reclaim},\"health\":{health},\"listening\":{listening},\
-          \"cpu_info\":{cpu_info},\"host_info\":{host_info},\"totals\":{totals},\"history\":{history},\"containers\":{containers},\"images\":{images},\"procs\":{procs},\"proc_table\":{proc_table},\"proc_spine\":{proc_spine},\"ts\":{}}}",
+          \"cpu_info\":{cpu_info},\"host_info\":{host_info},\"totals\":{totals},\"history\":{history},\"containers\":{containers},\"images\":{images},\"docker_daemon\":{docker_daemon},\"procs\":{procs},\"proc_table\":{proc_table},\"proc_spine\":{proc_spine},\"ts\":{}}}",
         vram_json(vram),
         pressure_block("cpu"),
         pressure_block("io"),
@@ -3398,6 +3427,7 @@ pub fn snapshot_once() -> String {
         "{}",
         &containers_json().0,
         &images_json(),
+        &docker_daemon_json(),
         &btrfs_storage_json(),
         &slices_json(&protected),
         &services_json(),
@@ -3434,9 +3464,17 @@ pub fn spawn() {
         // has the last summary rather than an empty object 29 ticks out of 30.
         let mut history = String::from("{}");
         let (mut containers, mut images) = containers_json();
+        let mut docker_daemon = docker_daemon_json();
         let mut tick: u64 = 0;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(INTERVAL_MS));
+            // Did anyone ask for something this tick? Checked BEFORE draining,
+            // because draining deletes the mailbox. A start/stop/rm/pull is the
+            // one moment the docker view is guaranteed to be wrong, and the
+            // slow cadence below would leave it wrong for up to 30s — long
+            // enough for a person to press the key a second time. One stat() a
+            // tick buys the answer arriving on the next one instead.
+            let acted = runtime_dir().join("my-konsole-watchdog.kill").exists();
             drain_kill_requests();
 
             let (now, now_cores) = read_cpu_all();
@@ -3484,9 +3522,17 @@ pub fn spawn() {
             if tick % SERVICES_EVERY_TICKS == 0 {
                 services = services_json();
                 host_info = host_info_json();
+            }
+            // Containers, images and the daemon's own state are refreshed as
+            // ONE unit and never independently: they are three views of the
+            // same instant, and letting them drift apart is what made the
+            // images page say "nothing runs this" about an image a container
+            // on the page beside it was visibly running.
+            if tick % SERVICES_EVERY_TICKS == 0 || acted {
                 let c = containers_json();
                 containers = c.0;
                 images = c.1;
+                docker_daemon = docker_daemon_json();
             }
             if tick % HISTORY_EVERY_TICKS == 1 {
                 history = history_step(cpu, mem, swap, now_unix());
@@ -3519,6 +3565,7 @@ pub fn spawn() {
                 &history,
                 &containers,
                 &images,
+                &docker_daemon,
                 &btrfs_storage_json(),
                 &slices_json(&protected_slices),
                 &services,
