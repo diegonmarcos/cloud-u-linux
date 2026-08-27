@@ -1,0 +1,26 @@
+# fido2-vault-broker — operator config
+#
+# This file is a template shipped from the public unix/ repo. Real
+# values live in `vault/fido/config.toml` (private, never committed).
+# `build.sh deploy` symlinks the vault copy into ~/.config/.
+#
+# Schema is consumed by `Config::load()` in src/src/config.rs.
+
+# Bitwarden REST endpoint (Vaultwarden). Required.
+vault_endpoint = "https://CHANGE_ME.example.test"
+
+# Account identifier (email registered on the vault). Required.
+vault_email    = "user@example.test"
+
+# Where the daemon caches the synced + TPM-sealed cipher set.
+# Default = $XDG_DATA_HOME/fido2-vault-broker/sealed.bin
+# Override here to point at vault/fido/sealed/ directly via symlink.
+# sealed_path  = "/home/USER/.local/share/fido2-vault-broker/sealed.bin"
+
+# Where the daemon reads the TPM-sealed master password blob from.
+# Default = $XDG_DATA_HOME/fido2-vault-broker/master.tpm-sealed
+# `build.sh seal-master` writes this file (or its vault/fido/ origin).
+# master_blob_path = "/home/USER/.local/share/fido2-vault-broker/master.tpm-sealed"
+
+# /dev/uhid override (tests only).
+# uhid_path = "/dev/uhid"

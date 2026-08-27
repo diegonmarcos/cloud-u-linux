@@ -1,0 +1,2046 @@
+<!DOCTYPE html>
+<!--
+  qutebrowser start-page dashboard — TEMPLATE.
+  Generator (gen-dashboard.sh) replaces {
+  "sections": [
+    {
+      "name": "Last Sessions",
+      "desc": "recent · live",
+      "recent": true,
+      "links": {
+        "Full History": "qute://history"
+      },
+      "folders": []
+    },
+    {
+      "name": "QuickMarks",
+      "desc": "pinned",
+      "recent": false,
+      "links": {
+        "bookmarks": "file:///home/diego/.config/qutebrowser/qute-bookmarks.html",
+        "git": "http://localhost:8000/git",
+        "linktree": "https://linktree.diegonmarcos.com",
+        "cloud": "https://cloud.diegonmarcos.com",
+        "proxy": "https://proxy.diegonmarcos.com"
+      },
+      "folders": []
+    },
+    {
+      "name": "Bookmarks",
+      "desc": "categories",
+      "recent": false,
+      "links": {},
+      "folders": [
+        {
+          "name": "Dev",
+          "desc": "",
+          "links": {
+            "github": "https://github.com/diegonmarcos",
+            "mdn": "https://developer.mozilla.org",
+            "stackoverflow": "https://stackoverflow.com",
+            "nixpkgs": "https://search.nixos.org/packages"
+          }
+        },
+        {
+          "name": "AI",
+          "desc": "",
+          "links": {
+            "claude": "https://claude.ai/new",
+            "claude-usage": "https://claude.ai/new#settings/usage",
+            "gemini": "https://gemini.google.com",
+            "chatgpt": "https://chatgpt.com"
+          }
+        },
+        {
+          "name": "News",
+          "desc": "",
+          "links": {
+            "hn": "https://news.ycombinator.com",
+            "lobsters": "https://lobste.rs",
+            "reuters": "https://www.reuters.com",
+            "arstechnica": "https://arstechnica.com"
+          }
+        },
+        {
+          "name": "Mail",
+          "desc": "",
+          "links": {
+            "webmail": "https://webmail.diegonmarcos.com",
+            "gmail": "https://mail.google.com",
+            "proton": "https://mail.proton.me"
+          }
+        },
+        {
+          "name": "Media",
+          "desc": "",
+          "links": {
+            "youtube": "https://youtube.com",
+            "spotify": "https://open.spotify.com",
+            "photos": "https://photos.diegonmarcos.com"
+          }
+        },
+        {
+          "name": "Social",
+          "desc": "",
+          "links": {
+            "matrix": "https://messenger.diegonmarcos.com",
+            "mattermost": "https://chat.diegonmarcos.com",
+            "linkedin": "https://www.linkedin.com",
+            "reddit": "https://www.reddit.com"
+          }
+        },
+        {
+          "name": "Docs",
+          "desc": "",
+          "links": {
+            "hedgedoc": "https://app.diegonmarcos.com/hedgedoc",
+            "etherpad": "https://app.diegonmarcos.com/etherpad",
+            "grist": "https://sheets.diegonmarcos.com"
+          }
+        },
+        {
+          "name": "Finance",
+          "desc": "",
+          "links": {
+            "fin-api": "https://api.diegonmarcos.com/fin-api"
+          }
+        },
+        {
+          "name": "Shopping",
+          "desc": "",
+          "links": {
+            "amazon": "https://www.amazon.com"
+          }
+        },
+        {
+          "name": "Search",
+          "desc": "",
+          "links": {
+            "google": "https://www.google.com",
+            "ddg": "https://duckduckgo.com",
+            "wikipedia": "https://www.wikipedia.org"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cloud",
+      "desc": "self-hosted · by category",
+      "recent": false,
+      "links": {},
+      "folders": [
+        {
+          "name": "Agi",
+          "links": {
+            "claude-superset-api": "https://claude-superset-api.app",
+            "ollama": "https://ollama.app",
+            "ollama-arm": "https://ollama-arm.app",
+            "rig-agentic-sonn-14bq8": "https://rig-agentic-sonn-14bq8.app",
+            "session-memory": "https://session-memory.app"
+          }
+        },
+        {
+          "name": "App",
+          "links": {
+            "calendar-radicale": "https://cal.diegonmarcos.com",
+            "chat-mattermost": "https://chat.diegonmarcos.com",
+            "code-server": "https://ide.diegonmarcos.com",
+            "contacts-radicale": "https://contacts.diegonmarcos.com",
+            "etherpad": "https://app.diegonmarcos.com/etherpad",
+            "filebrowser": "https://app.diegonmarcos.com/filebrowser",
+            "google-personal-mcp": "https://mcp.diegonmarcos.com",
+            "google-workspace-mcp": "https://mcp.diegonmarcos.com",
+            "grist": "https://sheets.diegonmarcos.com",
+            "hedgedoc": "https://app.diegonmarcos.com/hedgedoc",
+            "maddy": "https://mail.diegonmarcos.com",
+            "mail-mcp": "https://mcp.diegonmarcos.com",
+            "mail-puller": "https://mail-puller.diegonmarcos.com",
+            "matrix-continuwuity": "https://matrix.diegonmarcos.com",
+            "matrix-element": "https://messenger.diegonmarcos.com",
+            "matrix-mautrix-whatsapp": "https://matrix-mautrix-whatsapp.app",
+            "mattermost-mcp": "https://mattermost-mcp.app",
+            "paca": "https://paca.diegonmarcos.com",
+            "photoprism": "https://photos.diegonmarcos.com",
+            "send": "https://send.diegonmarcos.com",
+            "snappymail": "https://webmail.diegonmarcos.com",
+            "stalwart": "https://jmap.diegonmarcos.com"
+          }
+        },
+        {
+          "name": "Cloud",
+          "links": {
+            "hickory-dns": "https://dns.internal"
+          }
+        },
+        {
+          "name": "Data",
+          "links": {
+            "gitea": "https://git.diegonmarcos.com",
+            "redis": "https://redis.app",
+            "scrappers-api": "https://api.diegonmarcos.com"
+          }
+        },
+        {
+          "name": "Fin",
+          "links": {
+            "fin-api": "https://api.diegonmarcos.com/fin-api"
+          }
+        },
+        {
+          "name": "Mic",
+          "links": {
+            "vaultwarden": "https://vault.diegonmarcos.com"
+          }
+        },
+        {
+          "name": "Obs",
+          "links": {
+            "c3-analytics-api": "https://api.diegonmarcos.com/c3a",
+            "c3-public-api": "https://api.diegonmarcos.com/pub",
+            "c3-services-api": "https://api.diegonmarcos.com/c3-services-api",
+            "c3-services-mcp": "https://c3-services-mcp.app",
+            "cloud-cgc-mcp": "https://cloud-cgc-mcp.app"
+          }
+        },
+        {
+          "name": "Sec",
+          "links": {
+            "authelia": "https://auth.diegonmarcos.com",
+            "c3-infra-api": "https://api.diegonmarcos.com/c3-infra-api",
+            "c3-infra-mcp": "https://mcp.diegonmarcos.com/c3-infra-mcp",
+            "caddy": "https://proxy.diegonmarcos.com",
+            "caddy-public": "https://caddy-public.app",
+            "crowdsec": "https://crowdsec.diegonmarcos.com",
+            "introspect-proxy": "https://introspect-proxy.app"
+          }
+        },
+        {
+          "name": "Tools",
+          "links": {
+            "cloud-spec": "https://c3-spec.app",
+            "dagu": "https://workflows.diegonmarcos.com",
+            "dbgate": "https://db.diegonmarcos.com",
+            "matomo": "https://analytics.diegonmarcos.com/matomo",
+            "news-gdelt": "https://news-gdelt.app",
+            "ntfy": "https://rss.diegonmarcos.com",
+            "openobserve": "https://analytics.diegonmarcos.com/openobserve",
+            "umami": "https://analytics.diegonmarcos.com",
+            "wireguard-mesh": "https://mesh.diegonmarcos.com",
+            "wireguard-mesh-ws-tunnel": "https://vpn.diegonmarcos.com"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Front",
+      "desc": "front monorepo · a/b/c tree",
+      "recent": false,
+      "links": {},
+      "folders": [
+        {
+          "name": "a-Companies",
+          "links": {
+            "Leafy": "file:///home/diego/git/front/a-Companies/leafy/dist/index.html",
+            "Nexus": "file:///home/diego/git/front/a-Companies/nexus/dist/index.html",
+            "Stark": "file:///home/diego/git/front/a-Companies/stark/dist/index.html"
+          }
+        },
+        {
+          "name": "a-Individual",
+          "links": {
+            "CV PDF": "file:///home/diego/git/front/a-Individual/cv_pdf/dist/index.html",
+            "CV Web": "file:///home/diego/git/front/a-Individual/cv_web/dist/index.html",
+            "Landpage": "file:///home/diego/git/front/a-Individual/landpage/dist/index.html"
+          }
+        },
+        {
+          "name": "a-Portals",
+          "links": {
+            "Cloud": "file:///home/diego/git/front/a-Portals/cloud/dist/index.html",
+            "Linktree": "file:///home/diego/git/front/a-Portals/linktree/dist/index.html",
+            "Linktree Mindmap": "file:///home/diego/git/front/a-Portals/linktree_mindmap/dist/index.html",
+            "Linktree Pixel World": "file:///home/diego/git/front/a-Portals/linktree_pixel-world/dist/index.html"
+          }
+        },
+        {
+          "name": "a-Projects",
+          "links": {
+            "SlabTwin 3D Warehouse": "file:///home/diego/git/front/a-Projects/Warehouse/dist/index.html"
+          }
+        },
+        {
+          "name": "b-Data",
+          "links": {
+            "myAstro": "file:///home/diego/git/front/b-Data/myAstro/dist/index.html",
+            "MyFeed": "file:///home/diego/git/front/b-Data/myfeed/dist/index.html"
+          }
+        },
+        {
+          "name": "b-Media",
+          "links": {
+            "mySocials": "file:///home/diego/git/front/b-Media/mySocials/dist/index.html"
+          }
+        },
+        {
+          "name": "b-MyData",
+          "links": {
+            "My Financials": "file:///home/diego/git/front/b-MyData/my-fin/dist/index.html",
+            "MyHealth": "file:///home/diego/git/front/b-MyData/myhealth/dist/index.html",
+            "MyHealth Profile": "file:///home/diego/git/front/b-MyData/myhealth-profile/dist/index.html",
+            "MyHealth Tracker": "file:///home/diego/git/front/b-MyData/myhealth-tracker/dist/index.html",
+            "myID": "file:///home/diego/git/front/b-MyData/myid/dist/index.html",
+            "MyMaps MyTrips": "file:///home/diego/git/front/b-MyData/mymaps-mytrips/dist/index.html",
+            "MyPhotos": "file:///home/diego/git/front/b-MyData/myphotos/dist/index.html"
+          }
+        },
+        {
+          "name": "b-Profiles",
+          "links": {
+            "MyProfile": "file:///home/diego/git/front/b-Profiles/myprofile/dist/index.html"
+          }
+        },
+        {
+          "name": "b-Projects",
+          "links": {
+            "Leafy2": "file:///home/diego/git/front/b-Projects/galaxy/index.html"
+          }
+        },
+        {
+          "name": "c-Circus",
+          "links": {
+            "Carto": "file:///home/diego/git/front/c-Circus/carto/dist/index.html",
+            "Games": "file:///home/diego/git/front/c-Circus/games/dist/index.html",
+            "Movies": "file:///home/diego/git/front/c-Circus/movies/dist/index.html",
+            "Music": "file:///home/diego/git/front/c-Circus/music/dist/index.html"
+          }
+        },
+        {
+          "name": "c-Cloud",
+          "links": {
+            "API": "file:///home/diego/git/front/c-Cloud/api/dist/index.html",
+            "mcp-api-swagger": "file:///home/diego/git/front/c-Cloud/mcp-api-swagger/dist/index.html",
+            "Skills MCP": "file:///home/diego/git/front/c-Cloud/skills_mcp/dist/index.html"
+          }
+        },
+        {
+          "name": "c-LabTools",
+          "links": {
+            "LMMS": "file:///home/diego/git/front/c-LabTools/Music_DAW_LLMS/dist/index.html",
+            "Mixxx": "file:///home/diego/git/front/c-LabTools/Music_DJ-Mixer_Mixxx/dist/index.html",
+            "CentralBank": "file:///home/diego/git/front/c-LabTools/central_bank/dist/index.html",
+            "FinTerminal": "file:///home/diego/git/front/c-LabTools/fin-terminal/dist/index.html",
+            "MarketWatch": "file:///home/diego/git/front/c-LabTools/market_watch/dist/index.html",
+            "GDELTNews": "file:///home/diego/git/front/c-LabTools/news/dist/index.html",
+            "Sailyng": "file:///home/diego/git/front/c-LabTools/sailytics/dist/index.html"
+          }
+        },
+        {
+          "name": "c-Suite",
+          "links": {
+            "Sheets (Grist)": "file:///home/diego/git/front/c-Suite/grist/dist/index.html",
+            "JSON Vision": "file:///home/diego/git/front/c-Suite/json-vision/dist/index.html",
+            "MyHealth FeedYourself": "file:///home/diego/git/front/c-Suite/myhealth-feedyourself/dist/index.html",
+            "MyMail": "file:///home/diego/git/front/c-Suite/mymail/dist/index.html",
+            "MyMaps": "file:///home/diego/git/front/c-Suite/mymaps/dist/index.html",
+            "MyMaps Maps": "file:///home/diego/git/front/c-Suite/mymaps-maps/dist/index.html",
+            "MyMaps Navigation": "file:///home/diego/git/front/c-Suite/mymaps-navigation/dist/index.html",
+            "Suite": "file:///home/diego/git/front/c-Suite/suite/dist/index.html",
+            "tldraw": "file:///home/diego/git/front/c-Suite/tldraw/dist/index.html"
+          }
+        }
+      ]
+    }
+  ]
+} (folders), [
+  {
+    "key": "<Tab>",
+    "cmd": "tab-next",
+    "desc": "Next tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "<Shift-Tab>",
+    "cmd": "tab-prev",
+    "desc": "Previous tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "t",
+    "cmd": "cmd-set-text -s :open -t",
+    "desc": "New tab → type address",
+    "group": "Tabs"
+  },
+  {
+    "key": "T",
+    "cmd": "open -t about:blank",
+    "desc": "New blank tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "w",
+    "cmd": "tab-close",
+    "desc": "Close current tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "W",
+    "cmd": "tab-only",
+    "desc": "Close all other tabs",
+    "group": "Tabs"
+  },
+  {
+    "key": "u",
+    "cmd": "undo",
+    "desc": "Reopen last closed tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "<",
+    "cmd": "tab-move -",
+    "desc": "Move tab left",
+    "group": "Tabs"
+  },
+  {
+    "key": ">",
+    "cmd": "tab-move +",
+    "desc": "Move tab right",
+    "group": "Tabs"
+  },
+  {
+    "key": "<Ctrl-p>",
+    "cmd": "tab-pin",
+    "desc": "Pin / unpin tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "<Ctrl-m>",
+    "cmd": "tab-mute",
+    "desc": "Mute / unmute tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "H",
+    "cmd": "back",
+    "desc": "Back",
+    "group": "Navigate"
+  },
+  {
+    "key": "L",
+    "cmd": "forward",
+    "desc": "Forward",
+    "group": "Navigate"
+  },
+  {
+    "key": "<Alt-Left>",
+    "cmd": "back",
+    "desc": "Back (Alt-Left)",
+    "group": "Navigate"
+  },
+  {
+    "key": "<Alt-Right>",
+    "cmd": "forward",
+    "desc": "Forward (Alt-Right)",
+    "group": "Navigate"
+  },
+  {
+    "key": "<Alt-Up>",
+    "cmd": "open file:///home/diego/.config/qutebrowser/qute-bookmarks.html",
+    "desc": "Home (dashboard, Alt-Up)",
+    "group": "Navigate"
+  },
+  {
+    "key": "r",
+    "cmd": "reload",
+    "desc": "Reload",
+    "group": "Navigate"
+  },
+  {
+    "key": "R",
+    "cmd": "reload -f",
+    "desc": "Hard reload (bypass cache)",
+    "group": "Navigate"
+  },
+  {
+    "key": "<F5>",
+    "cmd": "reload",
+    "desc": "Reload",
+    "group": "Navigate"
+  },
+  {
+    "key": "<Escape>",
+    "cmd": "stop",
+    "desc": "Stop loading",
+    "group": "Navigate"
+  },
+  {
+    "key": "<F11>",
+    "cmd": "fullscreen",
+    "desc": "Toggle fullscreen",
+    "group": "Navigate"
+  },
+  {
+    "key": "o",
+    "cmd": "cmd-set-text -s :open",
+    "desc": "Open address (this tab)",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "O",
+    "cmd": "cmd-set-text -s :open -t",
+    "desc": "Open address (new tab)",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "e",
+    "cmd": "cmd-set-text :open {url:pretty}",
+    "desc": "Edit current URL",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "E",
+    "cmd": "cmd-set-text :open -t {url:pretty}",
+    "desc": "Edit current URL → new tab",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "Y",
+    "cmd": "yank url",
+    "desc": "Copy current URL",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "p",
+    "cmd": "open -- {clipboard}",
+    "desc": "Open clipboard URL (this tab)",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "P",
+    "cmd": "open -t -- {clipboard}",
+    "desc": "Open clipboard URL (new tab)",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "gD",
+    "cmd": "open -t qute://downloads",
+    "desc": "Downloads page",
+    "group": "Pages / tools"
+  },
+  {
+    "key": "<F12>",
+    "cmd": "devtools",
+    "desc": "Developer tools",
+    "group": "Pages / tools"
+  },
+  {
+    "key": "gI",
+    "cmd": "open -t qute://history",
+    "desc": "History page",
+    "group": "Pages / tools"
+  },
+  {
+    "key": "gS",
+    "cmd": "open -t qute://settings",
+    "desc": "Settings page",
+    "group": "Pages / tools"
+  },
+  {
+    "key": "<Ctrl-Shift-p>",
+    "cmd": "spawn --detach /home/diego/.local/bin/da_autofill-rbw-rofi pick",
+    "desc": "Autofill: action picker",
+    "group": "Autofill"
+  },
+  {
+    "key": "<Ctrl-Shift-u>",
+    "cmd": "spawn --detach /home/diego/.local/bin/da_autofill-rbw-rofi user",
+    "desc": "Autofill: username",
+    "group": "Autofill"
+  },
+  {
+    "key": "<Ctrl-Shift-l>",
+    "cmd": "spawn --detach /home/diego/.local/bin/da_autofill-rbw-rofi pass",
+    "desc": "Autofill: password",
+    "group": "Autofill"
+  },
+  {
+    "key": "<Ctrl-Shift-o>",
+    "cmd": "spawn --detach /home/diego/.local/bin/da_autofill-rbw-rofi totp",
+    "desc": "Autofill: TOTP",
+    "group": "Autofill"
+  },
+  {
+    "key": ",d",
+    "cmd": "open file:///home/diego/.config/qutebrowser/qute-bookmarks.html",
+    "desc": "Open bookmarks (dashboard)",
+    "group": "Leader"
+  },
+  {
+    "key": ",s",
+    "cmd": "config-shortcuts",
+    "desc": "Open Shortcuts reference (Config-shortcuts)",
+    "group": "Leader"
+  },
+  {
+    "key": ",e",
+    "cmd": "config-edit",
+    "desc": "Edit config.py in $EDITOR (native qutebrowser command)",
+    "group": "Leader"
+  },
+  {
+    "key": ",v",
+    "cmd": "open https://vault.diegonmarcos.com",
+    "desc": "Vaultwarden",
+    "group": "Leader"
+  },
+  {
+    "key": ",a",
+    "cmd": "open https://auth.diegonmarcos.com",
+    "desc": "Authelia",
+    "group": "Leader"
+  },
+  {
+    "key": ",g",
+    "cmd": "open https://git.diegonmarcos.com",
+    "desc": "Gitea",
+    "group": "Leader"
+  }
+],
+  [
+  {
+    "id": "adblock",
+    "name": "Ad & Tracker Blocking",
+    "category": "Privacy",
+    "surface": "config",
+    "enabled": true,
+    "status": "",
+    "keybinding": ",pa",
+    "option": "content.blocking.enabled",
+    "description": "EasyList + EasyPrivacy + StevenBlack hosts (lists in qute-settings.json). Blocks ads and trackers network-wide.",
+    "footprint": "none when off — pure network filter",
+    "actions": {}
+  },
+  {
+    "id": "javascript",
+    "name": "JavaScript",
+    "category": "Privacy",
+    "surface": "config",
+    "enabled": true,
+    "status": "",
+    "keybinding": ",pj",
+    "option": "content.javascript.enabled",
+    "description": "Global JS on/off. Off = maximum privacy/minimal footprint but breaks most sites; use per-site overrides for exceptions.",
+    "footprint": "off = lowest possible",
+    "actions": {}
+  },
+  {
+    "id": "dark-mode",
+    "name": "Dark Mode (all sites)",
+    "category": "Appearance",
+    "surface": "config",
+    "enabled": false,
+    "status": "",
+    "keybinding": ",pd",
+    "option": "colors.webpage.darkmode.enabled",
+    "description": "QtWebEngine's native page darkening for every site (independent of site theme). Off by default; toggle per taste.",
+    "footprint": "none when off",
+    "actions": {}
+  },
+  {
+    "id": "anti-fingerprint",
+    "name": "Anti-Fingerprint (canvas)",
+    "category": "Privacy",
+    "surface": "config",
+    "enabled": true,
+    "status": "",
+    "keybinding": ",pf",
+    "option": "content.canvas_reading",
+    "description": "Blocks canvas read-back, a major browser-fingerprinting vector. Enabled (protected) = canvas_reading disabled. Rarely breaks sites.",
+    "footprint": "none — a permission gate",
+    "actions": {}
+  },
+  {
+    "id": "no-autoplay",
+    "name": "Block Autoplay",
+    "category": "Appearance",
+    "surface": "config",
+    "enabled": true,
+    "status": "",
+    "keybinding": ",pm",
+    "option": "content.autoplay",
+    "description": "Stops media autoplaying. Enabled (blocked) = content.autoplay off.",
+    "footprint": "none",
+    "actions": {}
+  },
+  {
+    "id": "vaultwarden",
+    "name": "Vaultwarden Autofill",
+    "category": "Security",
+    "surface": "userscript",
+    "enabled": true,
+    "status": "",
+    "keybinding": "<Ctrl-Shift-b>",
+    "option": "",
+    "description": "In-page autofill against self-hosted vault.diegonmarcos.com via the official qute-bitwarden userscript + bw CLI (keyctl session, auto-lock). Login user/pass/TOTP today; cards, identities, save/edit/add land in Phase 1. One-time setup: run `bw login` once.",
+    "footprint": "none until invoked — a userscript",
+    "actions": {
+      "user-pass": "Fill username + Tab + password (Ctrl-Shift-B)",
+      "totp": "Copy 2FA/TOTP code to clipboard (--totp)"
+    }
+  },
+  {
+    "id": "autofill-daemon",
+    "name": "System Autofill (rofi)",
+    "category": "Security",
+    "surface": "daemon",
+    "enabled": true,
+    "status": "",
+    "keybinding": "<Ctrl-Shift-p>",
+    "option": "",
+    "description": "OS-level password autofill (rbw + rofi → keystroke synth). Works in ANY window, not just the browser. Complements the in-page Vaultwarden plugin.",
+    "footprint": "none until invoked — a systemd user service",
+    "actions": {
+      "pick": "Ctrl-Shift-P — action picker (rofi)",
+      "user": "Ctrl-Shift-U — type username",
+      "pass": "Ctrl-Shift-L — type password",
+      "totp": "Ctrl-Shift-O — TOTP to clipboard"
+    }
+  },
+  {
+    "id": "fido2-passkeys",
+    "name": "FIDO2 Passkeys / WebAuthn",
+    "category": "Security",
+    "surface": "daemon",
+    "enabled": true,
+    "status": "",
+    "keybinding": "",
+    "option": "",
+    "description": "Passkeys / WebAuthn over a virtual FIDO2 device (/dev/uhid). QtWebEngine discovers it automatically on any WebAuthn prompt — zero browser config, no in-page UI needed.",
+    "footprint": "none — passive, discovered on demand",
+    "actions": {}
+  },
+  {
+    "id": "reader-mode",
+    "name": "Reader Mode",
+    "category": "Reading",
+    "surface": "userscript",
+    "enabled": false,
+    "status": "planned:phase-2",
+    "keybinding": "",
+    "option": "",
+    "description": "Strip a page to its article via readability-lxml (already in qute's python env). Planned Phase 2.",
+    "footprint": "none until invoked",
+    "actions": {}
+  },
+  {
+    "id": "video-tools",
+    "name": "Video Tools (speed / PiP / download)",
+    "category": "Media",
+    "surface": "userscript",
+    "enabled": false,
+    "status": "planned:phase-2",
+    "keybinding": "",
+    "option": "",
+    "description": "Playback speed ±, picture-in-picture, download via yt-dlp. Planned Phase 2.",
+    "footprint": "none until invoked",
+    "actions": {}
+  },
+  {
+    "id": "translate",
+    "name": "Translate Selection",
+    "category": "Reading",
+    "surface": "userscript",
+    "enabled": false,
+    "status": "planned:phase-2",
+    "keybinding": "",
+    "option": "",
+    "description": "Send the current selection to a translate endpoint. Planned Phase 2.",
+    "footprint": "none until invoked",
+    "actions": {}
+  }
+], and https://www.qwant.com/?q={} (Qwant web-search template, from qute-search-engines.json).
+  The #q search box double-duties: typing filters the bookmarks below live; Enter opens
+  a Qwant results tab for the typed query (window.open → new qutebrowser tab).
+  Two views (persisted in localStorage):
+    • Icons — ANDROID LAUNCHER: home screen of folder icons (squircle w/ 2x2 preview);
+              tap a folder to open it and reveal the app icons inside.
+    • List  — traditional folder/file tree.
+  Keys: v = toggle view · / = search · Esc = close folder / clear · qutebrowser hints on every link.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bookmarks</title>
+<style>
+  :root{
+    --fg:#eef2f8; --muted:#aab6c8; --hi:#fff;
+    --dnm:#3b82f6; --priv:#a855f7; --svc:#f59e0b; --local:#10b981;
+    --sq:28%;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    color:var(--fg);
+    font:14px/1.45 'JetBrains Mono','SFMono-Regular',ui-monospace,Menlo,Consolas,monospace;
+    -webkit-font-smoothing:antialiased;
+    /* Android-style vibrant wallpaper */
+    background:
+      radial-gradient(900px 900px at 12% 8%, #4338ca55, transparent 55%),
+      radial-gradient(1000px 800px at 92% 12%, #9333ea4d, transparent 55%),
+      radial-gradient(900px 900px at 70% 100%, #0ea5e94d, transparent 55%),
+      linear-gradient(160deg,#0b1020,#0a0d17 60%,#0b1020);
+    min-height:100vh; overflow-x:hidden;
+  }
+  /* status/top bar */
+  header{display:flex;align-items:center;gap:16px;padding:22px clamp(18px,5vw,60px) 10px}
+  .brand{font-size:17px;font-weight:700;letter-spacing:.5px;color:#fff;text-shadow:0 1px 8px #0008}
+  .brand b{background:linear-gradient(90deg,var(--dnm),var(--priv),var(--svc),var(--local));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .clock{color:#dfe7f2;font-variant-numeric:tabular-nums;text-shadow:0 1px 6px #0007}
+  .spacer{flex:1}
+  .search input{background:#ffffff1a;border:1px solid #ffffff26;color:#fff;padding:8px 14px;
+    border-radius:22px;width:210px;outline:none;font:inherit;backdrop-filter:blur(8px)}
+  .search input::placeholder{color:#ffffff99}
+  .search input:focus{border-color:#ffffff66;background:#ffffff26}
+  .toggle{display:flex;background:#ffffff1a;border:1px solid #ffffff26;border-radius:22px;overflow:hidden;backdrop-filter:blur(8px)}
+  .toggle button{background:none;border:0;color:#ffffffb0;font:inherit;padding:8px 15px;cursor:pointer;display:flex;align-items:center;gap:6px}
+  .toggle button.on{background:#ffffff2e;color:#fff}
+  .toggle svg{width:15px;height:15px}
+  .gear{background:#ffffff1a;border:1px solid #ffffff26;border-radius:50%;width:38px;height:38px;
+    display:grid;place-items:center;color:#ffffffcc;cursor:pointer;backdrop-filter:blur(8px);transition:transform .3s,color .15s}
+  .gear:hover{color:#fff;transform:rotate(60deg)} .gear svg{width:18px;height:18px}
+  /* config panel */
+  .tabs{display:flex;gap:8px;margin-bottom:18px}
+  .tabs button{background:#ffffff12;border:1px solid #ffffff20;color:#ffffffb0;font:inherit;
+    padding:7px 16px;border-radius:20px;cursor:pointer}
+  .tabs button.on{background:var(--dnm);border-color:transparent;color:#fff}
+  .cfg-body{min-height:120px}
+  .hrun{background:var(--local);border:0;color:#04120b;font:inherit;font-weight:700;padding:9px 18px;
+    border-radius:20px;cursor:pointer;margin-bottom:16px}
+  .hrun:disabled{opacity:.5;cursor:default}
+  .hgrp{margin:14px 0 6px;color:#fff;font-weight:600;display:flex;gap:10px;align-items:center}
+  .hgrp .dot{width:9px;height:9px;border-radius:50%;background:var(--a)}
+  .hgrp .tally{margin-left:auto;font-size:12px;color:var(--muted)}
+  .hrow{display:flex;align-items:center;gap:10px;padding:5px 10px;border-radius:7px;font-size:13px}
+  .hrow:hover{background:#ffffff08}
+  .hrow .st{width:16px;text-align:center} .st.ok{color:#34d399}.st.bad{color:#f87171}.st.na{color:#7c8aa0}.st.run{color:#fbbf24}
+  .hrow .hn{color:#e7edf6;min-width:150px} .hrow .hms{color:var(--muted);font-size:11px;margin-left:auto}
+  .about{color:#cdd7e6;line-height:1.7} .about h3{color:#fff;margin:0 0 8px}
+  .about code{background:#ffffff14;padding:1px 6px;border-radius:5px;font-size:12px}
+  .about .stat{display:inline-block;background:#ffffff10;border:1px solid #ffffff1c;border-radius:10px;
+    padding:8px 14px;margin:4px 8px 4px 0}
+  .about .stat b{color:#fff;font-size:18px;display:block}
+  /* shortcuts tab */
+  .kbrow{display:flex;align-items:center;gap:12px;padding:6px 10px;border-radius:7px;font-size:13px}
+  .kbrow:hover{background:#ffffff08}
+  .kbk{min-width:150px;display:flex;gap:3px;flex-wrap:wrap}
+  .kbd-desc{color:#e7edf6;flex:1}
+  .kbc{color:var(--muted);font-size:11px;font-family:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40%}
+  .kbgrp{margin-bottom:10px}
+
+  /* accents by section */
+  [data-s="Last Sessions"]{--a:#10b981} [data-s="QuickMarks"]{--a:#f59e0b}
+  [data-s="Bookmarks"]{--a:var(--dnm)} [data-s="Cloud"]{--a:var(--priv)}
+  [data-s="Front"]{--a:#ec4899}
+  [data-s]{--a:#64748b} [data-k]{--a:inherit}
+
+  /* section header (Icons home) */
+  .sec{max-width:760px;margin:0 auto;padding:0 20px}
+  .sec-h{display:flex;align-items:baseline;gap:11px;margin:26px 4px 14px}
+  .sec-h .dot{width:9px;height:9px;border-radius:50%;background:var(--a);box-shadow:0 0 10px var(--a);align-self:center}
+  .sec-h .sn{font-size:15px;font-weight:700;color:#fff;text-shadow:0 1px 6px #0008}
+  .sec-h .sd{font-size:12px;color:var(--muted)}
+  .sec-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:26px 8px;justify-items:center}
+
+  /* ─────────── ICONS = ANDROID HOME SCREEN ─────────── */
+  #home{margin:2vh auto 0;padding:0 0 90px}
+  .folder-ico{display:flex;flex-direction:column;align-items:center;gap:12px;cursor:pointer;
+    border:0;background:none;color:#fff;font:inherit;width:104px;transition:transform .13s}
+  .folder-ico:hover,.folder-ico:focus-visible{transform:translateY(-4px);outline:none}
+  .fbox{width:84px;height:84px;border-radius:24px;padding:11px;
+    display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;
+    background:#ffffff1f;backdrop-filter:blur(14px);
+    border:1px solid #ffffff2e;box-shadow:0 10px 30px #0007, inset 0 1px 0 #ffffff33;position:relative}
+  .fbox::after{content:'';position:absolute;inset:0;border-radius:24px;
+    background:radial-gradient(circle at 50% 0,var(--a),transparent 70%);opacity:.28}
+  .mini{width:100%;height:100%;border-radius:8px;background:#0006;display:grid;place-items:center;
+    overflow:hidden;font-size:11px;font-weight:700;color:#fff}
+  .mini img{width:100%;height:100%;object-fit:cover}
+  .folder-ico .cap{font-size:13px;color:#fff;text-shadow:0 1px 6px #0009;max-width:104px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .folder-ico .cnt{font-size:11px;color:#ffffffcc;background:#0004;padding:0 7px;border-radius:10px}
+
+  /* open folder overlay (Android folder expand) */
+  #scrim{position:fixed;inset:0;background:#05070ccc;backdrop-filter:blur(6px);
+    display:none;align-items:center;justify-content:center;z-index:20;padding:24px}
+  #scrim.on{display:flex;animation:fade .18s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .sheet{width:min(680px,94vw);max-height:82vh;overflow:auto;border-radius:30px;
+    background:#141a26e6;border:1px solid #ffffff24;box-shadow:0 30px 80px #000a;
+    padding:26px 26px 30px;animation:pop .2s cubic-bezier(.2,.9,.3,1.2)}
+  @keyframes pop{from{transform:scale(.9);opacity:.4}to{transform:scale(1);opacity:1}}
+  .sheet h2{display:flex;align-items:center;gap:11px;font-size:19px;color:#fff;margin-bottom:20px}
+  .sheet h2 .dot{width:12px;height:12px;border-radius:50%;background:var(--a);box-shadow:0 0 14px var(--a)}
+  .sheet h2 .x{margin-left:auto;background:#ffffff14;border:0;color:#fff;width:32px;height:32px;
+    border-radius:50%;cursor:pointer;font-size:16px}
+  .appgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:20px 8px}
+  .app{display:flex;flex-direction:column;align-items:center;gap:9px;text-decoration:none;color:#fff;
+    border-radius:16px;padding:6px 2px;transition:transform .1s,background .1s}
+  .app:hover{transform:translateY(-3px);background:#ffffff0f}
+  .app:focus-visible{outline:2px solid var(--a);outline-offset:3px}
+  .icn{width:58px;height:58px;border-radius:var(--sq);display:grid;place-items:center;overflow:hidden;
+    font-size:24px;font-weight:800;color:#fff;position:relative;
+    background:linear-gradient(150deg,var(--a),#0000),#1b2433;
+    box-shadow:0 8px 20px #0007, inset 0 1px 0 #ffffff2b}
+  .icn img{width:100%;height:100%;object-fit:cover}
+  .app .lbl{font-size:12px;color:#eaf0f8;max-width:82px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .empty{color:var(--muted);font-style:italic;padding:8px}
+
+  /* ─────────── LIST view ─────────── */
+  #list{display:none;max-width:900px;margin:14px auto 80px;padding:0 clamp(18px,5vw,40px)}
+  body.list-mode #home{display:none}
+  body.list-mode #list{display:block}
+  .folder{margin-bottom:22px;border:1px solid #ffffff14;border-radius:14px;background:#0d131f80;overflow:hidden}
+  .fhead{display:flex;align-items:center;gap:11px;padding:13px 16px;cursor:pointer;user-select:none}
+  .fhead .dot{width:10px;height:10px;border-radius:50%;background:var(--a);box-shadow:0 0 10px var(--a)}
+  .fhead .fname{font-weight:600;color:#fff}.fhead .cnt{color:var(--muted);font-size:12px}
+  .fhead .fdesc{margin-left:auto;color:var(--muted);font-size:12px}
+  .fhead .caret{color:var(--a);transition:transform .18s}
+  .folder.collapsed .caret{transform:rotate(-90deg)} .folder.collapsed .rows{display:none}
+  .rows{border-top:1px solid #ffffff10}
+  .row{display:flex;align-items:center;gap:12px;padding:9px 18px;text-decoration:none;color:var(--fg)}
+  .row:hover{background:#ffffff0c} .row:focus-visible{outline:2px solid var(--a);outline-offset:-2px}
+  .row .fi{width:20px;height:20px;border-radius:6px;flex:none;display:grid;place-items:center;overflow:hidden;
+    font-size:10px;font-weight:700;color:#fff;background:var(--a)}
+  .row .fi img{width:100%;height:100%;object-fit:cover}
+  .row .rn{color:#fff;min-width:130px} .row .ru{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hidden{display:none!important}
+  footer{position:fixed;bottom:12px;left:0;right:0;text-align:center;color:#ffffff88;font-size:11px;text-shadow:0 1px 4px #0008}
+  kbd{background:#ffffff1f;border:1px solid #ffffff30;border-radius:5px;padding:1px 6px;font:inherit;font-size:11px;color:#fff}
+</style>
+</head>
+<body class="icons-mode">
+  <header>
+    <div class="brand">◆ <b>my-browser</b> <span style="color:var(--muted);font-weight:400;font-size:14px">(qute)</span></div>
+    <div class="clock" id="clock"></div>
+    <div class="spacer"></div>
+    <label class="search"><input id="q" type="text" placeholder="search bookmarks… (Enter → Qwant)" autocomplete="off" spellcheck="false"></label>
+    <div class="toggle" id="toggle">
+      <button data-view="icons" title="Icons (v)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Icons</button>
+      <button data-view="list" title="List (v)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>List</button>
+    </div>
+    <button class="gear" id="gear" title="Config"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+  </header>
+
+  <div id="home"></div>
+  <div id="list"></div>
+
+  <div id="scrim"><div class="sheet" id="sheet"></div></div>
+  <footer><kbd>v</kbd> view · <kbd>/</kbd> search · <kbd>Esc</kbd> close · qutebrowser <kbd>f</kbd> to follow</footer>
+
+<!-- Fork-written real browsing history (window.QUTE_HISTORY_RECENT), refreshed live
+     by mybar.py off history.web_history.changed. A plain <script src> load across
+     file:// paths works (verified); fetch()/XHR to it or to qute://history/data
+     does NOT (CORS-mode network requests are blocked even with LocalAccessAllowed).
+     Missing/stale file (fresh install, before first navigation) → just no globals,
+     handled by the fallback below. -->
+<script src="file:///home/diego/.local/share/qutebrowser/history-recent.js"></script>
+<script>
+const DATA = {
+  "sections": [
+    {
+      "name": "Last Sessions",
+      "desc": "recent · live",
+      "recent": true,
+      "links": {
+        "Full History": "qute://history"
+      },
+      "folders": []
+    },
+    {
+      "name": "QuickMarks",
+      "desc": "pinned",
+      "recent": false,
+      "links": {
+        "bookmarks": "file:///home/diego/.config/qutebrowser/qute-bookmarks.html",
+        "git": "http://localhost:8000/git",
+        "linktree": "https://linktree.diegonmarcos.com",
+        "cloud": "https://cloud.diegonmarcos.com",
+        "proxy": "https://proxy.diegonmarcos.com"
+      },
+      "folders": []
+    },
+    {
+      "name": "Bookmarks",
+      "desc": "categories",
+      "recent": false,
+      "links": {},
+      "folders": [
+        {
+          "name": "Dev",
+          "desc": "",
+          "links": {
+            "github": "https://github.com/diegonmarcos",
+            "mdn": "https://developer.mozilla.org",
+            "stackoverflow": "https://stackoverflow.com",
+            "nixpkgs": "https://search.nixos.org/packages"
+          }
+        },
+        {
+          "name": "AI",
+          "desc": "",
+          "links": {
+            "claude": "https://claude.ai/new",
+            "claude-usage": "https://claude.ai/new#settings/usage",
+            "gemini": "https://gemini.google.com",
+            "chatgpt": "https://chatgpt.com"
+          }
+        },
+        {
+          "name": "News",
+          "desc": "",
+          "links": {
+            "hn": "https://news.ycombinator.com",
+            "lobsters": "https://lobste.rs",
+            "reuters": "https://www.reuters.com",
+            "arstechnica": "https://arstechnica.com"
+          }
+        },
+        {
+          "name": "Mail",
+          "desc": "",
+          "links": {
+            "webmail": "https://webmail.diegonmarcos.com",
+            "gmail": "https://mail.google.com",
+            "proton": "https://mail.proton.me"
+          }
+        },
+        {
+          "name": "Media",
+          "desc": "",
+          "links": {
+            "youtube": "https://youtube.com",
+            "spotify": "https://open.spotify.com",
+            "photos": "https://photos.diegonmarcos.com"
+          }
+        },
+        {
+          "name": "Social",
+          "desc": "",
+          "links": {
+            "matrix": "https://messenger.diegonmarcos.com",
+            "mattermost": "https://chat.diegonmarcos.com",
+            "linkedin": "https://www.linkedin.com",
+            "reddit": "https://www.reddit.com"
+          }
+        },
+        {
+          "name": "Docs",
+          "desc": "",
+          "links": {
+            "hedgedoc": "https://app.diegonmarcos.com/hedgedoc",
+            "etherpad": "https://app.diegonmarcos.com/etherpad",
+            "grist": "https://sheets.diegonmarcos.com"
+          }
+        },
+        {
+          "name": "Finance",
+          "desc": "",
+          "links": {
+            "fin-api": "https://api.diegonmarcos.com/fin-api"
+          }
+        },
+        {
+          "name": "Shopping",
+          "desc": "",
+          "links": {
+            "amazon": "https://www.amazon.com"
+          }
+        },
+        {
+          "name": "Search",
+          "desc": "",
+          "links": {
+            "google": "https://www.google.com",
+            "ddg": "https://duckduckgo.com",
+            "wikipedia": "https://www.wikipedia.org"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cloud",
+      "desc": "self-hosted · by category",
+      "recent": false,
+      "links": {},
+      "folders": [
+        {
+          "name": "Agi",
+          "links": {
+            "claude-superset-api": "https://claude-superset-api.app",
+            "ollama": "https://ollama.app",
+            "ollama-arm": "https://ollama-arm.app",
+            "rig-agentic-sonn-14bq8": "https://rig-agentic-sonn-14bq8.app",
+            "session-memory": "https://session-memory.app"
+          }
+        },
+        {
+          "name": "App",
+          "links": {
+            "calendar-radicale": "https://cal.diegonmarcos.com",
+            "chat-mattermost": "https://chat.diegonmarcos.com",
+            "code-server": "https://ide.diegonmarcos.com",
+            "contacts-radicale": "https://contacts.diegonmarcos.com",
+            "etherpad": "https://app.diegonmarcos.com/etherpad",
+            "filebrowser": "https://app.diegonmarcos.com/filebrowser",
+            "google-personal-mcp": "https://mcp.diegonmarcos.com",
+            "google-workspace-mcp": "https://mcp.diegonmarcos.com",
+            "grist": "https://sheets.diegonmarcos.com",
+            "hedgedoc": "https://app.diegonmarcos.com/hedgedoc",
+            "maddy": "https://mail.diegonmarcos.com",
+            "mail-mcp": "https://mcp.diegonmarcos.com",
+            "mail-puller": "https://mail-puller.diegonmarcos.com",
+            "matrix-continuwuity": "https://matrix.diegonmarcos.com",
+            "matrix-element": "https://messenger.diegonmarcos.com",
+            "matrix-mautrix-whatsapp": "https://matrix-mautrix-whatsapp.app",
+            "mattermost-mcp": "https://mattermost-mcp.app",
+            "paca": "https://paca.diegonmarcos.com",
+            "photoprism": "https://photos.diegonmarcos.com",
+            "send": "https://send.diegonmarcos.com",
+            "snappymail": "https://webmail.diegonmarcos.com",
+            "stalwart": "https://jmap.diegonmarcos.com"
+          }
+        },
+        {
+          "name": "Cloud",
+          "links": {
+            "hickory-dns": "https://dns.internal"
+          }
+        },
+        {
+          "name": "Data",
+          "links": {
+            "gitea": "https://git.diegonmarcos.com",
+            "redis": "https://redis.app",
+            "scrappers-api": "https://api.diegonmarcos.com"
+          }
+        },
+        {
+          "name": "Fin",
+          "links": {
+            "fin-api": "https://api.diegonmarcos.com/fin-api"
+          }
+        },
+        {
+          "name": "Mic",
+          "links": {
+            "vaultwarden": "https://vault.diegonmarcos.com"
+          }
+        },
+        {
+          "name": "Obs",
+          "links": {
+            "c3-analytics-api": "https://api.diegonmarcos.com/c3a",
+            "c3-public-api": "https://api.diegonmarcos.com/pub",
+            "c3-services-api": "https://api.diegonmarcos.com/c3-services-api",
+            "c3-services-mcp": "https://c3-services-mcp.app",
+            "cloud-cgc-mcp": "https://cloud-cgc-mcp.app"
+          }
+        },
+        {
+          "name": "Sec",
+          "links": {
+            "authelia": "https://auth.diegonmarcos.com",
+            "c3-infra-api": "https://api.diegonmarcos.com/c3-infra-api",
+            "c3-infra-mcp": "https://mcp.diegonmarcos.com/c3-infra-mcp",
+            "caddy": "https://proxy.diegonmarcos.com",
+            "caddy-public": "https://caddy-public.app",
+            "crowdsec": "https://crowdsec.diegonmarcos.com",
+            "introspect-proxy": "https://introspect-proxy.app"
+          }
+        },
+        {
+          "name": "Tools",
+          "links": {
+            "cloud-spec": "https://c3-spec.app",
+            "dagu": "https://workflows.diegonmarcos.com",
+            "dbgate": "https://db.diegonmarcos.com",
+            "matomo": "https://analytics.diegonmarcos.com/matomo",
+            "news-gdelt": "https://news-gdelt.app",
+            "ntfy": "https://rss.diegonmarcos.com",
+            "openobserve": "https://analytics.diegonmarcos.com/openobserve",
+            "umami": "https://analytics.diegonmarcos.com",
+            "wireguard-mesh": "https://mesh.diegonmarcos.com",
+            "wireguard-mesh-ws-tunnel": "https://vpn.diegonmarcos.com"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Front",
+      "desc": "front monorepo · a/b/c tree",
+      "recent": false,
+      "links": {},
+      "folders": [
+        {
+          "name": "a-Companies",
+          "links": {
+            "Leafy": "file:///home/diego/git/front/a-Companies/leafy/dist/index.html",
+            "Nexus": "file:///home/diego/git/front/a-Companies/nexus/dist/index.html",
+            "Stark": "file:///home/diego/git/front/a-Companies/stark/dist/index.html"
+          }
+        },
+        {
+          "name": "a-Individual",
+          "links": {
+            "CV PDF": "file:///home/diego/git/front/a-Individual/cv_pdf/dist/index.html",
+            "CV Web": "file:///home/diego/git/front/a-Individual/cv_web/dist/index.html",
+            "Landpage": "file:///home/diego/git/front/a-Individual/landpage/dist/index.html"
+          }
+        },
+        {
+          "name": "a-Portals",
+          "links": {
+            "Cloud": "file:///home/diego/git/front/a-Portals/cloud/dist/index.html",
+            "Linktree": "file:///home/diego/git/front/a-Portals/linktree/dist/index.html",
+            "Linktree Mindmap": "file:///home/diego/git/front/a-Portals/linktree_mindmap/dist/index.html",
+            "Linktree Pixel World": "file:///home/diego/git/front/a-Portals/linktree_pixel-world/dist/index.html"
+          }
+        },
+        {
+          "name": "a-Projects",
+          "links": {
+            "SlabTwin 3D Warehouse": "file:///home/diego/git/front/a-Projects/Warehouse/dist/index.html"
+          }
+        },
+        {
+          "name": "b-Data",
+          "links": {
+            "myAstro": "file:///home/diego/git/front/b-Data/myAstro/dist/index.html",
+            "MyFeed": "file:///home/diego/git/front/b-Data/myfeed/dist/index.html"
+          }
+        },
+        {
+          "name": "b-Media",
+          "links": {
+            "mySocials": "file:///home/diego/git/front/b-Media/mySocials/dist/index.html"
+          }
+        },
+        {
+          "name": "b-MyData",
+          "links": {
+            "My Financials": "file:///home/diego/git/front/b-MyData/my-fin/dist/index.html",
+            "MyHealth": "file:///home/diego/git/front/b-MyData/myhealth/dist/index.html",
+            "MyHealth Profile": "file:///home/diego/git/front/b-MyData/myhealth-profile/dist/index.html",
+            "MyHealth Tracker": "file:///home/diego/git/front/b-MyData/myhealth-tracker/dist/index.html",
+            "myID": "file:///home/diego/git/front/b-MyData/myid/dist/index.html",
+            "MyMaps MyTrips": "file:///home/diego/git/front/b-MyData/mymaps-mytrips/dist/index.html",
+            "MyPhotos": "file:///home/diego/git/front/b-MyData/myphotos/dist/index.html"
+          }
+        },
+        {
+          "name": "b-Profiles",
+          "links": {
+            "MyProfile": "file:///home/diego/git/front/b-Profiles/myprofile/dist/index.html"
+          }
+        },
+        {
+          "name": "b-Projects",
+          "links": {
+            "Leafy2": "file:///home/diego/git/front/b-Projects/galaxy/index.html"
+          }
+        },
+        {
+          "name": "c-Circus",
+          "links": {
+            "Carto": "file:///home/diego/git/front/c-Circus/carto/dist/index.html",
+            "Games": "file:///home/diego/git/front/c-Circus/games/dist/index.html",
+            "Movies": "file:///home/diego/git/front/c-Circus/movies/dist/index.html",
+            "Music": "file:///home/diego/git/front/c-Circus/music/dist/index.html"
+          }
+        },
+        {
+          "name": "c-Cloud",
+          "links": {
+            "API": "file:///home/diego/git/front/c-Cloud/api/dist/index.html",
+            "mcp-api-swagger": "file:///home/diego/git/front/c-Cloud/mcp-api-swagger/dist/index.html",
+            "Skills MCP": "file:///home/diego/git/front/c-Cloud/skills_mcp/dist/index.html"
+          }
+        },
+        {
+          "name": "c-LabTools",
+          "links": {
+            "LMMS": "file:///home/diego/git/front/c-LabTools/Music_DAW_LLMS/dist/index.html",
+            "Mixxx": "file:///home/diego/git/front/c-LabTools/Music_DJ-Mixer_Mixxx/dist/index.html",
+            "CentralBank": "file:///home/diego/git/front/c-LabTools/central_bank/dist/index.html",
+            "FinTerminal": "file:///home/diego/git/front/c-LabTools/fin-terminal/dist/index.html",
+            "MarketWatch": "file:///home/diego/git/front/c-LabTools/market_watch/dist/index.html",
+            "GDELTNews": "file:///home/diego/git/front/c-LabTools/news/dist/index.html",
+            "Sailyng": "file:///home/diego/git/front/c-LabTools/sailytics/dist/index.html"
+          }
+        },
+        {
+          "name": "c-Suite",
+          "links": {
+            "Sheets (Grist)": "file:///home/diego/git/front/c-Suite/grist/dist/index.html",
+            "JSON Vision": "file:///home/diego/git/front/c-Suite/json-vision/dist/index.html",
+            "MyHealth FeedYourself": "file:///home/diego/git/front/c-Suite/myhealth-feedyourself/dist/index.html",
+            "MyMail": "file:///home/diego/git/front/c-Suite/mymail/dist/index.html",
+            "MyMaps": "file:///home/diego/git/front/c-Suite/mymaps/dist/index.html",
+            "MyMaps Maps": "file:///home/diego/git/front/c-Suite/mymaps-maps/dist/index.html",
+            "MyMaps Navigation": "file:///home/diego/git/front/c-Suite/mymaps-navigation/dist/index.html",
+            "Suite": "file:///home/diego/git/front/c-Suite/suite/dist/index.html",
+            "tldraw": "file:///home/diego/git/front/c-Suite/tldraw/dist/index.html"
+          }
+        }
+      ]
+    }
+  ]
+};
+const KEYBINDINGS = [
+  {
+    "key": "<Tab>",
+    "cmd": "tab-next",
+    "desc": "Next tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "<Shift-Tab>",
+    "cmd": "tab-prev",
+    "desc": "Previous tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "t",
+    "cmd": "cmd-set-text -s :open -t",
+    "desc": "New tab → type address",
+    "group": "Tabs"
+  },
+  {
+    "key": "T",
+    "cmd": "open -t about:blank",
+    "desc": "New blank tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "w",
+    "cmd": "tab-close",
+    "desc": "Close current tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "W",
+    "cmd": "tab-only",
+    "desc": "Close all other tabs",
+    "group": "Tabs"
+  },
+  {
+    "key": "u",
+    "cmd": "undo",
+    "desc": "Reopen last closed tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "<",
+    "cmd": "tab-move -",
+    "desc": "Move tab left",
+    "group": "Tabs"
+  },
+  {
+    "key": ">",
+    "cmd": "tab-move +",
+    "desc": "Move tab right",
+    "group": "Tabs"
+  },
+  {
+    "key": "<Ctrl-p>",
+    "cmd": "tab-pin",
+    "desc": "Pin / unpin tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "<Ctrl-m>",
+    "cmd": "tab-mute",
+    "desc": "Mute / unmute tab",
+    "group": "Tabs"
+  },
+  {
+    "key": "H",
+    "cmd": "back",
+    "desc": "Back",
+    "group": "Navigate"
+  },
+  {
+    "key": "L",
+    "cmd": "forward",
+    "desc": "Forward",
+    "group": "Navigate"
+  },
+  {
+    "key": "<Alt-Left>",
+    "cmd": "back",
+    "desc": "Back (Alt-Left)",
+    "group": "Navigate"
+  },
+  {
+    "key": "<Alt-Right>",
+    "cmd": "forward",
+    "desc": "Forward (Alt-Right)",
+    "group": "Navigate"
+  },
+  {
+    "key": "<Alt-Up>",
+    "cmd": "open file:///home/diego/.config/qutebrowser/qute-bookmarks.html",
+    "desc": "Home (dashboard, Alt-Up)",
+    "group": "Navigate"
+  },
+  {
+    "key": "r",
+    "cmd": "reload",
+    "desc": "Reload",
+    "group": "Navigate"
+  },
+  {
+    "key": "R",
+    "cmd": "reload -f",
+    "desc": "Hard reload (bypass cache)",
+    "group": "Navigate"
+  },
+  {
+    "key": "<F5>",
+    "cmd": "reload",
+    "desc": "Reload",
+    "group": "Navigate"
+  },
+  {
+    "key": "<Escape>",
+    "cmd": "stop",
+    "desc": "Stop loading",
+    "group": "Navigate"
+  },
+  {
+    "key": "<F11>",
+    "cmd": "fullscreen",
+    "desc": "Toggle fullscreen",
+    "group": "Navigate"
+  },
+  {
+    "key": "o",
+    "cmd": "cmd-set-text -s :open",
+    "desc": "Open address (this tab)",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "O",
+    "cmd": "cmd-set-text -s :open -t",
+    "desc": "Open address (new tab)",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "e",
+    "cmd": "cmd-set-text :open {url:pretty}",
+    "desc": "Edit current URL",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "E",
+    "cmd": "cmd-set-text :open -t {url:pretty}",
+    "desc": "Edit current URL → new tab",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "Y",
+    "cmd": "yank url",
+    "desc": "Copy current URL",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "p",
+    "cmd": "open -- {clipboard}",
+    "desc": "Open clipboard URL (this tab)",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "P",
+    "cmd": "open -t -- {clipboard}",
+    "desc": "Open clipboard URL (new tab)",
+    "group": "URL / clipboard"
+  },
+  {
+    "key": "gD",
+    "cmd": "open -t qute://downloads",
+    "desc": "Downloads page",
+    "group": "Pages / tools"
+  },
+  {
+    "key": "<F12>",
+    "cmd": "devtools",
+    "desc": "Developer tools",
+    "group": "Pages / tools"
+  },
+  {
+    "key": "gI",
+    "cmd": "open -t qute://history",
+    "desc": "History page",
+    "group": "Pages / tools"
+  },
+  {
+    "key": "gS",
+    "cmd": "open -t qute://settings",
+    "desc": "Settings page",
+    "group": "Pages / tools"
+  },
+  {
+    "key": "<Ctrl-Shift-p>",
+    "cmd": "spawn --detach /home/diego/.local/bin/da_autofill-rbw-rofi pick",
+    "desc": "Autofill: action picker",
+    "group": "Autofill"
+  },
+  {
+    "key": "<Ctrl-Shift-u>",
+    "cmd": "spawn --detach /home/diego/.local/bin/da_autofill-rbw-rofi user",
+    "desc": "Autofill: username",
+    "group": "Autofill"
+  },
+  {
+    "key": "<Ctrl-Shift-l>",
+    "cmd": "spawn --detach /home/diego/.local/bin/da_autofill-rbw-rofi pass",
+    "desc": "Autofill: password",
+    "group": "Autofill"
+  },
+  {
+    "key": "<Ctrl-Shift-o>",
+    "cmd": "spawn --detach /home/diego/.local/bin/da_autofill-rbw-rofi totp",
+    "desc": "Autofill: TOTP",
+    "group": "Autofill"
+  },
+  {
+    "key": ",d",
+    "cmd": "open file:///home/diego/.config/qutebrowser/qute-bookmarks.html",
+    "desc": "Open bookmarks (dashboard)",
+    "group": "Leader"
+  },
+  {
+    "key": ",s",
+    "cmd": "config-shortcuts",
+    "desc": "Open Shortcuts reference (Config-shortcuts)",
+    "group": "Leader"
+  },
+  {
+    "key": ",e",
+    "cmd": "config-edit",
+    "desc": "Edit config.py in $EDITOR (native qutebrowser command)",
+    "group": "Leader"
+  },
+  {
+    "key": ",v",
+    "cmd": "open https://vault.diegonmarcos.com",
+    "desc": "Vaultwarden",
+    "group": "Leader"
+  },
+  {
+    "key": ",a",
+    "cmd": "open https://auth.diegonmarcos.com",
+    "desc": "Authelia",
+    "group": "Leader"
+  },
+  {
+    "key": ",g",
+    "cmd": "open https://git.diegonmarcos.com",
+    "desc": "Gitea",
+    "group": "Leader"
+  }
+];   // [{key,cmd,desc,group}] — SoT: qute-keybindings.json
+const PLUGINS = [
+  {
+    "id": "adblock",
+    "name": "Ad & Tracker Blocking",
+    "category": "Privacy",
+    "surface": "config",
+    "enabled": true,
+    "status": "",
+    "keybinding": ",pa",
+    "option": "content.blocking.enabled",
+    "description": "EasyList + EasyPrivacy + StevenBlack hosts (lists in qute-settings.json). Blocks ads and trackers network-wide.",
+    "footprint": "none when off — pure network filter",
+    "actions": {}
+  },
+  {
+    "id": "javascript",
+    "name": "JavaScript",
+    "category": "Privacy",
+    "surface": "config",
+    "enabled": true,
+    "status": "",
+    "keybinding": ",pj",
+    "option": "content.javascript.enabled",
+    "description": "Global JS on/off. Off = maximum privacy/minimal footprint but breaks most sites; use per-site overrides for exceptions.",
+    "footprint": "off = lowest possible",
+    "actions": {}
+  },
+  {
+    "id": "dark-mode",
+    "name": "Dark Mode (all sites)",
+    "category": "Appearance",
+    "surface": "config",
+    "enabled": false,
+    "status": "",
+    "keybinding": ",pd",
+    "option": "colors.webpage.darkmode.enabled",
+    "description": "QtWebEngine's native page darkening for every site (independent of site theme). Off by default; toggle per taste.",
+    "footprint": "none when off",
+    "actions": {}
+  },
+  {
+    "id": "anti-fingerprint",
+    "name": "Anti-Fingerprint (canvas)",
+    "category": "Privacy",
+    "surface": "config",
+    "enabled": true,
+    "status": "",
+    "keybinding": ",pf",
+    "option": "content.canvas_reading",
+    "description": "Blocks canvas read-back, a major browser-fingerprinting vector. Enabled (protected) = canvas_reading disabled. Rarely breaks sites.",
+    "footprint": "none — a permission gate",
+    "actions": {}
+  },
+  {
+    "id": "no-autoplay",
+    "name": "Block Autoplay",
+    "category": "Appearance",
+    "surface": "config",
+    "enabled": true,
+    "status": "",
+    "keybinding": ",pm",
+    "option": "content.autoplay",
+    "description": "Stops media autoplaying. Enabled (blocked) = content.autoplay off.",
+    "footprint": "none",
+    "actions": {}
+  },
+  {
+    "id": "vaultwarden",
+    "name": "Vaultwarden Autofill",
+    "category": "Security",
+    "surface": "userscript",
+    "enabled": true,
+    "status": "",
+    "keybinding": "<Ctrl-Shift-b>",
+    "option": "",
+    "description": "In-page autofill against self-hosted vault.diegonmarcos.com via the official qute-bitwarden userscript + bw CLI (keyctl session, auto-lock). Login user/pass/TOTP today; cards, identities, save/edit/add land in Phase 1. One-time setup: run `bw login` once.",
+    "footprint": "none until invoked — a userscript",
+    "actions": {
+      "user-pass": "Fill username + Tab + password (Ctrl-Shift-B)",
+      "totp": "Copy 2FA/TOTP code to clipboard (--totp)"
+    }
+  },
+  {
+    "id": "autofill-daemon",
+    "name": "System Autofill (rofi)",
+    "category": "Security",
+    "surface": "daemon",
+    "enabled": true,
+    "status": "",
+    "keybinding": "<Ctrl-Shift-p>",
+    "option": "",
+    "description": "OS-level password autofill (rbw + rofi → keystroke synth). Works in ANY window, not just the browser. Complements the in-page Vaultwarden plugin.",
+    "footprint": "none until invoked — a systemd user service",
+    "actions": {
+      "pick": "Ctrl-Shift-P — action picker (rofi)",
+      "user": "Ctrl-Shift-U — type username",
+      "pass": "Ctrl-Shift-L — type password",
+      "totp": "Ctrl-Shift-O — TOTP to clipboard"
+    }
+  },
+  {
+    "id": "fido2-passkeys",
+    "name": "FIDO2 Passkeys / WebAuthn",
+    "category": "Security",
+    "surface": "daemon",
+    "enabled": true,
+    "status": "",
+    "keybinding": "",
+    "option": "",
+    "description": "Passkeys / WebAuthn over a virtual FIDO2 device (/dev/uhid). QtWebEngine discovers it automatically on any WebAuthn prompt — zero browser config, no in-page UI needed.",
+    "footprint": "none — passive, discovered on demand",
+    "actions": {}
+  },
+  {
+    "id": "reader-mode",
+    "name": "Reader Mode",
+    "category": "Reading",
+    "surface": "userscript",
+    "enabled": false,
+    "status": "planned:phase-2",
+    "keybinding": "",
+    "option": "",
+    "description": "Strip a page to its article via readability-lxml (already in qute's python env). Planned Phase 2.",
+    "footprint": "none until invoked",
+    "actions": {}
+  },
+  {
+    "id": "video-tools",
+    "name": "Video Tools (speed / PiP / download)",
+    "category": "Media",
+    "surface": "userscript",
+    "enabled": false,
+    "status": "planned:phase-2",
+    "keybinding": "",
+    "option": "",
+    "description": "Playback speed ±, picture-in-picture, download via yt-dlp. Planned Phase 2.",
+    "footprint": "none until invoked",
+    "actions": {}
+  },
+  {
+    "id": "translate",
+    "name": "Translate Selection",
+    "category": "Reading",
+    "surface": "userscript",
+    "enabled": false,
+    "status": "planned:phase-2",
+    "keybinding": "",
+    "option": "",
+    "description": "Send the current selection to a translate endpoint. Planned Phase 2.",
+    "footprint": "none until invoked",
+    "actions": {}
+  }
+];           // [{id,name,category,surface,enabled,...}] — SoT: qute-plugins.json
+const SEARCH_URL = "https://www.qwant.com/?q={}";        // web-search template ({} = query) — SoT: qute-search-engines.json "qw"
+const HISTORY_RECENT = window.QUTE_HISTORY_RECENT || [];  // real qutebrowser history, see script tag above
+// sections[] → { name, desc, recent, links{}, folders:[{name,desc,links{}}] }
+const SECTIONS = (DATA.sections||[]).map(s=>({
+  name:s.name, desc:s.desc||'', recent:!!s.recent,
+  links:s.links||{},
+  folders:(s.folders||[]).map(f=>({name:f.name,desc:f.desc||'',links:f.links||{}}))
+}));
+// Flat folder registry so the open-sheet + health can address a folder by id.
+const FOLDERS=[];
+SECTIONS.forEach((s,si)=>s.folders.forEach((f,fi)=>{ f._id=FOLDERS.length; f._sec=s.name; FOLDERS.push(f); }));
+
+const host = u => { try{ return new URL(u).hostname||'localhost'; }catch(e){ return 'localhost'; } };
+const fav  = u => `https://icons.duckduckgo.com/ip3/${host(u)}.ico`;
+const L    = n => (n.replace(/[^a-z0-9]/ig,'')[0]||'◆').toUpperCase();
+// icon <img> with letter fallback
+const icon = (name,url,cls)=>`<span class="${cls}" data-l="${L(name)}"><img src="${fav(url)}" alt="" loading="lazy" onerror="this.parentNode.textContent=this.parentNode.dataset.l"></span>`;
+
+/* ---------- Last Sessions: live recents (localStorage), merged over build-baked ---------- */
+const RECENT_KEY='bm-recent';
+const getRecent=()=>{ try{return JSON.parse(localStorage.getItem(RECENT_KEY))||[];}catch(e){return [];} };
+function pushRecent(name,url){
+  if(!/^https?:/i.test(url)) return;           // only real web pages
+  let r=getRecent().filter(x=>x.url!==url);
+  r.unshift({name:name||host(url),url}); r=r.slice(0,5);
+  try{ localStorage.setItem(RECENT_KEY,JSON.stringify(r)); }catch(e){}
+}
+// resolve a section's links for "recent" sections: real qutebrowser history
+// (HISTORY_RECENT, fork-written, most authoritative) first, then dashboard
+// click-throughs (localStorage), then any baked/static links — deduped by
+// URL, capped so this stays a "recent" glance, not a full history browser
+// (qute://history / the "Full History" link is that).
+function sectionLinks(s){
+  if(!s.recent) return s.links;
+  const out={}; const seen=new Set();
+  HISTORY_RECENT.map(h=>({name:h.title,url:h.url}))
+    .concat(getRecent())
+    .concat(Object.entries(s.links).map(([name,url])=>({name,url})))
+    .forEach(({name,url})=>{ if(out[name]||seen.has(url)) return; if(Object.keys(out).length>=8) return; out[name]=url; seen.add(url); });
+  return out;
+}
+// track clicks on any dashboard link
+document.addEventListener('click',e=>{
+  const a=e.target.closest('a[href]'); if(!a) return;
+  pushRecent(a.dataset.name||a.textContent.trim(),a.getAttribute('href'));
+});
+
+/* ---------- Android home: sections of direct-links + folder icons ---------- */
+const appIco=(name,url)=>`<a class="folder-ico" href="${url}" target="_blank" rel="noopener" data-name="${name.toLowerCase()}">
+    <span class="fbox" style="display:grid;place-items:center">${icon(name,url,'mini')}</span>
+    <span class="cap">${name}</span></a>`;
+function folderIco(f){
+  const names=Object.keys(f.links);
+  const preview=names.slice(0,4).map(n=>`<span class="mini" data-l="${L(n)}"><img src="${fav(f.links[n])}" alt="" onerror="this.parentNode.textContent=this.parentNode.dataset.l"></span>`).join('')
+               || '<span class="mini">·</span>';
+  const b=document.createElement('button');
+  b.className='folder-ico'; b.dataset.k=f.name; b.dataset.i=f._id;
+  b.innerHTML=`<span class="fbox">${preview}</span><span class="cap">${f.name}</span><span class="cnt">${names.length}</span>`;
+  b.addEventListener('click',()=>openFolder(f._id));
+  return b;
+}
+function renderHome(){
+  const home=document.getElementById('home'); home.innerHTML='';
+  SECTIONS.forEach(s=>{
+    const sec=document.createElement('div'); sec.className='sec'; sec.dataset.s=s.name;
+    sec.innerHTML=`<div class="sec-h"><span class="dot"></span><span class="sn">${s.name}</span><span class="sd">${s.desc}</span></div>`;
+    const grid=document.createElement('div'); grid.className='sec-grid';
+    const dl=sectionLinks(s), dn=Object.keys(dl);
+    dn.forEach(n=>grid.insertAdjacentHTML('beforeend',appIco(n,dl[n])));
+    s.folders.forEach(f=>grid.appendChild(folderIco(f)));
+    if(!dn.length && !s.folders.length) grid.innerHTML=`<div class="empty">— empty —</div>`;
+    sec.appendChild(grid); home.appendChild(sec);
+  });
+}
+
+/* ---------- open a folder (Android expand) ---------- */
+let openIdx=-1;
+function openFolder(i){
+  openIdx=i; const f=FOLDERS[i];
+  const names=Object.keys(f.links);
+  const sheet=document.getElementById('sheet');
+  sheet.dataset.k=f.name;
+  sheet.style.setProperty('--a',getComputedStyle(document.querySelector(`.folder-ico[data-i="${i}"]`)).getPropertyValue('--a'));
+  sheet.innerHTML=`<h2><span class="dot"></span>${f.name}
+      <span style="font-size:12px;color:var(--muted);font-weight:400">${f.desc}</span>
+      <button class="x" title="close (Esc)">✕</button></h2>
+    <div class="appgrid">`+
+    (names.length?names.map(n=>
+      `<a class="app" href="${f.links[n]}" target="_blank" rel="noopener" data-name="${n.toLowerCase()}">${icon(n,f.links[n],'icn')}<span class="lbl">${n}</span></a>`).join('')
+      :`<div class="empty">— empty —</div>`)+`</div>`;
+  sheet.querySelector('.x').addEventListener('click',closeFolder);
+  document.getElementById('scrim').classList.add('on');
+}
+function closeFolder(){ document.getElementById('scrim').classList.remove('on'); openIdx=-1; }
+document.getElementById('scrim').addEventListener('click',e=>{ if(e.target.id==='scrim') closeFolder(); });
+
+/* ---------- Config: Health + About ---------- */
+function openConfig(tab){
+  const sheet=document.getElementById('sheet');
+  sheet.dataset.k=''; sheet.style.setProperty('--a','var(--dnm)');
+  sheet.innerHTML=`<h2><span class="dot"></span>Config
+      <button class="x" title="close (Esc)">✕</button></h2>
+    <div class="tabs"><button data-t="plugins">Plugins</button><button data-t="shortcuts">Shortcuts</button><button data-t="health">Health</button><button data-t="about">About</button></div>
+    <div class="cfg-body" id="cfgbody"></div>`;
+  sheet.querySelector('.x').addEventListener('click',closeFolder);
+  sheet.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>showCfgTab(b.dataset.t)));
+  document.getElementById('scrim').classList.add('on');
+  showCfgTab(tab||'health');
+}
+function showCfgTab(t){
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  const body=document.getElementById('cfgbody');
+  if(t==='plugins'){
+    renderPlugins(body);
+  } else if(t==='shortcuts'){
+    renderShortcuts(body);
+  } else if(t==='about'){
+    const secCount=n=>Object.keys(sectionLinks(n)).length+n.folders.reduce((a,f)=>a+Object.keys(f.links).length,0);
+    const ns=SECTIONS.length, nf=FOLDERS.length, nl=SECTIONS.reduce((a,s)=>a+secCount(s),0);
+    body.innerHTML=`<div class="about">
+      <h3>◆ my-browser (qute) — cloud dashboard</h3>
+      <p>A declarative, data-driven start page for <b>qutebrowser</b>. Cloud folders are
+      generated from <code>cloud-data → build-flakes_desktop.json</code>; the Front tree from
+      <code>front-topology.json</code>; Last Sessions from <code>history.sqlite</code> (merged live).
+      Curated links live in <code>qute-bookmarks.json</code>. Rendered by <code>gen-dashboard.sh</code>.</p>
+      <p style="margin:14px 0">
+        <span class="stat"><b>${ns}</b>sections</span>
+        <span class="stat"><b>${nf}</b>folders</span>
+        <span class="stat"><b>${nl}</b>links</span>
+        ${SECTIONS.map(s=>`<span class="stat" data-s="${s.name}"><b>${secCount(s)}</b>${s.name}</span>`).join('')}
+      </p>
+      <p><b>Views:</b> Icons (Android launcher) · List (tree) — toggle <kbd>v</kbd>.
+         <b>Search</b> <kbd>/</kbd>. Links open in a new tab.</p>
+      <p style="color:var(--muted);font-size:12px">Owner: Diego Nepomuceno Marcos ·
+         source: <code>da_my-browser/src/dashboard</code></p>
+    </div>`;
+  } else {
+    body.innerHTML=`<button class="hrun" id="hrun">▶ Run health check</button>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:6px">
+        Browser reachability probe (no-cors fetch, 8s timeout). <code>*.app</code> need the WG mesh up;
+        <code>file://</code> paths are local (n/a).</p>
+      <div id="hres"></div>`;
+    document.getElementById('hrun').addEventListener('click',runHealth);
+  }
+}
+/* ---------- Shortcuts reference (data-driven from qute-keybindings.json) ---------- */
+const kbd = k => k.replace(/^<(.+)>$/,'$1').split('-').map(p=>`<kbd>${p}</kbd>`).join('+');
+function renderShortcuts(body){
+  const groups=[...new Set(KEYBINDINGS.map(b=>b.group))];
+  body.innerHTML=`<p style="color:var(--muted);font-size:12px;margin-bottom:10px">
+      Edit these in <code>qute-keybindings.json</code> → home-manager switch. Command palette:
+      <kbd>:</kbd> · leader <kbd>,</kbd> then key.</p>
+    <label class="search" style="display:block;margin-bottom:12px"><input id="kbq" placeholder="filter shortcuts…" autocomplete="off" style="width:100%"></label>
+    <div id="kblist">`+
+    groups.map(g=>`<div class="kbgrp" data-g="${g}"><div class="hgrp"><span class="dot" style="--a:var(--dnm)"></span>${g}</div>`+
+      KEYBINDINGS.filter(b=>b.group===g).map(b=>
+        `<div class="kbrow" data-f="${(b.key+' '+b.desc+' '+b.cmd).toLowerCase()}">
+           <span class="kbk">${kbd(b.key)}</span><span class="kbd-desc">${b.desc}</span><span class="kbc">${b.cmd}</span></div>`).join('')
+      +`</div>`).join('')+`</div>`;
+  const q=body.querySelector('#kbq');
+  q.addEventListener('input',()=>{ const t=q.value.trim().toLowerCase();
+    body.querySelectorAll('.kbrow').forEach(r=>r.classList.toggle('hidden',!!t&&!r.dataset.f.includes(t)));
+    body.querySelectorAll('.kbgrp').forEach(g=>g.classList.toggle('hidden',
+      !!t&&![...g.querySelectorAll('.kbrow')].some(r=>!r.classList.contains('hidden'))));
+  });
+  setTimeout(()=>q.focus(),50);
+}
+function renderPlugins(body){
+  const cats=[...new Set(PLUGINS.map(p=>p.category))];
+  const planned=p=>(p.status||'').indexOf('planned')===0;
+  const pill=p=> planned(p)
+      ? '<span style="font-size:11px;padding:1px 8px;border-radius:10px;font-weight:600;background:#3a3f44;color:#a1a9b1">planned</span>'
+      : (p.enabled
+        ? '<span style="font-size:11px;padding:1px 8px;border-radius:10px;font-weight:600;background:#1e5738;color:#7fe0a8">ON</span>'
+        : '<span style="font-size:11px;padding:1px 8px;border-radius:10px;font-weight:600;background:#3a2426;color:#e0a0a0">off</span>');
+  const meta=p=>{
+    if(p.surface==='config') return `<span class="kbc">:plugin-toggle-${p.id}</span>`+(p.keybinding?` &nbsp;<span class="kbk">${kbd(p.keybinding)}</span>`:'')+` &nbsp;<span style="color:var(--muted);font-size:11px">(live · no rebuild)</span>`;
+    const acts=Object.entries(p.actions||{}).map(([k,v])=>`<div class="kbrow"><span class="kbk">${k}</span><span class="kbd-desc">${v}</span></div>`).join('');
+    return (p.keybinding?`<span class="kbk">${kbd(p.keybinding)}</span> `:'')+(p.command?`<span class="kbc">${p.command}</span>`:'')+(acts?`<div style="margin-top:6px">${acts}</div>`:'');
+  };
+  body.innerHTML=`<p style="color:var(--muted);font-size:12px;margin-bottom:10px">
+      Registry: <code>qute-plugins.json</code>. Config plugins toggle <b>live</b> (<code>:config-cycle</code>, no rebuild) —
+      zero footprint when off. Open anytime: <kbd>:plugins</kbd> · <kbd>,pp</kbd>.</p>
+    <label class="search" style="display:block;margin-bottom:12px"><input id="plq" placeholder="filter plugins…" autocomplete="off" style="width:100%"></label>
+    <div id="pllist">`+
+    cats.map(c=>`<div class="kbgrp" data-g="${c}"><div class="hgrp"><span class="dot" style="--a:var(--dnm)"></span>${c}</div>`+
+      PLUGINS.filter(p=>p.category===c).map(p=>
+        `<div class="plcard" data-plugin="${p.id}" data-f="${(p.id+' '+p.name+' '+p.category+' '+p.description).toLowerCase()}"
+              style="border:1px solid #2a2e32;border-radius:8px;padding:10px 12px;margin:8px 0;background:#23272b">
+           <div style="display:flex;align-items:center;gap:8px;font-size:14px">${pill(p)} <b>${p.name}</b>
+             <span style="margin-left:auto;font-size:11px;color:var(--muted);text-transform:uppercase">${p.surface}</span></div>
+           <div style="color:var(--muted);font-size:12px;margin:6px 0">${p.description}</div>
+           <div>${meta(p)}</div>
+           <div style="color:#6a7078;font-size:11px;margin-top:6px">footprint: ${p.footprint||'—'}</div>
+         </div>`).join('')
+      +`</div>`).join('')+`</div>`;
+  const q=body.querySelector('#plq');
+  q.addEventListener('input',()=>{ const t=q.value.trim().toLowerCase();
+    body.querySelectorAll('.plcard').forEach(r=>r.classList.toggle('hidden',!!t&&!r.dataset.f.includes(t)));
+    body.querySelectorAll('.kbgrp').forEach(g=>g.classList.toggle('hidden',
+      !!t&&![...g.querySelectorAll('.plcard')].some(r=>!r.classList.contains('hidden'))));
+  });
+  if(location.hash==='#plugins-vaultwarden'){
+    const el=body.querySelector('[data-plugin="vaultwarden"]');
+    if(el){ el.scrollIntoView({block:'center'}); el.style.outline='2px solid var(--dnm)'; }
+  }
+  setTimeout(()=>q.focus(),50);
+}
+async function ping(url){
+  if(!/^https?:/i.test(url)) return {s:'na',ms:0};
+  const t0=performance.now(), c=new AbortController(), to=setTimeout(()=>c.abort(),8000);
+  try{ await fetch(url,{mode:'no-cors',cache:'no-store',signal:c.signal}); clearTimeout(to);
+       return {s:'ok',ms:Math.round(performance.now()-t0)}; }
+  catch(e){ clearTimeout(to); return {s:'bad',ms:Math.round(performance.now()-t0)}; }
+}
+async function runHealth(){
+  const btn=document.getElementById('hrun'); btn.disabled=true; btn.textContent='… probing';
+  const res=document.getElementById('hres'); res.innerHTML='';
+  // probe groups: each section's direct links, plus every folder (labelled Section/Folder)
+  const groups=[];
+  SECTIONS.forEach(s=>{
+    const dl=sectionLinks(s); if(Object.keys(dl).length) groups.push({label:s.name,sec:s.name,links:dl});
+    s.folders.forEach(f=>{ if(Object.keys(f.links).length) groups.push({label:`${s.name} / ${f.name}`,sec:s.name,links:f.links}); });
+  });
+  for(let gi=0; gi<groups.length; gi++){
+    const g=groups[gi], names=Object.keys(g.links);
+    const grp=document.createElement('div'); grp.dataset.s=g.sec;
+    grp.innerHTML=`<div class="hgrp" data-s="${g.sec}"><span class="dot"></span>${g.label}<span class="tally">…</span></div>`+
+      names.map((n,ri)=>`<div class="hrow" id="h-${gi}-${ri}"><span class="st run">◔</span><span class="hn">${n}</span><span class="hms">${g.links[n]}</span></div>`).join('');
+    res.appendChild(grp);
+    let ok=0,bad=0,na=0;
+    const q=names.map((n,ri)=>({n,ri}));
+    async function worker(){ while(q.length){ const {n,ri}=q.shift();
+      const r=await ping(g.links[n]); const row=document.getElementById(`h-${gi}-${ri}`);
+      const st=row.querySelector('.st'); const ms=row.querySelector('.hms');
+      st.className='st '+(r.s==='ok'?'ok':r.s==='na'?'na':'bad');
+      st.textContent=r.s==='ok'?'✓':r.s==='na'?'—':'✗';
+      if(r.s!=='na') ms.textContent=`${r.ms}ms · ${g.links[n]}`;
+      r.s==='ok'?ok++:r.s==='na'?na++:bad++;
+    }}
+    await Promise.all([worker(),worker(),worker(),worker(),worker(),worker()]);
+    grp.querySelector('.tally').textContent=`${ok} up · ${bad} down${na?` · ${na} n/a`:''}`;
+  }
+  btn.disabled=false; btn.textContent='▶ Re-run';
+}
+document.getElementById('gear').addEventListener('click',()=>openConfig('health'));
+
+/* ---------- List view ---------- */
+const rowsHTML=links=>Object.keys(links).map(n=>
+  `<a class="row" href="${links[n]}" target="_blank" rel="noopener" data-name="${n.toLowerCase()}" data-url="${links[n].toLowerCase()}">
+    ${icon(n,links[n],'fi')}<span class="rn">${n}</span><span class="ru">${links[n]}</span></a>`).join('');
+function collapsible(list,name,desc,cnt,inner){
+  const sec=document.createElement('section'); sec.className='folder'; sec.dataset.k=name;
+  sec.innerHTML=`<div class="fhead"><span class="caret">▾</span><span class="dot"></span>
+      <span class="fname">${name}</span><span class="cnt">${cnt}</span><span class="fdesc">${desc}</span></div>
+    <div class="rows">${inner||'<div class="empty">— empty —</div>'}</div>`;
+  sec.querySelector('.fhead').addEventListener('click',()=>sec.classList.toggle('collapsed'));
+  list.appendChild(sec); return sec;
+}
+function renderList(){
+  const list=document.getElementById('list'); list.innerHTML='';
+  SECTIONS.forEach(s=>{
+    const wrap=document.createElement('div'); wrap.className='sec'; wrap.dataset.s=s.name;
+    wrap.innerHTML=`<div class="sec-h"><span class="dot"></span><span class="sn">${s.name}</span><span class="sd">${s.desc}</span></div>`;
+    list.appendChild(wrap);
+    const dl=sectionLinks(s), dn=Object.keys(dl);
+    if(dn.length) collapsible(wrap,s.name,s.desc,dn.length,rowsHTML(dl));
+    s.folders.forEach(f=>collapsible(wrap,f.name,f.desc,Object.keys(f.links).length,rowsHTML(f.links)));
+    if(!dn.length && !s.folders.length) collapsible(wrap,s.name,s.desc,0,'');
+  });
+}
+
+function setView(v){
+  document.body.className=v+'-mode';
+  document.querySelectorAll('#toggle button').forEach(b=>b.classList.toggle('on',b.dataset.view===v));
+  try{ localStorage.setItem('bm-view',v); }catch(e){}
+  if(v!=='icons') closeFolder();
+}
+
+/* search: filters icons (direct links + folders) / list rows; hides empty sections */
+function filter(t){
+  t=t.trim().toLowerCase();
+  const root=document.body.classList.contains('list-mode')?'#list':'#home';
+  if(root==='#list'){
+    document.querySelectorAll('#list .folder').forEach(f=>{
+      let any=false;
+      f.querySelectorAll('[data-name]').forEach(el=>{
+        const hit=!t||el.dataset.name.includes(t)||(el.dataset.url||'').includes(t);
+        el.classList.toggle('hidden',!hit); if(hit)any=true;
+      });
+      f.classList.toggle('hidden',!!t&&!any);
+    });
+  }else{
+    document.querySelectorAll('#home .folder-ico').forEach(b=>{
+      let hit;
+      if(b.dataset.i!==undefined){ const f=FOLDERS[+b.dataset.i];
+        hit=!t||Object.keys(f.links).some(n=>n.toLowerCase().includes(t)||f.links[n].toLowerCase().includes(t)); }
+      else hit=!t||(b.dataset.name||'').includes(t);
+      b.classList.toggle('hidden',!hit);
+    });
+  }
+  // hide a section whose visible items are all gone
+  document.querySelectorAll(`${root} .sec`).forEach(sec=>{
+    const items=sec.querySelectorAll('.folder-ico, .folder');
+    const anyVisible=[...items].some(el=>!el.classList.contains('hidden'));
+    sec.classList.toggle('hidden',!!t&&!anyVisible);
+  });
+}
+
+renderHome(); renderList();
+setView((()=>{try{return localStorage.getItem('bm-view')||'icons';}catch(e){return 'icons';}})());
+document.getElementById('toggle').addEventListener('click',e=>{const b=e.target.closest('button'); if(b)setView(b.dataset.view);});
+const q=document.getElementById('q');
+q.addEventListener('input',()=>filter(q.value));
+q.addEventListener('keydown',e=>{
+  if(e.key!=='Enter')return;
+  const t=q.value.trim();
+  if(!t)return;
+  window.open(SEARCH_URL.replace('{}',encodeURIComponent(t)),'_blank');
+});
+document.addEventListener('keydown',e=>{
+  if(e.target===q){ if(e.key==='Escape'){q.value='';filter('');q.blur();} return; }
+  if(e.key==='/'){ e.preventDefault(); q.focus(); }
+  else if(e.key==='v'){ setView(document.body.classList.contains('icons-mode')?'list':'icons'); }
+  else if(e.key==='Escape'){ closeFolder(); }
+});
+const clk=document.getElementById('clock');
+const tick=()=>{const d=new Date();clk.textContent=d.toTimeString().slice(0,5);};
+tick(); setInterval(tick,10000);
+// deep-links: #shortcuts (,s) → Shortcuts tab; #plugins (:plugins / ,pp) and
+// #plugins-vaultwarden (:plugins-vaultwarden) → Plugins tab.
+function hashRoute(){
+  const h=location.hash;
+  if(h==='#shortcuts') openConfig('shortcuts');
+  else if(h==='#plugins'||h==='#plugins-vaultwarden') openConfig('plugins');
+}
+window.addEventListener('hashchange',hashRoute); hashRoute();
+</script>
+</body>
+</html>

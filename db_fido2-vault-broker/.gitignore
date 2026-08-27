@@ -1,0 +1,6 @@
+target/
+dist/
+build.log
+*.bak
+result
+result-*
