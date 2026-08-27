@@ -1,1 +1,0 @@
-/data/data/com.termux.nix/files/home/git/unix/ba_flakes_desktop/build.sh

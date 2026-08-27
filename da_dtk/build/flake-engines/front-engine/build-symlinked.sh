@@ -1,1 +1,0 @@
-/data/data/com.termux.nix/files/home/git/front/_engine.sh

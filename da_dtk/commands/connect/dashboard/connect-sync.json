@@ -1,9 +1,0 @@
-{
-  "settings": {
-    "sync_dir": "/home/diego/mnt_syncs",
-    "sync_config_dir": "$HOME/.config/rclone_manager",
-    "rclone_opts": "--vfs-cache-mode writes",
-    "rclone_sync_opts": "--tpslimit 10 --drive-skip-gdocs",
-    "merge_strategy": "theirs"
-  }
-}

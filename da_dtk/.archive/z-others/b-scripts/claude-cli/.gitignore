@@ -1,8 +1,0 @@
-# Downloaded libraries and build staging
-libs/
-
-# Build outputs
-dist/
-
-# Backup directory
-.backup/

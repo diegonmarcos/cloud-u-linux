@@ -1,4 +1,0 @@
-#!/bin/sh
-# Pre-commit hook — tools repo
-# (cloud-data and front-data submodules removed, moved to unix repo)
-exit 0
