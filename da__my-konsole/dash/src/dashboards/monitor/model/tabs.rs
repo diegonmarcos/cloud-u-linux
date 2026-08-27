@@ -52,9 +52,17 @@ pub(crate) const TABS: &[Tab] = &[
         name: "containers",
         key: 'o',
         desc: "what is running, and what is on disk",
+        // In deployment order, which is also the order the question gets
+        // asked: what was declared, what that produced, what is running from
+        // it, and what it left behind. compose comes first because it is the
+        // only one of the five that is a STATEMENT of intent rather than a
+        // reading of the machine.
         subs: &[
-            Sub { name: "containers", key: Some('o'), desc: "running containers, enter for detail and actions", net: None },
+            Sub { name: "compose", key: None, desc: "the projects docker itself recorded, and what drifted from them", net: None },
             Sub { name: "images", key: Some('I'), desc: "every image on the box, enter for detail and actions", net: None },
+            Sub { name: "containers", key: Some('o'), desc: "running containers, enter for detail and actions", net: None },
+            Sub { name: "volumes", key: None, desc: "what the containers keep, and what nothing claims", net: None },
+            Sub { name: "network", key: None, desc: "the docker networks and what they are for", net: None },
         ],
     },
     Tab {
@@ -87,9 +95,35 @@ pub(crate) const TABS: &[Tab] = &[
         // first was cheaper than a red build.
         key: 'W',
         desc: "what is declared open, what is actually listening",
+        // Three views because there are two firewalls on this box and they do
+        // not know about each other: the OS one, and docker's, which inserts
+        // its own chain AHEAD of the user rules and so goes around whatever
+        // the OS one says. Reading them merged hides exactly that. The
+        // consolidated view exists to put the disagreement on one screen.
         subs: &[
-            Sub { name: "listening", key: None, desc: "every socket bound here, and how far it reaches", net: None },
-            Sub { name: "declared", key: None, desc: "the ingress cloud-infra declares for this fleet", net: None },
+            Sub { name: "consolidated", key: None, desc: "both firewalls on one screen, and where they disagree", net: None },
+            Sub { name: "os", key: None, desc: "every socket bound here, and the ingress cloud-infra declares", net: None },
+            Sub { name: "container", key: None, desc: "the ports docker published, from docker ps", net: None },
+        ],
+    },
+    // The journal, read-only. Every sub-tab below is one journalctl invocation
+    // and nothing else — this tab writes nothing, restarts nothing, and asks
+    // for no privilege it does not already have.
+    Tab {
+        name: "logs",
+        // 'L': lowercase l is free, but uppercase matches the other view tabs
+        // added after the strip existed (I, F, W).
+        key: 'L',
+        desc: "the journal, one section at a time",
+        subs: &[
+            Sub { name: "summary", key: None, desc: "alerts per section over the last 24h", net: None },
+            Sub { name: "kernel", key: None, desc: "journalctl -k", net: None },
+            Sub { name: "system", key: None, desc: "the system manager's own journal", net: None },
+            Sub { name: "user", key: None, desc: "this login's services", net: None },
+            Sub { name: "docker", key: None, desc: "docker.service", net: None },
+            Sub { name: "network", key: None, desc: "NetworkManager and wireguard", net: None },
+            Sub { name: "ssh", key: None, desc: "sshd — who reached this box", net: None },
+            Sub { name: "watchdog", key: None, desc: "my-watchdog's own journal", net: None },
         ],
     },
     Tab { name: "history", key: 'y', desc: "what this machine did over the last day", subs: &[] },

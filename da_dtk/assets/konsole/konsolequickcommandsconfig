@@ -1,0 +1,880 @@
+
+[VM - gcp-proxy][htop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-htop gcp-proxy
+name=htop
+tooltip=Interactive process viewer
+
+[VM - gcp-proxy][journalctl -f]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journalctl-f gcp-proxy
+name=journalctl -f
+tooltip=Follow system journal
+
+[VM - gcp-proxy][journal-watch docker]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-docker gcp-proxy
+name=journal-watch docker
+tooltip=Last 15 lines of Docker daemon journal
+
+[VM - gcp-proxy][journal-watch sshd]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-sshd gcp-proxy
+name=journal-watch sshd
+tooltip=Last 15 lines of SSH daemon journal
+
+[VM - gcp-proxy][journal-watch wg]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-wg gcp-proxy
+name=journal-watch wg
+tooltip=Last 15 lines of WireGuard journal
+
+[VM - gcp-proxy][journal-watch cinit]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-cinit gcp-proxy
+name=journal-watch cinit
+tooltip=Last 15 lines of container-init journal
+
+[VM - gcp-proxy][journal-watch kernel]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-kernel gcp-proxy
+name=journal-watch kernel
+tooltip=Last 15 kernel messages
+
+[VM - gcp-proxy][journal-watch errors]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-errors gcp-proxy
+name=journal-watch errors
+tooltip=Last 15 error-level journal entries
+
+[VM - gcp-proxy][systemctl status]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-systemctl-status gcp-proxy
+name=systemctl status
+tooltip=Show systemd status overview
+
+[VM - gcp-proxy][systemctl list-units]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-systemctl-list gcp-proxy
+name=systemctl list-units
+tooltip=List running systemd services
+
+[VM - gcp-proxy][docker daemon start]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-start gcp-proxy
+name=docker daemon start
+tooltip=Start Docker daemon
+
+[VM - gcp-proxy][docker daemon stop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-stop gcp-proxy
+name=docker daemon stop
+tooltip=Stop Docker daemon
+
+[VM - gcp-proxy][docker ps]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-ps gcp-proxy
+name=docker ps
+tooltip=List running containers
+
+[VM - gcp-proxy][docker stats]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-stats gcp-proxy
+name=docker stats
+tooltip=Live container resource usage
+
+[VM - gcp-proxy][docker exec]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-exec gcp-proxy
+name=docker exec
+tooltip=Pick a container and exec into it
+
+[VM - gcp-proxy][dashboard]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-dashboard gcp-proxy
+name=dashboard
+tooltip=tmux: docker stats + htop split
+
+[VM - gcp-proxy][gcloud start]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-gcloud-start arch-1
+name=gcloud start
+tooltip=Start GCP instance
+
+[VM - gcp-proxy][gcloud stop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-gcloud-stop arch-1
+name=gcloud stop
+tooltip=Stop GCP instance
+
+[VM - gcp-proxy][gcloud reset]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-gcloud-reset arch-1
+name=gcloud reset
+tooltip=Reset GCP instance
+
+[VM - gcp-proxy][gcloud serial]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-gcloud-serial arch-1
+name=gcloud serial
+tooltip=GCloud serial console
+
+[VM - oci-mail][htop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-htop oci-mail
+name=htop
+tooltip=Interactive process viewer
+
+[VM - oci-mail][journalctl -f]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journalctl-f oci-mail
+name=journalctl -f
+tooltip=Follow system journal
+
+[VM - oci-mail][journal-watch docker]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-docker oci-mail
+name=journal-watch docker
+tooltip=Last 15 lines of Docker daemon journal
+
+[VM - oci-mail][journal-watch sshd]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-sshd oci-mail
+name=journal-watch sshd
+tooltip=Last 15 lines of SSH daemon journal
+
+[VM - oci-mail][journal-watch wg]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-wg oci-mail
+name=journal-watch wg
+tooltip=Last 15 lines of WireGuard journal
+
+[VM - oci-mail][journal-watch cinit]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-cinit oci-mail
+name=journal-watch cinit
+tooltip=Last 15 lines of container-init journal
+
+[VM - oci-mail][journal-watch kernel]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-kernel oci-mail
+name=journal-watch kernel
+tooltip=Last 15 kernel messages
+
+[VM - oci-mail][journal-watch errors]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-errors oci-mail
+name=journal-watch errors
+tooltip=Last 15 error-level journal entries
+
+[VM - oci-mail][systemctl status]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-systemctl-status oci-mail
+name=systemctl status
+tooltip=Show systemd status overview
+
+[VM - oci-mail][systemctl list-units]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-systemctl-list oci-mail
+name=systemctl list-units
+tooltip=List running systemd services
+
+[VM - oci-mail][docker daemon start]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-start oci-mail
+name=docker daemon start
+tooltip=Start Docker daemon
+
+[VM - oci-mail][docker daemon stop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-stop oci-mail
+name=docker daemon stop
+tooltip=Stop Docker daemon
+
+[VM - oci-mail][docker ps]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-ps oci-mail
+name=docker ps
+tooltip=List running containers
+
+[VM - oci-mail][docker stats]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-stats oci-mail
+name=docker stats
+tooltip=Live container resource usage
+
+[VM - oci-mail][docker exec]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-exec oci-mail
+name=docker exec
+tooltip=Pick a container and exec into it
+
+[VM - oci-mail][dashboard]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-dashboard oci-mail
+name=dashboard
+tooltip=tmux: docker stats + htop split
+
+[VM - oci-mail][oci start]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-oci-start oci-mail
+name=oci start
+tooltip=Start OCI instance
+
+[VM - oci-mail][oci stop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-oci-stop oci-mail
+name=oci stop
+tooltip=Stop OCI instance
+
+[VM - oci-mail][oci reset]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-oci-reset oci-mail
+name=oci reset
+tooltip=Reset OCI instance
+
+[VM - oci-mail][oci serial]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-oci-serial oci-mail
+name=oci serial
+tooltip=OCI serial console
+
+[VM - oci-analytics][htop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-htop oci-analytics
+name=htop
+tooltip=Interactive process viewer
+
+[VM - oci-analytics][journalctl -f]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journalctl-f oci-analytics
+name=journalctl -f
+tooltip=Follow system journal
+
+[VM - oci-analytics][journal-watch docker]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-docker oci-analytics
+name=journal-watch docker
+tooltip=Last 15 lines of Docker daemon journal
+
+[VM - oci-analytics][journal-watch sshd]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-sshd oci-analytics
+name=journal-watch sshd
+tooltip=Last 15 lines of SSH daemon journal
+
+[VM - oci-analytics][journal-watch wg]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-wg oci-analytics
+name=journal-watch wg
+tooltip=Last 15 lines of WireGuard journal
+
+[VM - oci-analytics][journal-watch cinit]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-cinit oci-analytics
+name=journal-watch cinit
+tooltip=Last 15 lines of container-init journal
+
+[VM - oci-analytics][journal-watch kernel]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-kernel oci-analytics
+name=journal-watch kernel
+tooltip=Last 15 kernel messages
+
+[VM - oci-analytics][journal-watch errors]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-errors oci-analytics
+name=journal-watch errors
+tooltip=Last 15 error-level journal entries
+
+[VM - oci-analytics][systemctl status]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-systemctl-status oci-analytics
+name=systemctl status
+tooltip=Show systemd status overview
+
+[VM - oci-analytics][systemctl list-units]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-systemctl-list oci-analytics
+name=systemctl list-units
+tooltip=List running systemd services
+
+[VM - oci-analytics][docker daemon start]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-start oci-analytics
+name=docker daemon start
+tooltip=Start Docker daemon
+
+[VM - oci-analytics][docker daemon stop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-stop oci-analytics
+name=docker daemon stop
+tooltip=Stop Docker daemon
+
+[VM - oci-analytics][docker ps]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-ps oci-analytics
+name=docker ps
+tooltip=List running containers
+
+[VM - oci-analytics][docker stats]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-stats oci-analytics
+name=docker stats
+tooltip=Live container resource usage
+
+[VM - oci-analytics][docker exec]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-exec oci-analytics
+name=docker exec
+tooltip=Pick a container and exec into it
+
+[VM - oci-analytics][dashboard]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-dashboard oci-analytics
+name=dashboard
+tooltip=tmux: docker stats + htop split
+
+[VM - oci-analytics][oci start]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-oci-start oci-analytics
+name=oci start
+tooltip=Start OCI instance
+
+[VM - oci-analytics][oci stop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-oci-stop oci-analytics
+name=oci stop
+tooltip=Stop OCI instance
+
+[VM - oci-analytics][oci reset]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-oci-reset oci-analytics
+name=oci reset
+tooltip=Reset OCI instance
+
+[VM - oci-analytics][oci serial]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-oci-serial oci-analytics
+name=oci serial
+tooltip=OCI serial console
+
+[VM - oci-apps][htop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-htop oci-apps
+name=htop
+tooltip=Interactive process viewer
+
+[VM - oci-apps][journalctl -f]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journalctl-f oci-apps
+name=journalctl -f
+tooltip=Follow system journal
+
+[VM - oci-apps][journal-watch docker]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-docker oci-apps
+name=journal-watch docker
+tooltip=Last 15 lines of Docker daemon journal
+
+[VM - oci-apps][journal-watch sshd]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-sshd oci-apps
+name=journal-watch sshd
+tooltip=Last 15 lines of SSH daemon journal
+
+[VM - oci-apps][journal-watch wg]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-wg oci-apps
+name=journal-watch wg
+tooltip=Last 15 lines of WireGuard journal
+
+[VM - oci-apps][journal-watch cinit]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-cinit oci-apps
+name=journal-watch cinit
+tooltip=Last 15 lines of container-init journal
+
+[VM - oci-apps][journal-watch kernel]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-kernel oci-apps
+name=journal-watch kernel
+tooltip=Last 15 kernel messages
+
+[VM - oci-apps][journal-watch errors]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-errors oci-apps
+name=journal-watch errors
+tooltip=Last 15 error-level journal entries
+
+[VM - oci-apps][systemctl status]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-systemctl-status oci-apps
+name=systemctl status
+tooltip=Show systemd status overview
+
+[VM - oci-apps][systemctl list-units]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-systemctl-list oci-apps
+name=systemctl list-units
+tooltip=List running systemd services
+
+[VM - oci-apps][docker daemon start]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-start oci-apps
+name=docker daemon start
+tooltip=Start Docker daemon
+
+[VM - oci-apps][docker daemon stop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-stop oci-apps
+name=docker daemon stop
+tooltip=Stop Docker daemon
+
+[VM - oci-apps][docker ps]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-ps oci-apps
+name=docker ps
+tooltip=List running containers
+
+[VM - oci-apps][docker stats]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-stats oci-apps
+name=docker stats
+tooltip=Live container resource usage
+
+[VM - oci-apps][docker exec]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-exec oci-apps
+name=docker exec
+tooltip=Pick a container and exec into it
+
+[VM - oci-apps][dashboard]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-dashboard oci-apps
+name=dashboard
+tooltip=tmux: docker stats + htop split
+
+[VM - oci-apps][oci start]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-oci-start oci-apps
+name=oci start
+tooltip=Start OCI instance
+
+[VM - oci-apps][oci stop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-oci-stop oci-apps
+name=oci stop
+tooltip=Stop OCI instance
+
+[VM - oci-apps][oci reset]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-oci-reset oci-apps
+name=oci reset
+tooltip=Reset OCI instance
+
+[VM - oci-apps][oci serial]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-oci-serial oci-apps
+name=oci serial
+tooltip=OCI serial console
+
+[VM - gcp-t4][htop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-htop gcp-t4
+name=htop
+tooltip=Interactive process viewer
+
+[VM - gcp-t4][journalctl -f]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journalctl-f gcp-t4
+name=journalctl -f
+tooltip=Follow system journal
+
+[VM - gcp-t4][journal-watch docker]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-docker gcp-t4
+name=journal-watch docker
+tooltip=Last 15 lines of Docker daemon journal
+
+[VM - gcp-t4][journal-watch sshd]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-sshd gcp-t4
+name=journal-watch sshd
+tooltip=Last 15 lines of SSH daemon journal
+
+[VM - gcp-t4][journal-watch wg]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-wg gcp-t4
+name=journal-watch wg
+tooltip=Last 15 lines of WireGuard journal
+
+[VM - gcp-t4][journal-watch cinit]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-cinit gcp-t4
+name=journal-watch cinit
+tooltip=Last 15 lines of container-init journal
+
+[VM - gcp-t4][journal-watch kernel]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-kernel gcp-t4
+name=journal-watch kernel
+tooltip=Last 15 kernel messages
+
+[VM - gcp-t4][journal-watch errors]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-journal-errors gcp-t4
+name=journal-watch errors
+tooltip=Last 15 error-level journal entries
+
+[VM - gcp-t4][systemctl status]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-systemctl-status gcp-t4
+name=systemctl status
+tooltip=Show systemd status overview
+
+[VM - gcp-t4][systemctl list-units]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-systemctl-list gcp-t4
+name=systemctl list-units
+tooltip=List running systemd services
+
+[VM - gcp-t4][docker daemon start]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-start gcp-t4
+name=docker daemon start
+tooltip=Start Docker daemon
+
+[VM - gcp-t4][docker daemon stop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-stop gcp-t4
+name=docker daemon stop
+tooltip=Stop Docker daemon
+
+[VM - gcp-t4][docker ps]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-ps gcp-t4
+name=docker ps
+tooltip=List running containers
+
+[VM - gcp-t4][docker stats]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-stats gcp-t4
+name=docker stats
+tooltip=Live container resource usage
+
+[VM - gcp-t4][docker exec]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-docker-exec gcp-t4
+name=docker exec
+tooltip=Pick a container and exec into it
+
+[VM - gcp-t4][dashboard]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-dashboard gcp-t4
+name=dashboard
+tooltip=tmux: docker stats + htop split
+
+[VM - gcp-t4][gcloud start]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-gcloud-start ollama-spot-gpu
+name=gcloud start
+tooltip=Start GCP instance
+
+[VM - gcp-t4][gcloud stop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-gcloud-stop ollama-spot-gpu
+name=gcloud stop
+tooltip=Stop GCP instance
+
+[VM - gcp-t4][gcloud reset]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-gcloud-reset ollama-spot-gpu
+name=gcloud reset
+tooltip=Reset GCP instance
+
+[VM - gcp-t4][gcloud serial]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh vm-gcloud-serial ollama-spot-gpu
+name=gcloud serial
+tooltip=GCloud serial console
+
+[VM - Orchestration][⚡ mode: SSH (default)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh mode-ssh
+name=⚡ mode: SSH (default)
+tooltip=Set connection mode to SSH (port 22)
+
+[VM - Orchestration][⚡ mode: Dropbear]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh mode-dropbear
+name=⚡ mode: Dropbear
+tooltip=Set connection mode to Dropbear (port 2200)
+
+[VM - Orchestration][⚡ mode: Serial]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh mode-serial
+name=⚡ mode: Serial
+tooltip=Set connection mode to serial console
+
+[VM - Orchestration][⚡ mode: status]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh mode-status
+name=⚡ mode: status
+tooltip=Show current connection mode
+
+[VM - Orchestration][htop (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-htop
+name=htop (all)
+tooltip=htop on all VMs sequentially
+
+[VM - Orchestration][journalctl -f (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-journalctl-f
+name=journalctl -f (all)
+tooltip=Follow journal on all VMs
+
+[VM - Orchestration][journal-watch docker (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-journal-docker
+name=journal-watch docker (all)
+tooltip=Docker journal on all VMs
+
+[VM - Orchestration][journal-watch sshd (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-journal-sshd
+name=journal-watch sshd (all)
+tooltip=SSH journal on all VMs
+
+[VM - Orchestration][journal-watch wg (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-journal-wg
+name=journal-watch wg (all)
+tooltip=WireGuard journal on all VMs
+
+[VM - Orchestration][journal-watch cinit (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-journal-cinit
+name=journal-watch cinit (all)
+tooltip=container-init journal on all VMs
+
+[VM - Orchestration][journal-watch kernel (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-journal-kernel
+name=journal-watch kernel (all)
+tooltip=Kernel messages on all VMs
+
+[VM - Orchestration][journal-watch errors (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-journal-errors
+name=journal-watch errors (all)
+tooltip=Error journal on all VMs
+
+[VM - Orchestration][systemctl status (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-systemctl-status
+name=systemctl status (all)
+tooltip=systemd status on all VMs
+
+[VM - Orchestration][systemctl list-units (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-systemctl-list
+name=systemctl list-units (all)
+tooltip=Running services on all VMs
+
+[VM - Orchestration][docker daemon start (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-docker-start
+name=docker daemon start (all)
+tooltip=Start Docker on all VMs
+
+[VM - Orchestration][docker daemon stop (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-docker-stop
+name=docker daemon stop (all)
+tooltip=Stop Docker on all VMs
+
+[VM - Orchestration][docker ps (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-docker-ps
+name=docker ps (all)
+tooltip=List containers on all VMs
+
+[VM - Orchestration][docker stats (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-docker-stats
+name=docker stats (all)
+tooltip=Container stats on all VMs
+
+[VM - Orchestration][dashboard-stats (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-dashboard-stats
+name=dashboard-stats (all)
+tooltip=tmux: docker stats + htop for all VMs (one tab per VM)
+
+[VM - Orchestration][dashboard-journal (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-dashboard-journal
+name=dashboard-journal (all)
+tooltip=tmux: journalctl -f + htop for all VMs (one tab per VM)
+
+[VM - Orchestration][konsole script push (all)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh all-script-push
+name=konsole script push (all)
+tooltip=Push cloud-container-orchestrator.sh to all VMs
+
+[Local][htop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-htop
+name=htop
+tooltip=Interactive process viewer
+
+[Local][journalctl -f]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-journalctl-f
+name=journalctl -f
+tooltip=Follow system journal
+
+[Local][journal-watch docker]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-journal-docker
+name=journal-watch docker
+tooltip=Last 15 lines of Docker daemon journal
+
+[Local][journal-watch sshd]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-journal-sshd
+name=journal-watch sshd
+tooltip=Last 15 lines of SSH daemon journal
+
+[Local][journal-watch wg]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-journal-wg
+name=journal-watch wg
+tooltip=Last 15 lines of WireGuard journal
+
+[Local][journal-watch cinit]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-journal-cinit
+name=journal-watch cinit
+tooltip=Last 15 lines of container-init journal
+
+[Local][journal-watch kernel]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-journal-kernel
+name=journal-watch kernel
+tooltip=Last 15 kernel messages
+
+[Local][journal-watch errors]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-journal-errors
+name=journal-watch errors
+tooltip=Last 15 error-level journal entries
+
+[Local][systemctl status]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-systemctl-status
+name=systemctl status
+tooltip=Show systemd status overview
+
+[Local][systemctl list-units]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-systemctl-list
+name=systemctl list-units
+tooltip=List running systemd services
+
+[Local][docker daemon start]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-docker-start
+name=docker daemon start
+tooltip=Start Docker daemon
+
+[Local][docker daemon stop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-docker-stop
+name=docker daemon stop
+tooltip=Stop Docker daemon
+
+[Local][docker ps]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-docker-ps
+name=docker ps
+tooltip=List running containers
+
+[Local][docker stats]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-docker-stats
+name=docker stats
+tooltip=Live container resource usage
+
+[Local][docker exec]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh local-docker-exec
+name=docker exec
+tooltip=Pick a container and exec into it
+
+[Desktop][TUI (tmux + fzf)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator-tui.sh
+name=TUI (tmux + fzf)
+tooltip=Full TUI: fzf menu (left) + output (right) in tmux
+
+[Desktop][dtk.sh (interactive)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh dtk
+name=dtk.sh (interactive)
+tooltip=Full interactive toolkit menu
+
+[Desktop][install dev toolchain]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh dtk-install
+name=install dev toolchain
+tooltip=Install full dev environment for detected OS
+
+[Desktop][docker-start (dev container)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh dtk-docker
+name=docker-start (dev container)
+tooltip=Pull and run diego-user-env container
+
+[Desktop][git-clone (all repos)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh dtk-git-clone
+name=git-clone (all repos)
+tooltip=Clone/pull all 5 repos to ~/git
+
+[Desktop][info (installed tools)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh dtk-info
+name=info (installed tools)
+tooltip=Show installed tools and aliases
+
+[Desktop][commands (VM rescue)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh dtk-commands
+name=commands (VM rescue)
+tooltip=Quick rescue commands menu
+
+[Desktop][ssh (gcloud serial)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh dtk-ssh
+name=ssh (gcloud serial)
+tooltip=SSH via gcloud with serial/rescue modes
+
+[Desktop][htop]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh desktop-htop
+name=htop
+tooltip=Local interactive process viewer
+
+[Desktop][hm build switch]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh hm-switch
+name=hm build switch
+tooltip=Rebuild and switch home-manager desktop flake
+
+[Desktop][nixos rebuild switch]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh nixos-switch
+name=nixos rebuild switch
+tooltip=Rebuild and switch NixOS system flake
+
+[Desktop][git status (all repos)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh git-status-all
+name=git status (all repos)
+tooltip=Show git status across all repos
+
+[Desktop][wg status]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh wg-status
+name=wg status
+tooltip=Show WireGuard tunnel status
+
+[Desktop][docker ps (local)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh docker-ps-local
+name=docker ps (local)
+tooltip=List local running containers
+
+[Desktop][free memory]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh free-mem
+name=free memory
+tooltip=Show memory usage
+
+[Desktop][disk usage]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh disk-usage
+name=disk usage
+tooltip=Show disk usage for key partitions
+
+[Desktop][konsole script push]
+command=if [ -d ~/git/cloud-mykonsole-dtk/.git ]; then git -C ~/git/cloud-mykonsole-dtk pull; else git clone https://github.com/diegonmarcos/cloud-mykonsole-dtk.git ~/git/cloud-mykonsole-dtk; fi && echo 'Done: ~/git/cloud-mykonsole-dtk'
+name=konsole script push
+tooltip=Clone/pull tools repo from GitHub
+
+[VPS - Cloud][oci — list instances]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh oci-list
+name=oci — list instances
+tooltip=List all OCI compute instances
+
+[VPS - Cloud][oci — instance details]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh oci-details
+name=oci — instance details
+tooltip=Full JSON details for all OCI instances
+
+[VPS - Cloud][oci — vnic/IP list]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh oci-vnics
+name=oci — vnic/IP list
+tooltip=List all OCI VNICs with public/private IPs
+
+[VPS - Cloud][gcloud — list instances]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gcloud-list
+name=gcloud — list instances
+tooltip=List all GCP compute instances
+
+[VPS - Cloud][gcloud — instance details]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gcloud-details
+name=gcloud — instance details
+tooltip=Full JSON details for all GCP instances
+
+[VPS - Cloud][gcloud — billing + costs]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gcloud-billing
+name=gcloud — billing + costs
+tooltip=GCP billing, instances, budgets, disks
+
+[VPS - GH Actions][runs — recent (cloud)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gha-runs-cloud
+name=runs — recent (cloud)
+tooltip=Last 15 GitHub Actions runs for cloud repo
+
+[VPS - GH Actions][runs — failed (cloud)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gha-failed-cloud
+name=runs — failed (cloud)
+tooltip=Recent failed GitHub Actions runs
+
+[VPS - GH Actions][runs — latest log]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gha-log-cloud
+name=runs — latest log
+tooltip=Last 50 lines of the most recent GHA run
+
+[VPS - GH Actions][workflows — list]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gha-workflows
+name=workflows — list
+tooltip=List all GitHub Actions workflows
+
+[VPS - GH Actions][runs — recent (unix)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gha-runs-unix
+name=runs — recent (unix)
+tooltip=Last 10 GitHub Actions runs for unix repo
+
+[VPS - GH Actions][runs — recent (front)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gha-runs-front
+name=runs — recent (front)
+tooltip=Last 10 GitHub Actions runs for front repo
+
+[VPS - GH Repos][status — all repos]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gh-repos-status
+name=status — all repos
+tooltip=Push date and visibility for all repos
+
+[VPS - GH Repos][list — all repos]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gh-repos-list
+name=list — all repos
+tooltip=List all GitHub repos with description
+
+[VPS - GH Repos][PRs — open (cloud)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gh-prs
+name=PRs — open (cloud)
+tooltip=Open pull requests in cloud repo
+
+[VPS - GH Repos][issues — open (cloud)]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gh-issues
+name=issues — open (cloud)
+tooltip=Open issues in cloud repo
+
+[VPS - GH Repos][recent commits]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh gh-commits
+name=recent commits
+tooltip=Last 3 commits per repo
+
+[VPS - GH Registry][list — all packages]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh ghcr-list
+name=list — all packages
+tooltip=List all GHCR container packages
+
+[VPS - GH Registry][list — with versions]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh ghcr-versions
+name=list — with versions
+tooltip=GHCR packages with last update date
+
+[VPS - GH Registry][count — total]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh ghcr-count
+name=count — total
+tooltip=Count total GHCR packages
+
+[VPS - GH Registry][versions — inspect]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh ghcr-inspect
+name=versions — inspect
+tooltip=List versions for a specific package
+
+[VPS - GH Registry][latest — all images]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh ghcr-latest
+name=latest — all images
+tooltip=All packages with latest version tag
+
+[VPS - GH Registry][visibility — all]
+command=bash ~/git/cloud-mykonsole-dtk/1-aliases/engines/cloud-container-orchestrator/cloud-container-orchestrator.sh ghcr-visibility
+name=visibility — all
+tooltip=Public vs private for all packages

@@ -1,4 +1,5 @@
 // Where the numbers come from. Knows nothing about drawing.
+pub(crate) mod logs;
 pub(crate) mod parse;
 pub(crate) mod sort;
 pub(crate) mod storage;
@@ -41,6 +42,19 @@ pub(crate) fn text(v: &Value, path: &str) -> String {
         }
     }
     cur.as_str().unwrap_or("").to_string()
+}
+
+/// Booleans, read the same defensive way. Missing is false: the fields that
+/// use this all mean "yes, confirmed" and an absent key is not a confirmation.
+pub(crate) fn flag(v: &Value, path: &str) -> bool {
+    let mut cur = v;
+    for k in path.split('.') {
+        match cur.get(k) {
+            Some(n) => cur = n,
+            None => return false,
+        }
+    }
+    cur.as_bool().unwrap_or(false)
 }
 
 pub(crate) fn arr<'a>(v: &'a Value, path: &str) -> &'a [Value] {

@@ -52,7 +52,7 @@ use data::parse::{age_secs, ctr_mem, ctr_num};
 use data::sort::{avg_or, num_opt, sort_procs, tree_order, Sort, Win, SORT_ORDER};
 use data::storage;
 use data::tree::{file_tree, TreeCache};
-use data::{arr, kill_path, now_secs, num, read_json, snapshot_path, text, HIST};
+use data::{arr, flag, kill_path, now_secs, num, read_json, snapshot_path, text, HIST};
 use export::{exe_dir, export_snapshot, open_dir, proc_comm};
 use input::cmd;
 use model::columns::{
@@ -154,6 +154,10 @@ pub struct Monitor {
     docker: bool,
     /// `I`: the images on the box, running or not.
     images: bool,
+    compose: bool,
+    volumes: bool,
+    networks: bool,
+    logs: bool,
     /// `F`: the home directory as a tree.
     files: bool,
     /// `.` inside the files tab: whether dotfiles are in it.
@@ -164,6 +168,7 @@ pub struct Monitor {
     /// is opened and when the dotfile toggle flips, and not otherwise.
     /// Keyed by machine + dotfile toggle; see TreeCache.
     files_cache: TreeCache,
+    logs_cache: data::logs::LogsCache,
     /// The storage declaration, cached. It parses a 383KB JSON out of
     /// cloud-infra and reads /proc/mounts; neither belongs on a 1s render
     /// loop, and neither changes while you are looking at it.
@@ -256,9 +261,14 @@ impl Monitor {
             history: false,
             docker: false,
             images: false,
+            compose: false,
+            volumes: false,
+            networks: false,
+            logs: false,
             files: false,
             files_hidden: false,
             files_cache: TreeCache::default(),
+            logs_cache: data::logs::LogsCache::default(),
             storage_cache: vec![],
             repos: storage::Extras::default(),
             files_scroll: 0,
@@ -1565,13 +1575,19 @@ impl Monitor {
         let sub = self.sub[self.tab];
         self.tree = name == "proc" && sub == 1;
         self.zombies = name == "proc" && sub == 2;
-        self.docker = name == "containers" && sub == 0;
+        // Sub indices, not names, because the strip's ORDER is the product
+        // decision here — compose first, then what it produced.
+        self.compose = name == "containers" && sub == 0;
         self.images = name == "containers" && sub == 1;
+        self.docker = name == "containers" && sub == 2;
+        self.volumes = name == "containers" && sub == 3;
+        self.networks = name == "containers" && sub == 4;
         self.fleet = name == "fleet";
         self.history = name == "history";
         self.files = name == "files";
         self.about = name == "about";
         self.firewall = name == "firewall";
+        self.logs = name == "logs";
     }
 
     /// Move to a tab and a mode of it, doing the per-view setup each needs.
@@ -2766,10 +2782,25 @@ impl Dashboard for Monitor {
             return;
         }
         // firewall joins these: no row cursor, one scrolling page.
-        if self.history || self.about || self.firewall {
+        if self.history
+            || self.about
+            || self.firewall
+            || self.logs
+            || self.compose
+            || self.volumes
+            || self.networks
+        {
             // None of these has a row cursor; about scrolls, the rest are one
             // screen.
             match k {
+                // Every containers sub-tab can be empty for exactly one
+                // reason — dockerd is down — so every one of them offers the
+                // same way to say something about that.
+                KeyCode::Char('d') if self.compose || self.volumes || self.networks => {
+                    self.acting_unit = Some(("docker.service".to_string(), "system".to_string()));
+                    self.unit_sel = 0;
+                    self.overlay = Overlay::Unit;
+                }
                 KeyCode::Down | KeyCode::Char('j') => {
                     self.detail_scroll = self.detail_scroll.saturating_add(1)
                 }
@@ -4000,6 +4031,237 @@ impl Dashboard for Monitor {
         // it uses is the sum of everything inside it. docker already computes
         // that, so this shows docker's own numbers rather than re-deriving
         // them from cgroups and getting a subtly different answer.
+        // ── containers-compose ────────────────────────────────────────────────
+        // What was DECLARED, taken from the labels compose itself writes onto
+        // every container it creates. This is fact, not inference: the tool
+        // that deployed the thing recorded its own name on it. A container
+        // with no such label is one nobody deployed the declared way, which is
+        // the only drift signal available without a copy of the repo.
+        if self.compose {
+            let cb = self.tabs_box(&format!(
+                "compose projects · {} · d",
+                Self::dockerd_label(&s)
+            ));
+            let cin = cb.inner(rows[4]);
+            f.render_widget(cb, rows[4]);
+            let rowsv = arr(&s, "compose");
+            let mut l: Vec<Line> = vec![];
+            let declared: Vec<&Value> = rowsv.iter().filter(|c| flag(c, "declared")).collect();
+            let orphans: Vec<&Value> = rowsv.iter().filter(|c| !flag(c, "declared")).collect();
+            if rowsv.is_empty() {
+                l.push(Line::from(Span::styled(
+                    "  no containers at all — nothing to have been declared",
+                    Style::default().fg(DIM),
+                )));
+            }
+            // Grouped by project, because a project is the unit people deploy
+            // and restart; listing services flat would put two projects' web
+            // containers next to each other and imply they are related.
+            let mut seen: Vec<String> = vec![];
+            for c in &declared {
+                let p = text(c, "project");
+                if seen.contains(&p) {
+                    continue;
+                }
+                seen.push(p.clone());
+                let mine: Vec<&&Value> = declared.iter().filter(|x| text(x, "project") == p).collect();
+                l.push(Line::from(vec![
+                    Span::styled(
+                        p.clone(),
+                        Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        format!("  {} service(s)", mine.len()),
+                        Style::default().fg(DIM),
+                    ),
+                ]));
+                // The config file is the answer to "where do I edit this",
+                // which is the question a project name always raises next.
+                if let Some(file) = mine.iter().map(|x| text(x, "file")).find(|x| !x.is_empty()) {
+                    l.push(Line::from(Span::styled(
+                        format!("  {}", trunc(&file, 110)),
+                        Style::default().fg(LABEL),
+                    )));
+                }
+                for x in mine {
+                    let st = text(x, "state");
+                    l.push(Line::from(vec![
+                        Span::styled(
+                            format!("    {:<22}", trunc(&text(x, "service"), 21)),
+                            Style::default().fg(Color::White),
+                        ),
+                        Span::styled(
+                            format!("{:<26}", trunc(&text(x, "container"), 25)),
+                            Style::default().fg(Color::Gray),
+                        ),
+                        Span::styled(
+                            st.clone(),
+                            Style::default().fg(if st == "running" {
+                                Color::Rgb(120, 220, 140)
+                            } else {
+                                Color::Rgb(240, 160, 90)
+                            }),
+                        ),
+                    ]));
+                }
+                l.push(Line::from(""));
+            }
+            if !orphans.is_empty() {
+                l.push(Line::from(Span::styled(
+                    "undeclared",
+                    Style::default().fg(Color::Rgb(240, 160, 90)).add_modifier(Modifier::BOLD),
+                )));
+                l.push(Line::from(Span::styled(
+                    "  compose wrote no label on these — they were started by hand, by another",
+                    Style::default().fg(DIM),
+                )));
+                l.push(Line::from(Span::styled(
+                    "  tool, or by a compose old enough not to label. Nothing here re-creates them.",
+                    Style::default().fg(DIM),
+                )));
+                for x in &orphans {
+                    l.push(Line::from(vec![
+                        Span::styled(
+                            format!("    {:<26}", trunc(&text(x, "container"), 25)),
+                            Style::default().fg(Color::White),
+                        ),
+                        Span::styled(text(x, "state"), Style::default().fg(DIM)),
+                    ]));
+                }
+            }
+            let hmax = (l.len() as u16).saturating_sub(cin.height);
+            self.detail_scroll = self.detail_scroll.min(hmax);
+            f.render_widget(Paragraph::new(l).scroll((self.detail_scroll, 0)), cin);
+            f.render_widget(
+                Paragraph::new(Line::from(Span::styled(
+                    match &self.msg {
+                        Some((m, _)) => format!(" {m}"),
+                        None => format!(
+                            " {} project(s) · {} declared · {} undeclared",
+                            seen.len(),
+                            declared.len(),
+                            orphans.len()
+                        ),
+                    },
+                    Style::default().fg(if orphans.is_empty() { LABEL } else { Color::Rgb(240, 160, 90) }),
+                ))),
+                rows[5],
+            );
+            self.render_overlays(f, area);
+            return;
+        }
+
+        // ── containers-volumes ────────────────────────────────────────────────
+        // What the containers KEEP. Deleting a container is cheap and deleting
+        // its volume is not, so the two are never in the same list: this one
+        // shows what is claimed and what is not, and offers no verb at all.
+        if self.volumes {
+            let vb = self.tabs_box(&format!("docker volumes · {} · d", Self::dockerd_label(&s)));
+            let vin = vb.inner(rows[4]);
+            f.render_widget(vb, rows[4]);
+            let vols = arr(&s, "volumes");
+            let idle = vols.iter().filter(|v| !flag(v, "in_use")).count();
+            let mut l: Vec<Line> = vec![Line::from(Span::styled(
+                "  VOLUME                              DRIVER   USED  MOUNTPOINT",
+                Style::default().fg(LABEL),
+            ))];
+            if vols.is_empty() {
+                l.push(Line::from(Span::styled("  no volumes", Style::default().fg(DIM))));
+            }
+            for v in vols {
+                let used = flag(v, "in_use");
+                l.push(Line::from(vec![
+                    Span::styled(
+                        format!("  {:<36}", trunc(&text(v, "name"), 35)),
+                        Style::default().fg(Color::White),
+                    ),
+                    Span::styled(format!("{:<9}", trunc(&text(v, "driver"), 8)), Style::default().fg(DIM)),
+                    Span::styled(
+                        format!("{:<6}", if used { "yes" } else { "idle" }),
+                        Style::default().fg(if used {
+                            Color::Rgb(120, 220, 140)
+                        } else {
+                            Color::Rgb(240, 160, 90)
+                        }),
+                    ),
+                    Span::styled(trunc(&text(v, "mount"), 70), Style::default().fg(Color::Gray)),
+                ]));
+            }
+            let hmax = (l.len() as u16).saturating_sub(vin.height);
+            self.detail_scroll = self.detail_scroll.min(hmax);
+            f.render_widget(Paragraph::new(l).scroll((self.detail_scroll, 0)), vin);
+            f.render_widget(
+                Paragraph::new(Line::from(Span::styled(
+                    match &self.msg {
+                        Some((m, _)) => format!(" {m}"),
+                        // No delete key here on purpose: an idle volume is
+                        // often the only surviving copy of something, and
+                        // "nothing references it" is not "nobody wants it".
+                        None => format!(
+                            " {} volume(s) · {idle} claimed by nothing · removal is deliberate, do it in a shell",
+                            vols.len()
+                        ),
+                    },
+                    Style::default().fg(LABEL),
+                ))),
+                rows[5],
+            );
+            self.render_overlays(f, area);
+            return;
+        }
+
+        // ── containers-network ────────────────────────────────────────────────
+        if self.networks {
+            let nb = self.tabs_box(&format!("docker networks · {} · d", Self::dockerd_label(&s)));
+            let nin = nb.inner(rows[4]);
+            f.render_widget(nb, rows[4]);
+            let nets = arr(&s, "networks");
+            let mut l: Vec<Line> = vec![Line::from(Span::styled(
+                "  NETWORK                        DRIVER     SCOPE      ID",
+                Style::default().fg(LABEL),
+            ))];
+            if nets.is_empty() {
+                l.push(Line::from(Span::styled("  no networks", Style::default().fg(DIM))));
+            }
+            for n in nets {
+                let drv = text(n, "driver");
+                l.push(Line::from(vec![
+                    Span::styled(
+                        format!("  {:<31}", trunc(&text(n, "name"), 30)),
+                        Style::default().fg(Color::White),
+                    ),
+                    Span::styled(
+                        format!("{:<11}", trunc(&drv, 10)),
+                        // bridge is the default one everything lands on unless
+                        // told otherwise; host and none are choices, and a
+                        // choice is worth reading twice.
+                        Style::default().fg(if drv == "bridge" {
+                            Color::Gray
+                        } else {
+                            Color::Rgb(240, 169, 66)
+                        }),
+                    ),
+                    Span::styled(format!("{:<11}", trunc(&text(n, "scope"), 10)), Style::default().fg(DIM)),
+                    Span::styled(text(n, "id"), Style::default().fg(DIM)),
+                ]));
+            }
+            let hmax = (l.len() as u16).saturating_sub(nin.height);
+            self.detail_scroll = self.detail_scroll.min(hmax);
+            f.render_widget(Paragraph::new(l).scroll((self.detail_scroll, 0)), nin);
+            f.render_widget(
+                Paragraph::new(Line::from(Span::styled(
+                    match &self.msg {
+                        Some((m, _)) => format!(" {m}"),
+                        None => format!(" {} network(s)", nets.len()),
+                    },
+                    Style::default().fg(LABEL),
+                ))),
+                rows[5],
+            );
+            self.render_overlays(f, area);
+            return;
+        }
+
         if self.docker {
             let (label, _) = CTR_SORT[self.ctr_sort.min(CTR_SORT.len() - 1)];
             let cb = self.tabs_box(
@@ -4281,7 +4543,11 @@ impl Dashboard for Monitor {
         // lets the gap between them be the finding: what cloud-infra declares
         // open, and what is actually bound here.
         if self.firewall {
-            let fb = self.tabs_box("W back · ↑↓ scrolls");
+            // 0 consolidated, 1 os, 2 container. Both halves are computed
+            // either way — the cross-reference between them is what the
+            // consolidated tab shows, so neither can be skipped for cost.
+            let fsub = self.sub[self.tab];
+            let fb = self.tabs_box("W back · ↑↓ scrolls · two firewalls, one screen");
             let fin = fb.inner(rows[4]);
             f.render_widget(fb, rows[4]);
             let mut l: Vec<Line> = vec![];
@@ -4310,82 +4576,155 @@ impl Dashboard for Monitor {
             let declared_ports: std::collections::HashSet<u64> =
                 rules.iter().map(|r| num(r, "port") as u64).collect();
 
-            l.push(Line::from(Span::styled(
-                format!("listening on {host} — {} sockets", socks.len()),
-                Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
-            )));
-            l.push(Line::from(Span::styled(
-                "  PORT   ADDRESS            REACHES     DECLARED",
-                Style::default().fg(LABEL),
-            )));
-            for sk in &socks {
-                let scope = text(sk, "scope");
-                let port = num(sk, "port") as u64;
-                let known = declared_ports.contains(&port);
-                // Only a WORLD-facing port needs declaring. Loopback and mesh
-                // sockets are not ingress, and marking them undeclared would
-                // bury the one line that matters under forty that do not.
-                let (flag, fc) = match (scope.as_str(), known) {
-                    ("world", false) => ("UNDECLARED", Color::Rgb(240, 100, 100)),
-                    ("world", true) => ("declared", Color::Rgb(120, 220, 140)),
-                    _ => ("—", DIM),
-                };
-                l.push(Line::from(vec![
-                    Span::styled(format!("  {port:<6}"), Style::default().fg(Color::White)),
-                    Span::styled(format!("{:<19}", trunc(&text(sk, "addr"), 18)), Style::default().fg(Color::Gray)),
-                    Span::styled(
-                        format!("{:<12}", scope),
-                        Style::default().fg(match scope.as_str() {
-                            "world" => Color::Rgb(240, 169, 66),
-                            "mesh" => Color::Rgb(120, 200, 255),
-                            _ => DIM,
-                        }),
-                    ),
-                    Span::styled(flag, Style::default().fg(fc)),
-                ]));
-            }
-
-            l.push(Line::from(""));
-            l.push(Line::from(Span::styled(
-                format!("declared ingress — {} rule(s)", rules.len()),
-                Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
-            )));
-            if rules.is_empty() {
+            // ── OS firewall ────────────────────────────────────────────────
+            // The sockets THIS kernel has bound, and the ingress the fleet
+            // declares. Skipped on the container tab, which is about the
+            // other firewall entirely.
+            if fsub != 2 {
                 l.push(Line::from(Span::styled(
-                    "  no declaration for this machine — it is not in the fleet's firewall table",
-                    Style::default().fg(DIM),
-                )));
-            }
-            for r in &rules {
-                let port = num(r, "port") as u64;
-                // A declared port nothing is listening on is the other half of
-                // the drift: a hole opened for a service that is not there.
-                let bound = socks.iter().any(|sk| num(sk, "port") as u64 == port);
-                l.push(Line::from(vec![
-                    Span::styled(format!("  {port:<6}"), Style::default().fg(Color::White)),
-                    Span::styled(format!("{:<5}", text(r, "proto")), Style::default().fg(DIM)),
-                    Span::styled(format!("{:<19}", trunc(&text(r, "source"), 18)), Style::default().fg(Color::Gray)),
-                    Span::styled(
-                        format!("{:<11}", if bound { "bound" } else { "NOTHING BOUND" }),
-                        Style::default().fg(if bound { Color::Rgb(120, 220, 140) } else { Color::Rgb(240, 160, 90) }),
-                    ),
-                    Span::styled(trunc(&text(r, "desc"), 52), Style::default().fg(DIM)),
-                ]));
-            }
-
-            // The forward/NAT policy, which is fleet-wide rather than per-host.
-            if let Some(g) = dec.as_ref().and_then(|d| d.get("global")) {
-                l.push(Line::from(""));
-                l.push(Line::from(Span::styled(
-                    "global policy",
+                    format!("listening on {host} — {} sockets", socks.len()),
                     Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
                 )));
-                for k in ["forward_policy", "docker_iptables", "docker_subnet", "wg_subnet"] {
+                l.push(Line::from(Span::styled(
+                    "  PORT   ADDRESS            REACHES     DECLARED",
+                    Style::default().fg(LABEL),
+                )));
+                for sk in &socks {
+                    let scope = text(sk, "scope");
+                    let port = num(sk, "port") as u64;
+                    let known = declared_ports.contains(&port);
+                    // Only a WORLD-facing port needs declaring. Loopback and mesh
+                    // sockets are not ingress, and marking them undeclared would
+                    // bury the one line that matters under forty that do not.
+                    let (flag, fc) = match (scope.as_str(), known) {
+                        ("world", false) => ("UNDECLARED", Color::Rgb(240, 100, 100)),
+                        ("world", true) => ("declared", Color::Rgb(120, 220, 140)),
+                        _ => ("—", DIM),
+                    };
                     l.push(Line::from(vec![
-                        Span::styled(format!("  {k:<18}"), Style::default().fg(LABEL)),
+                        Span::styled(format!("  {port:<6}"), Style::default().fg(Color::White)),
+                        Span::styled(format!("{:<19}", trunc(&text(sk, "addr"), 18)), Style::default().fg(Color::Gray)),
                         Span::styled(
-                            g.get(k).map(|v| v.to_string()).unwrap_or_else(|| "—".into()),
-                            Style::default().fg(Color::Gray),
+                            format!("{:<12}", scope),
+                            Style::default().fg(match scope.as_str() {
+                                "world" => Color::Rgb(240, 169, 66),
+                                "mesh" => Color::Rgb(120, 200, 255),
+                                _ => DIM,
+                            }),
+                        ),
+                        Span::styled(flag, Style::default().fg(fc)),
+                    ]));
+                }
+
+                l.push(Line::from(""));
+                l.push(Line::from(Span::styled(
+                    format!("declared ingress — {} rule(s)", rules.len()),
+                    Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
+                )));
+                if rules.is_empty() {
+                    l.push(Line::from(Span::styled(
+                        "  no declaration for this machine — it is not in the fleet's firewall table",
+                        Style::default().fg(DIM),
+                    )));
+                }
+                for r in &rules {
+                    let port = num(r, "port") as u64;
+                    // A declared port nothing is listening on is the other half of
+                    // the drift: a hole opened for a service that is not there.
+                    let bound = socks.iter().any(|sk| num(sk, "port") as u64 == port);
+                    l.push(Line::from(vec![
+                        Span::styled(format!("  {port:<6}"), Style::default().fg(Color::White)),
+                        Span::styled(format!("{:<5}", text(r, "proto")), Style::default().fg(DIM)),
+                        Span::styled(format!("{:<19}", trunc(&text(r, "source"), 18)), Style::default().fg(Color::Gray)),
+                        Span::styled(
+                            format!("{:<11}", if bound { "bound" } else { "NOTHING BOUND" }),
+                            Style::default().fg(if bound { Color::Rgb(120, 220, 140) } else { Color::Rgb(240, 160, 90) }),
+                        ),
+                        Span::styled(trunc(&text(r, "desc"), 52), Style::default().fg(DIM)),
+                    ]));
+                }
+
+                // The forward/NAT policy, which is fleet-wide rather than per-host.
+                if let Some(g) = dec.as_ref().and_then(|d| d.get("global")) {
+                    l.push(Line::from(""));
+                    l.push(Line::from(Span::styled(
+                        "global policy",
+                        Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
+                    )));
+                    for k in ["forward_policy", "docker_iptables", "docker_subnet", "wg_subnet"] {
+                        l.push(Line::from(vec![
+                            Span::styled(format!("  {k:<18}"), Style::default().fg(LABEL)),
+                            Span::styled(
+                                g.get(k).map(|v| v.to_string()).unwrap_or_else(|| "—".into()),
+                                Style::default().fg(Color::Gray),
+                            ),
+                        ]));
+                    }
+                }
+
+            }
+
+            // ── container firewall ─────────────────────────────────────────
+            // docker publishes ports by inserting its own chain AHEAD of the
+            // user rules, so a published port is open whatever the OS policy
+            // says. That is not a bug to report, it is how docker works — but
+            // it means the OS view above is not the whole answer, and this is
+            // the missing half, read from docker ps.
+            if fsub != 1 {
+                let pub_ports: Vec<(String, u64, String)> = arr(&s, "containers")
+                    .iter()
+                    .flat_map(|c| {
+                        let name = text(c, "name");
+                        // "0.0.0.0:8080->80/tcp, :::8080->80/tcp" — the host
+                        // side is the exposure; the container side is private
+                        // to the bridge and reaches nobody on its own.
+                        text(c, "ports")
+                            .split(',')
+                            .filter_map(|part| {
+                                let (host_side, _) = part.trim().split_once("->")?;
+                                let (addr, port) = host_side.rsplit_once(':')?;
+                                Some((name.clone(), port.trim().parse().ok()?, addr.to_string()))
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect();
+                l.push(Line::from(""));
+                l.push(Line::from(Span::styled(
+                    format!("published by docker — {} port(s)", pub_ports.len()),
+                    Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
+                )));
+                if pub_ports.is_empty() {
+                    l.push(Line::from(Span::styled(
+                        "  nothing published — every container here is reachable only from the bridge",
+                        Style::default().fg(DIM),
+                    )));
+                }
+                l.push(Line::from(Span::styled(
+                    "  PORT   BIND               CONTAINER              SOCKET      DECLARED",
+                    Style::default().fg(LABEL),
+                )));
+                for (name, port, addr) in &pub_ports {
+                    // A published port with no matching socket means docker is
+                    // running with userland-proxy off: it is pure DNAT, there
+                    // is no host socket to find, and the OS view above CANNOT
+                    // see it. Saying so is the point of this column.
+                    let bound = socks.iter().any(|sk| num(sk, "port") as u64 == *port);
+                    let known = declared_ports.contains(port);
+                    l.push(Line::from(vec![
+                        Span::styled(format!("  {port:<6}"), Style::default().fg(Color::White)),
+                        Span::styled(format!("{:<19}", trunc(addr, 18)), Style::default().fg(Color::Gray)),
+                        Span::styled(format!("{:<23}", trunc(name, 22)), Style::default().fg(Color::Gray)),
+                        Span::styled(
+                            format!("{:<12}", if bound { "bound" } else { "DNAT only" }),
+                            Style::default().fg(if bound { DIM } else { Color::Rgb(240, 169, 66) }),
+                        ),
+                        Span::styled(
+                            if known { "declared" } else { "UNDECLARED" },
+                            Style::default().fg(if known {
+                                Color::Rgb(120, 220, 140)
+                            } else {
+                                Color::Rgb(240, 100, 100)
+                            }),
                         ),
                     ]));
                 }
@@ -4410,6 +4749,118 @@ impl Dashboard for Monitor {
                 Style::default().fg(if undecl > 0 { Color::Rgb(240, 160, 90) } else { LABEL }),
             ));
             f.render_widget(Paragraph::new(status), rows[5]);
+            self.render_overlays(f, area);
+            return;
+        }
+
+        // ── logs ──────────────────────────────────────────────────────────────
+        // Every sub-tab here is one journalctl invocation and nothing else.
+        // The journal is read on a thread because reading a peer's over ssh
+        // takes seconds, and a panel that blocks its own draw loop on that is
+        // a panel that looks hung.
+        if self.logs {
+            let sub = self.sub_name();
+            let tgt = self.mesh.target();
+            let key = format!("{}|{sub}", tgt.unwrap_or("local"));
+            let lb = self.tabs_box("L back · ←→ section · ↑↓ scrolls");
+            let lin = lb.inner(rows[4]);
+            f.render_widget(lb, rows[4]);
+            let mut l: Vec<Line> = vec![];
+            let mut foot = String::new();
+            if sub == "summary" {
+                self.logs_cache.fetch_counts(key.clone(), tgt);
+                match self.logs_cache.counts(&key) {
+                    None => l.push(Line::from(Span::styled(
+                        "  counting… (one journalctl per section, over the last 24h)",
+                        Style::default().fg(DIM),
+                    ))),
+                    Some(counts) => {
+                        l.push(Line::from(Span::styled(
+                            "  SECTION      ALERTS/24h  WHAT IT IS",
+                            Style::default().fg(LABEL),
+                        )));
+                        let total: usize = counts.iter().map(|(_, c)| *c).sum();
+                        for (name, c) in &counts {
+                            let desc = data::logs::section(name).map(|x| x.desc).unwrap_or("");
+                            l.push(Line::from(vec![
+                                Span::styled(format!("  {name:<13}"), Style::default().fg(Color::White)),
+                                Span::styled(
+                                    format!("{c:>10}  "),
+                                    // Zero is the only genuinely quiet answer;
+                                    // everything else is a number someone has
+                                    // to have looked at at least once.
+                                    Style::default().fg(if *c == 0 {
+                                        Color::Rgb(120, 220, 140)
+                                    } else if *c < 50 {
+                                        Color::Rgb(240, 169, 66)
+                                    } else {
+                                        Color::Rgb(240, 100, 100)
+                                    }),
+                                ),
+                                Span::styled(desc, Style::default().fg(DIM)),
+                            ]));
+                        }
+                        l.push(Line::from(""));
+                        l.push(Line::from(Span::styled(
+                            "  alert = priority warning or worse. Nothing here decides what a service's",
+                            Style::default().fg(DIM),
+                        )));
+                        l.push(Line::from(Span::styled(
+                            "  INFO lines mean — that would be an opinion, and this tab has none.",
+                            Style::default().fg(DIM),
+                        )));
+                        foot = format!(" {total} alert(s) across {} section(s) in 24h", counts.len());
+                    }
+                }
+            } else {
+                self.logs_cache.fetch(key.clone(), sub, tgt);
+                let (lines, loading) = self.logs_cache.view(&key);
+                if loading {
+                    l.push(Line::from(Span::styled("  reading…", Style::default().fg(DIM))));
+                }
+                let lines = lines.unwrap_or_default();
+                if !loading && lines.is_empty() {
+                    l.push(Line::from(Span::styled(
+                        "  nothing in this section — no entries, or no permission to read them",
+                        Style::default().fg(Color::Rgb(240, 160, 90)),
+                    )));
+                }
+                for line in &lines {
+                    // Colour by what the line SAYS, not by priority: -o
+                    // short-iso does not carry the priority field, and running
+                    // a second journalctl to get it would double the cost of
+                    // every page for a tint.
+                    let low = line.to_ascii_lowercase();
+                    let c = if low.contains("error") || low.contains("fail") || low.contains("panic") {
+                        Color::Rgb(240, 100, 100)
+                    } else if low.contains("warn") {
+                        Color::Rgb(240, 169, 66)
+                    } else {
+                        Color::Gray
+                    };
+                    l.push(Line::from(Span::styled(format!("  {line}"), Style::default().fg(c))));
+                }
+                // Newest last, like the journal itself, so the bottom is where
+                // "what just happened" lives.
+                foot = format!(
+                    " {} line(s) · journalctl {} · newest at the bottom",
+                    lines.len(),
+                    data::logs::section(sub).map(|x| x.args.join(" ")).unwrap_or_default()
+                );
+            }
+            let hmax = (l.len() as u16).saturating_sub(lin.height);
+            self.detail_scroll = self.detail_scroll.min(hmax);
+            f.render_widget(Paragraph::new(l).scroll((self.detail_scroll, 0)), lin);
+            f.render_widget(
+                Paragraph::new(Line::from(Span::styled(
+                    match &self.msg {
+                        Some((m, _)) => format!(" {m}"),
+                        None => foot,
+                    },
+                    Style::default().fg(LABEL),
+                ))),
+                rows[5],
+            );
             self.render_overlays(f, area);
             return;
         }

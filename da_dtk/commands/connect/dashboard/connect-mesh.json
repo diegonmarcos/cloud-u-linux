@@ -1,0 +1,138 @@
+{
+  "mesh": {
+    "vms": [
+      {
+        "name": "OCI_micro_0",
+        "alias": "oci-mail",
+        "remote": "OCI_micro_0",
+        "type": "vm",
+        "enabled": true,
+        "wg_ip": "10.0.0.3",
+        "public_ip": "130.110.251.193",
+        "services": [
+          "mailu",
+          "syncthing",
+          "radicale"
+        ],
+        "vm_subdirs": [
+          {"name": "sys",    "remote_path": "/"},
+          {"name": "home",   "remote_path": "/home"},
+          {"name": "docker", "remote_path": "/var/lib/docker/volumes"},
+          {"name": "mnt",    "remote_path": "/mnt"}
+        ]
+      },
+      {
+        "name": "OCI_micro_1",
+        "alias": "oci-analytics",
+        "remote": "OCI_micro_1",
+        "type": "vm",
+        "enabled": true,
+        "wg_ip": "10.0.0.4",
+        "public_ip": "129.151.228.66",
+        "services": [
+          "matomo"
+        ],
+        "vm_subdirs": [
+          {"name": "sys",    "remote_path": "/"},
+          {"name": "home",   "remote_path": "/home"},
+          {"name": "docker", "remote_path": "/var/lib/docker/volumes"},
+          {"name": "mnt",    "remote_path": "/mnt"}
+        ]
+      },
+      {
+        "name": "OCI_Flex_0",
+        "alias": "oci-apps",
+        "remote": "OCI_Flex_0",
+        "type": "vm",
+        "enabled": true,
+        "wg_ip": "10.0.0.6",
+        "public_ip": "82.70.229.129",
+        "services": [
+          "crawlee"
+        ],
+        "vm_subdirs": [
+          {"name": "sys",    "remote_path": "/"},
+          {"name": "home",   "remote_path": "/home"},
+          {"name": "docker", "remote_path": "/var/lib/docker/volumes"},
+          {"name": "mnt",    "remote_path": "/mnt"}
+        ],
+        "oci_flex": {
+          "instance_id": "ocid1.instance.oc1.eu-marseille-1.anwxeljruadvczacj7dfxl7uifar574je7fzlvtdjp4ghljdwuwdemsdbiva",
+          "region": "eu-marseille-1"
+        }
+      },
+      {
+        "name": "OCI_Flex_1",
+        "alias": "oci-apps-1",
+        "remote": "OCI_Flex_1",
+        "type": "vm",
+        "enabled": true,
+        "wg_ip": "10.0.0.2",
+        "public_ip": "144.24.196.72",
+        "services": [
+          "photoprism",
+          "nocodb",
+          "code-server",
+          "affine"
+        ],
+        "vm_subdirs": [
+          {"name": "sys",    "remote_path": "/"},
+          {"name": "home",   "remote_path": "/home"},
+          {"name": "docker", "remote_path": "/var/lib/docker/volumes"},
+          {"name": "mnt",    "remote_path": "/mnt"}
+        ],
+        "oci_flex": {
+          "instance_id": "ocid1.instance.oc1.eu-marseille-1.anwxeljruadvczachwpa3qrh7n25vfez3smidz4o7gpmtj4ga4d7zqlja5yq",
+          "region": "eu-marseille-1"
+        }
+      },
+      {
+        "name": "GCP_micro_1",
+        "alias": "gcp-proxy",
+        "remote": "GCP_micro_1",
+        "type": "vm",
+        "enabled": true,
+        "wg_ip": "10.0.0.1",
+        "public_ip": "35.226.147.64",
+        "services": [
+          "caddy",
+          "authelia",
+          "vaultwarden",
+          "ntfy",
+          "hickory-dns",
+          "introspect-proxy"
+        ],
+        "vm_subdirs": [
+          {"name": "sys",    "remote_path": "/"},
+          {"name": "home",   "remote_path": "/home"},
+          {"name": "docker", "remote_path": "/var/lib/docker/volumes"},
+          {"name": "mnt",    "remote_path": "/mnt"}
+        ]
+      }
+    ],
+    "service_details": {
+      "caddy":            { "domain": "proxy.diegonmarcos.com",       "port": "80/443",  "availability": "24/7" },
+      "authelia":         { "domain": "auth.diegonmarcos.com",        "port": "9091",    "availability": "24/7" },
+      "vaultwarden":      { "domain": "vault.diegonmarcos.com",       "port": "80",      "availability": "24/7" },
+      "ntfy":             { "domain": "rss.diegonmarcos.com",         "port": "8090",    "availability": "24/7" },
+      "hickory-dns":      { "domain": "dns.internal (WG)",            "port": "53",      "availability": "24/7" },
+      "introspect-proxy": { "domain": "—",                            "port": "—",       "availability": "24/7" },
+      "mailu":            { "domain": "mail.diegonmarcos.com",        "port": "8444",    "availability": "24/7" },
+      "syncthing":        { "domain": "sync.diegonmarcos.com",        "port": "8384",    "availability": "24/7" },
+      "radicale":         { "domain": "cal.diegonmarcos.com",         "port": "5232",    "availability": "24/7" },
+      "matomo":           { "domain": "analytics.diegonmarcos.com",   "port": "8080",    "availability": "hybrid" },
+      "crawlee":          { "domain": "api.diegonmarcos.com/crawlee", "port": "3000",    "availability": "on-demand" },
+      "photoprism":       { "domain": "photos.diegonmarcos.com",      "port": "3013",    "availability": "on-demand" },
+      "nocodb":           { "domain": "db.diegonmarcos.com",          "port": "8085",    "availability": "on-demand" },
+      "code-server":      { "domain": "ide.diegonmarcos.com",         "port": "8443",    "availability": "on-demand" },
+      "affine":           { "domain": "drive-notes-affine.diegonmarcos.com", "port": "3010", "availability": "on-demand" }
+    },
+    "phone": {
+      "device_id": "28b75fc5_4661_422f_9b7f_38252da1579d",
+      "name": "samsung_gS21",
+      "model": "Galaxy S21",
+      "storage_gb": 128,
+      "sftp_base": "/run/user/1000/28b75fc5_4661_422f_9b7f_38252da1579d/storage/emulated/0"
+    }
+  }
+}

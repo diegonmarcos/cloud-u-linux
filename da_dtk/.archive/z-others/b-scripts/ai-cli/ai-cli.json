@@ -1,0 +1,43 @@
+{
+  "version": "1.0.0",
+  "default_model": "haiku",
+  "models": {
+    "haiku": {
+      "provider": "anthropic",
+      "model_id": "claude-haiku-4-5-20251001",
+      "context": "200K",
+      "pricing": { "input": 0.80, "output": 4.00, "batch_input": 0.40, "batch_output": 2.00 },
+      "latency": "~2s"
+    },
+    "sonnet": {
+      "provider": "anthropic",
+      "model_id": "claude-sonnet-4-6",
+      "context": "200K",
+      "pricing": { "input": 3.00, "output": 15.00, "batch_input": 1.50, "batch_output": 7.50 },
+      "latency": "~3s"
+    },
+    "opus": {
+      "provider": "anthropic",
+      "model_id": "claude-opus-4-6",
+      "context": "1M",
+      "pricing": { "input": 15.00, "output": 75.00, "batch_input": 7.50, "batch_output": 37.50 },
+      "latency": "~5s"
+    },
+    "local": {
+      "provider": "ollama",
+      "model_id": "qwen2.5-4k",
+      "context": "4K",
+      "ollama_host": "http://10.0.0.6:11435",
+      "pricing": { "input": 0, "output": 0 },
+      "latency": "~12s",
+      "notes": "qwen2.5 1.5B Q4_K_M on ARM CPU (oci-apps)"
+    }
+  },
+  "mcp_extensions": {
+    "cloud-services": { "type": "streamable_http", "uri": "https://mcp.diegonmarcos.com/c3-services-mcp/mcp" },
+    "cloud-infra": { "type": "streamable_http", "uri": "https://mcp.diegonmarcos.com/c3-infra-mcp/mcp" },
+    "cloud-cgc-mcp": { "type": "stdio", "cmd": "tsx", "args": ["~/git/cloud-infra/a_solutions/bc-obs_cloud-cgc-mcp/src/index.ts"] },
+    "google-workspace": { "type": "streamable_http", "uri": "https://mcp.diegonmarcos.com/g-workspace/mcp" },
+    "diego-personal-data": { "type": "stdio", "cmd": "tsx", "args": ["~/git/cloud-infra/a_solutions/ca-dat_c3-diego-personal-data-mcp/src/index.ts"] }
+  }
+}

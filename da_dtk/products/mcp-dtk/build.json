@@ -1,0 +1,11 @@
+{
+  "project": {
+    "name": "dtk-mcp",
+    "version": "1.0.0",
+    "description": "MCP server exposing all DTK commands (~210 tools)"
+  },
+  "paths": {
+    "src": "src",
+    "log": "build.log"
+  }
+}
