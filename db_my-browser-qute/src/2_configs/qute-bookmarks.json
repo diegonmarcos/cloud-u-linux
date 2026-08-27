@@ -11,7 +11,7 @@
     },
     {
       "name": "Web Search",
-      "url": "https://www.qwant.com"
+      "url": "file:///home/diego/.config/my-browser-qute/qute-websearch.html"
     }
   ],
   "sections": [

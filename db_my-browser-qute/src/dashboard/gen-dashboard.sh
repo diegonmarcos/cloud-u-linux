@@ -252,3 +252,36 @@ PIN_BAR="$(jq '[ .pinned // [] | .[] | { name: .name, url: .url } ]' "$BOOKMARKS
 jq -n --argjson bookmarks "$BM_BAR" --argjson pinned "$PIN_BAR" --argjson plugins "$PL_BAR" \
    '{ bookmarks: $bookmarks, pinned: $pinned, plugins: $plugins }' > "$MYBAR_JSON"
 echo "gen-dashboard: wrote $MYBAR_JSON ($(jq '.bookmarks|length' "$MYBAR_JSON") bar entries, $(jq '.pinned|length' "$MYBAR_JSON") pinned, $(jq '.plugins|length' "$MYBAR_JSON") plugins)"
+
+# Emit qute-websearch.html — the sibling page to the dashboard: every engine
+# from qute-search-engines.json stacked in one list, ONE shared query box,
+# Enter opens the picked engine's results in a new tab. Same SoT as
+# c.url.searchengines, so adding an engine there adds a row here.
+# `DEFAULT` gets no row of its own — it duplicates whichever engine it points
+# at; that engine is flagged is_default and wears the green badge instead.
+WEBSEARCH_TEMPLATE="${WEBSEARCH_TEMPLATE:-$HERE/websearch.template.html}"
+WEBSEARCH_OUT="${WEBSEARCH_OUT:-$HERE/../../dist/qute-websearch.html}"
+if [ -r "$SEARCH_ENGINES_JSON" ] && [ -r "$WEBSEARCH_TEMPLATE" ]; then
+  ENGINES="$(jq '
+    (.DEFAULT // "") as $def
+    | [ to_entries[]
+        | select((.key | startswith("_")) | not)
+        | select(.key != "DEFAULT")
+        | select(.value | type == "string")
+        | { key: .key,
+            url: .value,
+            host: (.value | sub("^https?://"; "") | split("/")[0] | sub("^www\\."; "")),
+            origin: (.value | capture("^(?<o>https?://[^/]+)").o),
+            is_default: (.value == $def) } ]' "$SEARCH_ENGINES_JSON")"
+  # Same literal-injection reasoning as above: ENVIRON + index()/substr(),
+  # never gsub() (an `&` in a query-string would corrupt it) and never -v.
+  EN="$ENGINES" awk '
+    function inject(s, tok, val,   i, out) {
+      out = ""
+      while ((i = index(s, tok)) > 0) { out = out substr(s, 1, i-1) val; s = substr(s, i + length(tok)) }
+      return out s
+    }
+    { print inject($0, "__ENGINES_JSON__", ENVIRON["EN"]) }' \
+    "$WEBSEARCH_TEMPLATE" > "$WEBSEARCH_OUT"
+  echo "gen-dashboard: wrote $WEBSEARCH_OUT ($(jq 'length' <<<"$ENGINES") search engines)"
+fi
