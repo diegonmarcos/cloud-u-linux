@@ -63,20 +63,35 @@ pub(crate) const IMG_SORT: &[(&str, &str)] = &[
 
 /// What can be done to a container. No `rm`: stopping one is reversible and
 /// removing one is not, and a keystroke is the wrong weight for that.
-pub(crate) const CTR_ACTIONS: [(&str, &str); 5] = [
+pub(crate) const CTR_ACTIONS: [(&str, &str); 7] = [
     ("restart", "stop it and bring it back"),
     ("stop", "take it down"),
     ("start", "bring it up"),
     ("pause", "freeze it, keeping its memory"),
     ("unpause", "thaw one you froze"),
+    // Ordered by how much they take away, and the two that take the most sit
+    // last so the finger that overshoots by one row lands on a milder verb.
+    // `kill` is not a louder `stop`: stop asks and then insists, kill does not
+    // ask, which is the difference between a clean shutdown and whatever the
+    // process was midway through.
+    ("kill", "SIGKILL it — no clean shutdown"),
+    // Deletes the container, not the image and not its named volumes. Docker
+    // refuses while it runs, which is the guard: there is no path here that
+    // destroys something still working.
+    ("rm", "delete it — refused while it runs"),
 ];
 
 /// What can be done to an image. `rm` is here because an unused image is dead
 /// weight and removing it is the point of looking — docker itself refuses if a
 /// container still references it, which is the guard.
-pub(crate) const IMG_ACTIONS: [(&str, &str); 2] = [
+pub(crate) const IMG_ACTIONS: [(&str, &str); 3] = [
     ("pull", "fetch the current version of this tag"),
     ("rm", "delete it — refused while a container uses it"),
+    // Takes no image: prune is defined by what is NOT referenced, so it acts on
+    // the whole dangling set at once. Every redeploy untags the previous
+    // :latest and leaves it behind, which is why that set is most of a long
+    // image list and none of a useful one.
+    ("prune", "delete every dangling <none> image"),
 ];
 
 /// One row under `v`: either a group heading or a declared unit.

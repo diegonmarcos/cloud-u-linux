@@ -3258,7 +3258,14 @@ fn drain_kill_requests() {
         if sig.eq_ignore_ascii_case("CTR") {
             let verb = it.next().unwrap_or("");
             let name = it.next().unwrap_or("");
-            if !matches!(verb, "start" | "stop" | "restart" | "pause" | "unpause")
+            if !matches!(
+                verb,
+                // kill is not a louder stop: stop asks and then insists, kill
+                // does not ask. rm deletes the container only -- not the image,
+                // not its named volumes -- and docker refuses while it runs,
+                // which is the guard: nothing here destroys something working.
+                "start" | "stop" | "restart" | "pause" | "unpause" | "kill" | "rm"
+            )
                 || name.is_empty()
                 || name.starts_with('-')
                 || name.contains('/')
@@ -3279,6 +3286,24 @@ fn drain_kill_requests() {
         if sig.eq_ignore_ascii_case("IMG") {
             let verb = it.next().unwrap_or("");
             let reference = it.next().unwrap_or("");
+            // prune is the one verb with nothing to name: it is defined by what
+            // is NOT referenced, so it acts on the whole dangling set at once and
+            // a reference would be meaningless. Handled before the shared
+            // [verb, reference] path rather than bent into it.
+            if verb == "prune" {
+                match clean_command("docker").args(["image", "prune", "-f"]).output() {
+                    Ok(o) if o.status.success() => eprintln!(
+                        "[watchdog] docker image prune: {}",
+                        String::from_utf8_lossy(&o.stdout).trim().replace('\n', " ")
+                    ),
+                    Ok(o) => eprintln!(
+                        "[watchdog] docker image prune failed: {}",
+                        String::from_utf8_lossy(&o.stderr).trim()
+                    ),
+                    Err(e) => eprintln!("[watchdog] docker image prune: {e}"),
+                }
+                continue;
+            }
             if !matches!(verb, "pull" | "rm") || reference.is_empty() || reference.starts_with('-') {
                 eprintln!("[watchdog] refusing image request {verb:?} {reference:?}");
                 continue;
