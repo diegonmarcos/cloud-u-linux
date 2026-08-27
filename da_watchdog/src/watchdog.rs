@@ -2246,6 +2246,112 @@ fn docker_daemon_json() -> String {
     )
 }
 
+/// The volumes, and which of them nothing is mounting.
+///
+/// The same question the images page asks, one layer down and with higher
+/// stakes: an unused image is bytes you can re-pull, an unused volume is the
+/// only copy of something. So `in use` is reported and nothing here removes
+/// anything -- the panel's job is to make an orphan visible, not to guess that
+/// it is garbage.
+fn volumes_json() -> String {
+    let run = |args: &[&str]| -> String {
+        clean_command("docker")
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .unwrap_or_default()
+    };
+    // Anything NOT in the dangling set is mounted by something.
+    let dangling = run(&["volume", "ls", "-q", "--filter", "dangling=true"]);
+    let idle: Vec<&str> = dangling.lines().map(|l| l.trim()).collect();
+    let items: Vec<String> = run(&["volume", "ls", "--format", "{{.Name}}\t{{.Driver}}\t{{.Mountpoint}}"])
+        .lines()
+        .filter_map(|l| {
+            let f: Vec<&str> = l.split('\t').collect();
+            if f.len() < 3 {
+                return None;
+            }
+            Some(format!(
+                "{{\"name\":\"{}\",\"driver\":\"{}\",\"mount\":\"{}\",\"in_use\":{}}}",
+                json_escape(f[0]),
+                json_escape(f[1]),
+                json_escape(f[2]),
+                !idle.contains(&f[0])
+            ))
+        })
+        .collect();
+    format!("[{}]", items.join(","))
+}
+/// The networks and how many containers sit on each.
+fn networks_json() -> String {
+    let Ok(o) = clean_command("docker")
+        .args(["network", "ls", "--format", "{{.Name}}\t{{.Driver}}\t{{.Scope}}\t{{.ID}}"])
+        .output()
+    else {
+        return "[]".into();
+    };
+    let Ok(t) = String::from_utf8(o.stdout) else { return "[]".into() };
+    let items: Vec<String> = t
+        .lines()
+        .filter_map(|l| {
+            let f: Vec<&str> = l.split('\t').collect();
+            if f.len() < 4 {
+                return None;
+            }
+            Some(format!(
+                "{{\"name\":\"{}\",\"driver\":\"{}\",\"scope\":\"{}\",\"id\":\"{}\"}}",
+                json_escape(f[0]),
+                json_escape(f[1]),
+                json_escape(f[2]),
+                json_escape(f[3]),
+            ))
+        })
+        .collect();
+    format!("[{}]", items.join(","))
+}
+/// The compose projects, read from the labels compose itself stamps.
+///
+/// Not derived from the repo: `com.docker.compose.project.config_files` is the
+/// absolute path of the file that CREATED this container, recorded by the tool
+/// that created it. That is a fact, where a repo scan is a guess -- and a
+/// container carrying no compose label is not a gap in the scan, it is a
+/// container nobody deployed the declared way, which is worth seeing.
+fn compose_json() -> String {
+    let Ok(o) = clean_command("docker")
+        .args([
+            "ps",
+            "-a",
+            "--format",
+            "{{.Label \"com.docker.compose.project\"}}\t{{.Label \"com.docker.compose.service\"}}\t{{.Label \"com.docker.compose.project.config_files\"}}\t{{.Names}}\t{{.State}}",
+        ])
+        .output()
+    else {
+        return "[]".into();
+    };
+    let Ok(t) = String::from_utf8(o.stdout) else { return "[]".into() };
+    let items: Vec<String> = t
+        .lines()
+        .filter_map(|l| {
+            let f: Vec<&str> = l.split('\t').collect();
+            if f.len() < 5 {
+                return None;
+            }
+            Some(format!(
+                "{{\"project\":\"{}\",\"service\":\"{}\",\"file\":\"{}\",\"container\":\"{}\",\"state\":\"{}\",\"declared\":{}}}",
+                json_escape(f[0]),
+                json_escape(f[1]),
+                json_escape(f[2]),
+                json_escape(f[3]),
+                json_escape(f[4]),
+                !f[0].is_empty()
+            ))
+        })
+        .collect();
+    format!("[{}]", items.join(","))
+}
+
 /// A day of this machine, one line a minute.
 ///
 /// Lives under XDG_DATA_HOME, not the runtime dir: the runtime dir is tmpfs
@@ -2985,6 +3091,9 @@ struct Snapshot<'a> {
     containers: &'a str,
     images: &'a str,
     docker_daemon: &'a str,
+    volumes: &'a str,
+    networks: &'a str,
+    compose: &'a str,
     storage: &'a str,
     slices: &'a str,
     services: &'a str,
@@ -3029,6 +3138,9 @@ fn render(s: &Snapshot<'_>) -> String {
         containers,
         images,
         docker_daemon,
+        volumes,
+        networks,
+        compose,
         storage,
         slices,
         services,
@@ -3062,7 +3174,7 @@ fn render(s: &Snapshot<'_>) -> String {
           \"slice_gib\":{slice_cur:.2},\"slice_max_gib\":{slice_max:.2},\"slice_pct\":{slice_pct:.1},\
           \"battery\":{},\
           \"storage\":{storage},\"slices\":{slices},\"services\":{services},\"reclaim\":{reclaim},\"health\":{health},\"listening\":{listening},\
-          \"cpu_info\":{cpu_info},\"host_info\":{host_info},\"totals\":{totals},\"history\":{history},\"containers\":{containers},\"images\":{images},\"docker_daemon\":{docker_daemon},\"procs\":{procs},\"proc_table\":{proc_table},\"proc_spine\":{proc_spine},\"ts\":{}}}",
+          \"cpu_info\":{cpu_info},\"host_info\":{host_info},\"totals\":{totals},\"history\":{history},\"containers\":{containers},\"images\":{images},\"docker_daemon\":{docker_daemon},\"volumes\":{volumes},\"networks\":{networks},\"compose\":{compose},\"procs\":{procs},\"proc_table\":{proc_table},\"proc_spine\":{proc_spine},\"ts\":{}}}",
         vram_json(vram),
         pressure_block("cpu"),
         pressure_block("io"),
@@ -3509,6 +3621,9 @@ pub fn snapshot_once() -> String {
         containers: &containers_json().0,
         images: &images_json(),
         docker_daemon: &docker_daemon_json(),
+        volumes: &volumes_json(),
+        networks: &networks_json(),
+        compose: &compose_json(),
         storage: &btrfs_storage_json(),
         slices: &slices_json(&protected),
         services: &services_json(),
@@ -3546,6 +3661,9 @@ pub fn spawn() {
         let mut history = String::from("{}");
         let (mut containers, mut images) = containers_json();
         let mut docker_daemon = docker_daemon_json();
+        let mut volumes = volumes_json();
+        let mut networks = networks_json();
+        let mut compose = compose_json();
         let mut tick: u64 = 0;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(INTERVAL_MS));
@@ -3614,6 +3732,9 @@ pub fn spawn() {
                 containers = c.0;
                 images = c.1;
                 docker_daemon = docker_daemon_json();
+                volumes = volumes_json();
+                networks = networks_json();
+                compose = compose_json();
             }
             if tick % HISTORY_EVERY_TICKS == 1 {
                 history = history_step(cpu, mem, swap, now_unix());
@@ -3658,6 +3779,9 @@ pub fn spawn() {
                 containers: &containers,
                 images: &images,
                 docker_daemon: &docker_daemon,
+                volumes: &volumes,
+                networks: &networks,
+                compose: &compose,
                 storage: &btrfs_storage_json(),
                 slices: &slices_json(&protected_slices),
                 services: &services,
@@ -3736,6 +3860,9 @@ mod tests {
             containers: "{}",
             images: "{}",
             docker_daemon: "{}",
+            volumes: "[]",
+            networks: "[]",
+            compose: "[]",
             storage: "{}",
             slices: "[]",
             services: "[]",
@@ -3787,6 +3914,9 @@ mod tests {
             containers: "{}",
             images: "{}",
             docker_daemon: "{}",
+            volumes: "[]",
+            networks: "[]",
+            compose: "[]",
             storage: "{}",
             slices: "[]",
             services: "[]",
@@ -3829,6 +3959,9 @@ mod tests {
             containers: "{}",
             images: "{}",
             docker_daemon: "{}",
+            volumes: "[]",
+            networks: "[]",
+            compose: "[]",
             storage: "{}",
             slices: "[]",
             services: "[]",
