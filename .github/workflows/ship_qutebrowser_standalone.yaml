@@ -1,0 +1,66 @@
+name: "Ship → qutebrowser standalone config release (decoupled from desktop HM closure)"
+
+# WHY: pulling the FULL ~6GB 37-module desktop home-manager closure just to
+# update qutebrowser's config repeatedly failed on the 8GB Surface under
+# disk/RAM contention from parallel sessions. This bundle is JUST the 4
+# generated qutebrowser config files + a --basedir launcher (a few hundred
+# KB) — reuses home-manager's real programs.qutebrowser renderer via
+# nix/standalone.nix (home-module.nix is the single source, no duplication).
+#
+# ALL logic in db_my-browser-qute/build.sh (verbs: release, gh-release,
+# ghcr-push). Thin YAML.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "db_my-browser-qute/src/**"
+      - "db_my-browser-qute/build.sh"
+      - "db_my-browser-qute/build.json"
+      - ".github/workflows/ship_qutebrowser_standalone.yaml"
+
+permissions:
+  contents: write    # gh release create/upload
+  packages: write    # oras push to ghcr.io
+
+concurrency:
+  group: ship-qutebrowser-standalone
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60   # fork nix-bundle (arx toolchain + ~640MB QtWebEngine) needs headroom
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - name: Build standalone bundle
+        run: ./db_my-browser-qute/build.sh release
+
+      - name: Publish to rolling GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./db_my-browser-qute/build.sh gh-release
+
+      - name: Mirror to GHCR (not a consumption path — release is authoritative)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: nix shell nixpkgs#oras --command ./db_my-browser-qute/build.sh ghcr-push
+
+      # The FORK binary — patched qutebrowser (native bookmark + plugin chrome
+      # bar), packaged portable via `nix bundle` and shipped to its own rolling
+      # release tag (my-browser-latest). ~640MB incl. QtWebEngine.
+      - name: Build portable fork binary (nix bundle)
+        run: ./db_my-browser-qute/build.sh fork-release
+
+      - name: Publish fork binary to rolling release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./db_my-browser-qute/build.sh fork-gh-release

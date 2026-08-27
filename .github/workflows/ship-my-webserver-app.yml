@@ -1,0 +1,128 @@
+name: ship-my-webserver-app
+# Build my-webserver.cjs into a per-arch, single-file Node
+# Single Executable Application (SEA) binary — node --experimental-sea-config
+# + postject injection, no third-party bundler. The base `node` binary is
+# fetched from the official nodejs.org release (NOT `nix shell
+# nixpkgs#nodejs_22`): nixpkgs' nodejs is built with --shared-<lib> flags
+# against ~19 separate nixpkgs-unstable store paths (zlib, openssl, icu4c,
+# llhttp, ada, simdjson, ...), so a raw copy of it depends on that entire
+# closure at runtime — fragile to carry across flakes/nixpkgs revisions.
+# The official nodejs.org tarball statically links all of that; `readelf -d`
+# on it shows only libc/libdl/libm/libpthread/libstdc++/libgcc_s (glibc +
+# libgcc), confirmed 2026-08-10. Verified via nodejs.org's own SHASUMS256.txt.
+# The entry script is CommonJS (.cjs), not ESM: Node's SEA main is loaded as
+# CJS even under --experimental-sea-config, so `import` syntax fails to parse
+# once postject-injected ("Cannot use import statement outside a module") —
+# reproduced by hand-building+injecting locally and confirmed fixed by
+# converting to require() and renaming .mjs -> .cjs (2026-08-10). The two
+# runtime assets (marked.min.js, github-markdown-dark.css) are embedded into
+# the binary via the SEA config's `assets` map, so the shipped artifact has
+# no loose sidecar files.
+#
+# postject injection ALWAYS runs under the x64 host's own node/npx, even for
+# the aarch64 output — never under a native aarch64 node process. Running
+# postject natively on GitHub's aarch64 runner (ubuntu-24.04-arm) corrupts
+# the injected binary's ELF dynamic-symbol/version tables (postject errors
+# mid-run: "patch value ... out of bounds of the segment (limit: 0x10000)",
+# then still exits 0 and writes a broken binary — it crashes at runtime with
+# blank-name "no version information available" / "undefined symbol" dynamic
+# linker errors). This is a known upstream bug on containerized/hosted Linux
+# aarch64 (nodejs/node#61483 — corrupts .gnu.hash the same way; doesn't
+# reproduce on Linux x64 or on bare-metal aarch64 hardware, matching our own
+# finding that hand-injecting on-device on the arm64 phone itself works
+# fine). postject only rewrites bytes in the target file — it never executes
+# it — so running it under x64 node against an aarch64 `node` binary as pure
+# file data sidesteps the bug entirely (confirmed 2026-08-10). Publishes
+# arch-suffixed binaries to a rolling GitHub Release
+# (my-webserver-latest).
+#
+# 2026-08-27: the SRI hashes that pin these assets live in cloud-infra-desktop
+# (ba_flakes_desktop + bb_flakes_termux), so the old in-workflow update-hashes
+# job cannot run here -- GITHUB_TOKEN is scoped to this repo and cannot push to
+# another one. That job now lives in cloud-infra-desktop as
+# update-flake-hashes.yml, which polls this repo's releases on a schedule.
+# Dispatch it there for an immediate refresh after a release.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'da_my-webserver/**'
+      - '.github/workflows/ship-my-webserver-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Serialize runs: the release tag (my-webserver-latest) is rolling and
+# clobbered on each upload, so overlapping runs would leave the tag holding a
+# mix of two builds' assets.
+concurrency:
+  group: ship-my-webserver-app
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 22.23.2
+
+jobs:
+  build:
+    # Single x64 runner for both architectures — see the injection step
+    # below for why aarch64 injection must NOT run on a native aarch64
+    # runner.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: da_my-webserver/src
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch official Node.js releases, both arches (statically link zlib/openssl/icu/etc — only glibc at runtime)
+        run: |
+          curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt"
+          for node_arch in x64 arm64; do
+            TARBALL="node-v${NODE_VERSION}-linux-${node_arch}"
+            curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/${TARBALL}.tar.xz"
+            grep " ${TARBALL}.tar.xz\$" SHASUMS256.txt | sha256sum -c -
+            tar xf "${TARBALL}.tar.xz"
+          done
+          echo "NODE_X64_DIR=$PWD/node-v${NODE_VERSION}-linux-x64" >> "$GITHUB_ENV"
+
+      - name: Generate SEA prep blob (architecture-independent — pure JS + assets bundle)
+        run: |
+          "$NODE_X64_DIR/bin/node" --experimental-sea-config my-webserver.sea-config.json
+
+      - name: Inject blob into each arch's node binary (postject, always run under the x64 host node)
+        run: |
+          for pair in "x86_64:x64" "aarch64:arm64"; do
+            arch="${pair%%:*}"
+            node_arch="${pair##*:}"
+            OUT="my-webserver-${arch}"
+            cp "node-v${NODE_VERSION}-linux-${node_arch}/bin/node" "$OUT"
+            chmod +w "$OUT"
+            "$NODE_X64_DIR/bin/npx" --yes postject@1.0.0-alpha.6 "$OUT" NODE_SEA_BLOB sea-prep.blob \
+              --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+            chmod +x "$OUT"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: my-webserver-x86_64
+          path: da_my-webserver/src/my-webserver-x86_64
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: my-webserver-aarch64
+          path: da_my-webserver/src/my-webserver-aarch64
+          if-no-files-found: error
+
+      - name: Publish to rolling GitHub Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create my-webserver-latest \
+            --title "my-webserver (rolling)" \
+            --notes "Latest multi-arch build — main@${GITHUB_SHA:0:8}. Fetched by ba_flakes_desktop's and bb_flakes_termux's my-webserver nix modules." \
+            --target "$GITHUB_SHA" 2>/dev/null || true
+          gh release upload my-webserver-latest \
+            my-webserver-x86_64 my-webserver-aarch64 --clobber

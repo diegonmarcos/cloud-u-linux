@@ -1,0 +1,145 @@
+name: ship-my-konsole-app
+# Compile-verify + build the Tauri (Rust) my-konsole terminal app. Toolchain
+# comes from the project flake (rust + cargo-tauri + webkitgtk); CI just needs
+# nix. The GitHub runner has the RAM the Surface Pro's freeze-guard denies, so
+# this is where the Rust actually compiles. Publishes the binary + .deb to a
+# rolling GitHub Release (my-konsole-latest) for `build.sh run` / KDE install.
+#
+# build-engine (2nd job): builds the standalone my-konsole-engine crate (no
+# tauri/webkit deps) to a STATIC aarch64-unknown-linux-musl binary — a static-musl
+# bin runs unmodified on Termux (Android) since it makes raw syscalls instead of
+# linking Termux's own libc. Built NATIVELY on a ubuntu-24.04-arm runner (house
+# "NO QEMU" mandate, same as ship-my-ai-app.yml) with Ubuntu's musl-tools —
+# reliable, unlike the musl.cc download it replaced. Published with the Tauri assets.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'da__my-konsole/**'
+      # my-konsole compiles the shared sampler from here.
+      - 'da_watchdog/**'
+      - '.github/workflows/ship-my-konsole-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: da__my-konsole
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build agentic-ui (goose-desktop-derived React frontend)
+        working-directory: da__my-konsole/agentic-ui
+        # npm install, not ci: no package-lock.json is committed (all builds
+        # happen in CI, never locally, so there's no natural place a lockfile
+        # gets generated/reviewed yet).
+        run: |
+          npm install
+          npm run build
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Compile-verify (build.sh check)
+        env:
+          CARGO_BUILD_JOBS: "4"
+        run: ./build.sh check
+
+      - name: Build release bundle (build.sh build)
+        env:
+          CARGO_BUILD_JOBS: "4"
+        run: ./build.sh build
+
+      - name: Tarball agentic-ui dist (for build.sh fetch)
+        run: tar -czf agentic-ui-dist.tar.gz -C agentic-ui/dist .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: my-konsole-bundle
+          path: |
+            da__my-konsole/src-tauri/target/release/my-konsole
+            da__my-konsole/dash/target/release/my-konsole-dash
+            da__my-konsole/src-tauri/target/release/bundle/**
+            da__my-konsole/agentic-ui-dist.tar.gz
+          if-no-files-found: warn
+
+      - name: Publish rolling GitHub Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create my-konsole-latest \
+            --title "my-konsole (rolling)" \
+            --notes "Latest Tauri build — main@${GITHUB_SHA:0:8}. Install the .deb, or fetch via da__my-konsole/build.sh run." \
+            --target "$GITHUB_SHA" 2>/dev/null || true
+          gh release upload my-konsole-latest \
+            src-tauri/target/release/my-konsole \
+            dash/target/release/my-konsole-dash \
+            src-tauri/target/release/bundle/deb/*.deb \
+            agentic-ui-dist.tar.gz \
+            --clobber
+
+  build-engine:
+    # NATIVE aarch64 runner (house mandate: NO QEMU, NO cross-toolchain download —
+    # ship-builders.yml + ship-my-ai-app.yml build aarch64 the same way). Still
+    # target *-musl (STATIC) so the binary runs on ANY Termux flavour (bionic
+    # Termux or nix-on-droid glibc), unlike a native-glibc build. musl-gcc comes
+    # from Ubuntu's own musl-tools (reliable) — the old musl.cc curl was the single
+    # point of failure (run 29923983817: connect-to-musl.cc timeout after 135s).
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: da__my-konsole
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain + aarch64 musl target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-musl
+
+      - name: Install musl-tools (native aarch64 musl-gcc)
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build my-konsole-engine (static, aarch64-unknown-linux-musl)
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+          CC_aarch64_unknown_linux_musl: musl-gcc
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: cargo build --release --manifest-path engine/Cargo.toml --target aarch64-unknown-linux-musl
+
+      - name: Stage + verify static binary
+        run: |
+          mkdir -p engine-dist
+          cp engine/target/aarch64-unknown-linux-musl/release/my-konsole-engine engine-dist/my-konsole-engine-aarch64
+          file engine-dist/my-konsole-engine-aarch64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: my-konsole-engine-aarch64
+          path: da__my-konsole/engine-dist/my-konsole-engine-aarch64
+          if-no-files-found: warn
+
+      - name: Publish rolling GitHub Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create my-konsole-latest \
+            --title "my-konsole (rolling)" \
+            --notes "Latest Tauri build — main@${GITHUB_SHA:0:8}. Install the .deb, or fetch via da__my-konsole/build.sh run." \
+            --target "$GITHUB_SHA" 2>/dev/null || true
+          gh release upload my-konsole-latest \
+            engine-dist/my-konsole-engine-aarch64 \
+            --clobber

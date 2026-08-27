@@ -1,0 +1,122 @@
+name: ship-my-watchdog
+# Build my-watchdog — the machine sampler, split out of my-konsole into its own
+# product. Plain std+libc+ksni, so unlike ship-my-konsole-app.yml this needs no
+# nix, no webkitgtk and no node: stable rust and the D-Bus headers ksni links
+# against are the whole toolchain, and the job finishes in a couple of minutes
+# instead of twenty.
+#
+# It builds here rather than on the laptop for the same reason everything else
+# does — the freeze-guard exists because Rust link steps are what put that
+# machine on the floor.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'da_watchdog/**'
+      - '.github/workflows/ship-my-watchdog.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: da_watchdog
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: da_watchdog
+
+      # ksni talks StatusNotifierItem over D-Bus and links against libdbus.
+      - name: D-Bus headers
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libdbus-1-dev pkg-config
+
+      # clippy before the build: this crate is the safety boundary for every
+      # kill, restart and unit verb the panel can ask for, and a warning here
+      # is worth stopping for.
+      - name: Compile-verify
+        run: |
+          cargo fmt --check || true
+          cargo clippy --release --all-targets -- -D warnings
+          cargo test --release
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Publish to the rolling release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view my-watchdog-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create my-watchdog-latest \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "my-watchdog (rolling)" \
+              --notes "The machine sampler. Rebuilt on every push to da_watchdog/."
+          gh release upload my-watchdog-latest \
+            target/release/my-watchdog \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+  # The fleet build. Static musl, no tray: a headless VM has no tray to put an
+  # icon on, and dropping ksni drops libdbus with it — which is exactly the
+  # dependency that stops a binary being statically linked. A static-musl
+  # binary makes raw syscalls instead of linking the host libc, so one artifact
+  # per architecture runs on Ubuntu, Fedora and NixOS alike, which is what this
+  # fleet actually is.
+  fleet:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Native runners, no QEMU: cross-compiling a musl target is a linker
+          # flag, and emulating a whole toolchain to avoid one is a bad trade.
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            asset: my-watchdog-x86_64
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            asset: my-watchdog-aarch64
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: da_watchdog
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: musl toolchain
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq musl-tools
+
+      - name: Build without the tray
+        run: cargo build --release --no-default-features --target ${{ matrix.target }}
+
+      - name: Confirm it is actually static
+        # A dynamically linked "static" build fails on the first peer with a
+        # different libc, and it fails there rather than here — so check here.
+        run: |
+          f="target/${{ matrix.target }}/release/my-watchdog"
+          file "$f"
+          file "$f" | grep -q 'static' || { echo "NOT static — it would not run on the fleet" >&2; exit 1; }
+
+      - name: Publish to the rolling release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp target/${{ matrix.target }}/release/my-watchdog ${{ matrix.asset }}
+          gh release view my-watchdog-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create my-watchdog-latest \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "my-watchdog (rolling)" \
+              --notes "The machine sampler. Rebuilt on every push to da_watchdog/."
+          gh release upload my-watchdog-latest \
+            ${{ matrix.asset }} \
+            --repo "$GITHUB_REPOSITORY" --clobber
