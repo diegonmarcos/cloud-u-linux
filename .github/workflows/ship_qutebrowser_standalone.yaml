@@ -51,7 +51,12 @@ jobs:
 
       - name: Mirror to GHCR (not a consumption path — release is authoritative)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The GHCR package is still bound to cloud-infra-desktop, the repo
+          # that first pushed it, and GHCR reads image.source only at package
+          # CREATION — so this repo's GITHUB_TOKEN is denied write_package.
+          # GHCR_TOKEN is a packages-scoped PAT; the fallback keeps the step
+          # working unchanged wherever the package is bound to its own repo.
+          GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
         run: nix shell nixpkgs#oras --command ./db_my-browser-qute/build.sh ghcr-push
 
       # The FORK binary — patched qutebrowser (native bookmark + plugin chrome
