@@ -63,6 +63,22 @@ fn consolidated() -> Option<Value> {
     None
 }
 
+/// The firewall declaration for this fleet, from the derived watchdog file.
+///
+/// dist/watchdog.json, not the 384KB consolidated one: a deriver already
+/// reduces the cloud declaration to what this panel needs, and re-implementing
+/// that reduction here would be a second answer to a question that already has
+/// one. Absent file simply means no declaration to compare against, which is
+/// what a machine outside the fleet honestly has.
+pub(crate) fn firewall_declared() -> Option<Value> {
+    let home = std::env::var("HOME").ok()?;
+    let p = format!("{home}/git/cloud-infra/1_cloud-configs/dist/watchdog.json");
+    serde_json::from_str::<Value>(&fs::read_to_string(p).ok()?)
+        .ok()?
+        .get("firewall")
+        .cloned()
+}
+
 /// Every mountpoint this machine DECLARES, mounted or not.
 ///
 /// The first version listed /proc/mounts, which answers "what is mounted" —

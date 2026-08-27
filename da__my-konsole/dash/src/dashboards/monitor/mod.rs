@@ -187,6 +187,9 @@ pub struct Monitor {
     /// about the container you chose, not about row 7.
     ctr_pin: Option<String>,
     img_pin: Option<String>,
+    /// `w`: what is declared open against what is actually bound.
+    firewall: bool,
+
     /// `a`: the static facts — what this machine IS, not what it is doing.
     about: bool,
     sel: usize,
@@ -268,6 +271,7 @@ impl Monitor {
             ctr_pin: None,
             img_pin: None,
             about: false,
+            firewall: false,
             sel: 0,
             sel_pid: None,
             offset: 0,
@@ -1556,6 +1560,7 @@ impl Monitor {
         self.history = name == "history";
         self.files = name == "files";
         self.about = name == "about";
+        self.firewall = name == "firewall";
     }
 
     /// Move to a tab and a mode of it, doing the per-view setup each needs.
@@ -2749,7 +2754,8 @@ impl Dashboard for Monitor {
             }
             return;
         }
-        if self.history || self.about {
+        // firewall joins these: no row cursor, one scrolling page.
+        if self.history || self.about || self.firewall {
             // None of these has a row cursor; about scrolls, the rest are one
             // screen.
             match k {
@@ -4237,6 +4243,145 @@ impl Dashboard for Monitor {
                     ),
                 },
                 Style::default().fg(LABEL),
+            ));
+            f.render_widget(Paragraph::new(status), rows[5]);
+            self.render_overlays(f, area);
+            return;
+        }
+
+        // ── firewall ──────────────────────────────────────────────────────────
+        // The firewall cannot be read without root and this panel is
+        // deliberately unprivileged, so it shows the two things it CAN see and
+        // lets the gap between them be the finding: what cloud-infra declares
+        // open, and what is actually bound here.
+        if self.firewall {
+            let fb = self.tabs_box("W back · ↑↓ scrolls");
+            let fin = fb.inner(rows[4]);
+            f.render_widget(fb, rows[4]);
+            let mut l: Vec<Line> = vec![];
+            let dec = storage::firewall_declared();
+            let host = text(&s, "host_info.host");
+
+            // WHAT IS BOUND, worst first. The address is the exposure: a port
+            // on 0.0.0.0 reaches the internet, one on 127.x reaches nobody.
+            let mut socks: Vec<&Value> = arr(&s, "listening").iter().collect();
+            let rank = |x: &Value| match text(x, "scope").as_str() {
+                "world" => 0,
+                "mesh" => 1,
+                _ => 2,
+            };
+            socks.sort_by(|a, b| rank(a).cmp(&rank(b)).then(num(a, "port").total_cmp(&num(b, "port"))));
+
+            // The declared ingress for THIS machine, if it is in the fleet.
+            // Keyed by the ssh alias the declaration uses, which is what
+            // host_info.host reports on a peer.
+            let rules: Vec<Value> = dec
+                .as_ref()
+                .and_then(|d| d.get("hosts"))
+                .and_then(|h| h.get(&host).or_else(|| h.as_object()?.values().next()))
+                .and_then(|r| r.as_array().cloned())
+                .unwrap_or_default();
+            let declared_ports: std::collections::HashSet<u64> =
+                rules.iter().map(|r| num(r, "port") as u64).collect();
+
+            l.push(Line::from(Span::styled(
+                format!("listening on {host} — {} sockets", socks.len()),
+                Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
+            )));
+            l.push(Line::from(Span::styled(
+                "  PORT   ADDRESS            REACHES     DECLARED",
+                Style::default().fg(LABEL),
+            )));
+            for sk in &socks {
+                let scope = text(sk, "scope");
+                let port = num(sk, "port") as u64;
+                let known = declared_ports.contains(&port);
+                // Only a WORLD-facing port needs declaring. Loopback and mesh
+                // sockets are not ingress, and marking them undeclared would
+                // bury the one line that matters under forty that do not.
+                let (flag, fc) = match (scope.as_str(), known) {
+                    ("world", false) => ("UNDECLARED", Color::Rgb(240, 100, 100)),
+                    ("world", true) => ("declared", Color::Rgb(120, 220, 140)),
+                    _ => ("—", DIM),
+                };
+                l.push(Line::from(vec![
+                    Span::styled(format!("  {port:<6}"), Style::default().fg(Color::White)),
+                    Span::styled(format!("{:<19}", trunc(&text(sk, "addr"), 18)), Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        format!("{:<12}", scope),
+                        Style::default().fg(match scope.as_str() {
+                            "world" => Color::Rgb(240, 169, 66),
+                            "mesh" => Color::Rgb(120, 200, 255),
+                            _ => DIM,
+                        }),
+                    ),
+                    Span::styled(flag, Style::default().fg(fc)),
+                ]));
+            }
+
+            l.push(Line::from(""));
+            l.push(Line::from(Span::styled(
+                format!("declared ingress — {} rule(s)", rules.len()),
+                Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
+            )));
+            if rules.is_empty() {
+                l.push(Line::from(Span::styled(
+                    "  no declaration for this machine — it is not in the fleet's firewall table",
+                    Style::default().fg(DIM),
+                )));
+            }
+            for r in &rules {
+                let port = num(r, "port") as u64;
+                // A declared port nothing is listening on is the other half of
+                // the drift: a hole opened for a service that is not there.
+                let bound = socks.iter().any(|sk| num(sk, "port") as u64 == port);
+                l.push(Line::from(vec![
+                    Span::styled(format!("  {port:<6}"), Style::default().fg(Color::White)),
+                    Span::styled(format!("{:<5}", text(r, "proto")), Style::default().fg(DIM)),
+                    Span::styled(format!("{:<19}", trunc(&text(r, "source"), 18)), Style::default().fg(Color::Gray)),
+                    Span::styled(
+                        format!("{:<11}", if bound { "bound" } else { "NOTHING BOUND" }),
+                        Style::default().fg(if bound { Color::Rgb(120, 220, 140) } else { Color::Rgb(240, 160, 90) }),
+                    ),
+                    Span::styled(trunc(&text(r, "desc"), 52), Style::default().fg(DIM)),
+                ]));
+            }
+
+            // The forward/NAT policy, which is fleet-wide rather than per-host.
+            if let Some(g) = dec.as_ref().and_then(|d| d.get("global")) {
+                l.push(Line::from(""));
+                l.push(Line::from(Span::styled(
+                    "global policy",
+                    Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
+                )));
+                for k in ["forward_policy", "docker_iptables", "docker_subnet", "wg_subnet"] {
+                    l.push(Line::from(vec![
+                        Span::styled(format!("  {k:<18}"), Style::default().fg(LABEL)),
+                        Span::styled(
+                            g.get(k).map(|v| v.to_string()).unwrap_or_else(|| "—".into()),
+                            Style::default().fg(Color::Gray),
+                        ),
+                    ]));
+                }
+            }
+
+            let hmax = (l.len() as u16).saturating_sub(fin.height);
+            self.detail_scroll = self.detail_scroll.min(hmax);
+            f.render_widget(Paragraph::new(l).scroll((self.detail_scroll, 0)), fin);
+            let world = socks.iter().filter(|x| text(x, "scope") == "world").count();
+            let undecl = socks
+                .iter()
+                .filter(|x| text(x, "scope") == "world" && !declared_ports.contains(&(num(x, "port") as u64)))
+                .count();
+            let status = Line::from(Span::styled(
+                match &self.msg {
+                    Some((m, _)) => format!(" {m}"),
+                    None => format!(
+                        " {} listening · {world} world-facing · {undecl} undeclared · nft needs root, this does not",
+                        socks.len()
+                    ),
+                },
+                Style::default().fg(if undecl > 0 { Color::Rgb(240, 160, 90) } else { LABEL }),
             ));
             f.render_widget(Paragraph::new(status), rows[5]);
             self.render_overlays(f, area);

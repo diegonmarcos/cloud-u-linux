@@ -783,6 +783,48 @@ fn read_proc_runq_wait_ns(pid: i32) -> Option<u64> {
 /// closes. Callers diff it with saturating_sub, which turns that drop into a
 /// zero — losing the last few bytes of a closed connection, never inventing a
 /// spike. That trade is deliberate: a wrong rate is worse than a missing one.
+/// WHAT THIS MACHINE IS LISTENING ON, and how far each socket reaches.
+///
+/// The firewall itself is unreadable without root — `nft list ruleset` and
+/// `iptables -S` both refuse, and this daemon is deliberately a USER service.
+/// So it answers the question the firewall exists to answer instead: what is
+/// actually bound, and on which address.
+///
+/// The address IS the exposure. 127.0.0.1 reaches nobody, a mesh address
+/// reaches the fleet, and 0.0.0.0 reaches the internet — so a port on 0.0.0.0
+/// that no declaration mentions is the finding, and it needs no privilege to
+/// see.
+fn listening_json() -> String {
+    let Ok(o) = clean_command("ss").args(["-tlnH"]).output() else { return "[]".into() };
+    let txt = String::from_utf8_lossy(&o.stdout);
+    let mut items: Vec<String> = vec![];
+    for l in txt.lines() {
+        let f: Vec<&str> = l.split_whitespace().collect();
+        // state recv send local peer ...  — local is field 3.
+        let Some(local) = f.get(3) else { continue };
+        // [::]:443 and 0.0.0.0:443 are the same statement about exposure;
+        // rsplit_once keeps IPv6 addresses intact, which split(':') would not.
+        let Some((addr, port)) = local.rsplit_once(':') else { continue };
+        let addr = addr.trim_matches(|c| c == '[' || c == ']');
+        // The WHOLE of 127.0.0.0/8 is loopback, not just 127.0.0.1 —
+        // systemd-resolved binds 127.0.0.54 and it reaches nobody either.
+        let scope = if addr.starts_with("127.") || addr == "::1" {
+            "loopback"
+        } else if addr == "0.0.0.0" || addr == "*" || addr == "::" {
+            "world"
+        } else {
+            "mesh"
+        };
+        items.push(format!(
+            "{{\"addr\":\"{}\",\"port\":{},\"proto\":\"tcp\",\"scope\":\"{}\"}}",
+            json_escape(addr),
+            port.parse::<u32>().unwrap_or(0),
+            scope
+        ));
+    }
+    format!("[{}]", items.join(","))
+}
+
 /// The numbers atop shows that nothing here did: what the CPU is ACTUALLY
 /// clocked at against what it could be, whether the kernel has killed anything
 /// for memory, how deep the run queue is, and whether the network is losing
@@ -2908,6 +2950,7 @@ fn render(
     services: &str,
     reclaim: &str,
     health: &str,
+    listening: &str,
 ) -> String {
     // Named, not positional: this format string mixes inline-captured names
     // with `{}` holes, and when the cores list was positional it was simply
@@ -2933,7 +2976,7 @@ fn render(
           \"psi\":{{\"cpu\":{},\"io\":{},\"memory\":{}}},\
           \"slice_gib\":{slice_cur:.2},\"slice_max_gib\":{slice_max:.2},\"slice_pct\":{slice_pct:.1},\
           \"battery\":{},\
-          \"storage\":{storage},\"slices\":{slices},\"services\":{services},\"reclaim\":{reclaim},\"health\":{health},\
+          \"storage\":{storage},\"slices\":{slices},\"services\":{services},\"reclaim\":{reclaim},\"health\":{health},\"listening\":{listening},\
           \"cpu_info\":{cpu_info},\"host_info\":{host_info},\"totals\":{totals},\"history\":{history},\"containers\":{containers},\"images\":{images},\"procs\":{procs},\"proc_table\":{proc_table},\"proc_spine\":{proc_spine},\"ts\":{}}}",
         vram_json(vram),
         pressure_block("cpu"),
@@ -3363,6 +3406,7 @@ pub fn snapshot_once() -> String {
         // of the snapshot, not a measurement of it.
         &reclaim_json(VmStat::default(), VmStat::default(), 0.0),
         &health_json(Health::default(), read_health(), 0.0),
+        &listening_json(),
     )
 }
 
@@ -3480,6 +3524,7 @@ pub fn spawn() {
                 &services,
                 &reclaim,
                 &health,
+                &listening_json(),
             );
             publish(&path, &body);
         }
@@ -3527,12 +3572,12 @@ mod tests {
                        Some((1024.0, 512.0)),
                        "{}",
                        0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 5.6,
-                       &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]", "{}", "{}");
+                       &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]", "{}", "{}", "[]");
         for k in ["cpu", "cores", "cpu_detail", "mem", "swap", "mem_detail", "swap_detail",
                   "vram", "disk", "disk_r", "disk_w", "disks",
                   "net_rx", "net_tx", "load1", "load5", "load15",
                   "psi", "slice_gib", "slice_max_gib", "slice_pct", "battery", "procs",
-                  "storage", "slices", "reclaim", "health",
+                  "storage", "slices", "reclaim", "health", "listening",
                   "proc_table", "ts"] {
             assert!(s.contains(&format!("\"{k}\":")), "missing {k} in {s}");
         }
@@ -3542,13 +3587,13 @@ mod tests {
         // machines without a readable GPU VRAM counter), not an absent key.
         let s2 = render(12.5, &[], cpu_detail, 40.0, 1.0, mem_detail, swap_detail,
                          55.0, 1.5, 2.5, "[]", None, "{}",
-                         0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 5.6, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]", "{}", "{}");
+                         0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 5.6, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]", "{}", "{}", "[]");
         assert!(s2.contains("\"vram\":null"), "expected null vram, got {s2}");
 
         // slice_pct must be 0.0, not NaN/Infinity, when slice_max is 0.
         let s3 = render(12.5, &[], cpu_detail, 40.0, 1.0, mem_detail, swap_detail,
                          55.0, 1.5, 2.5, "[]", None, "{}",
-                         0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 0.0, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]", "{}", "{}");
+                         0.3, 0.4, 1.1, 2.2, 3.3, 4.9, 0.0, &None, "[]", "[]", "[]", "[]", "[]", "[]", "{}", "{}", "{}", "{}", "[]", "[]", "{}", "{}", "[]");
         assert!(s3.contains("\"slice_pct\":0.0"), "expected 0.0 slice_pct, got {s3}");
     }
 

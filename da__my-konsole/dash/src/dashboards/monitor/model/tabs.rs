@@ -75,6 +75,23 @@ pub(crate) const TABS: &[Tab] = &[
             Sub { name: "storage", key: None, desc: "every unit this fleet can mount — s3, git, rclone", net: None },
         ],
     },
+    // WHAT IS EXPOSED. The firewall itself cannot be read without root and
+    // this dashboard is deliberately unprivileged, so the tab answers the
+    // question the firewall exists to answer instead: what is declared open,
+    // what is actually bound, and where those two disagree.
+    Tab {
+        name: "firewall",
+        // 'W', not 'w': lowercase w already cycles the CPU%/MEM% averaging
+        // window, and a tab key that silently never arrives is worse than an
+        // awkward one. The collision test would have caught it; checking
+        // first was cheaper than a red build.
+        key: 'W',
+        desc: "what is declared open, what is actually listening",
+        subs: &[
+            Sub { name: "listening", key: None, desc: "every socket bound here, and how far it reaches", net: None },
+            Sub { name: "declared", key: None, desc: "the ingress cloud-infra declares for this fleet", net: None },
+        ],
+    },
     Tab { name: "history", key: 'y', desc: "what this machine did over the last day", subs: &[] },
     Tab { name: "files", key: 'F', desc: "home as four panes, one per level", subs: &[] },
     // 'b', not 'a': the frame owns r and a for refresh/auto and advertises
