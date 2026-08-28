@@ -12,11 +12,6 @@ pub(crate) fn push(v: &mut Vec<f64>, x: f64) {
     }
 }
 
-/// A column of sizes only reads as a column if every entry is the same shape.
-/// fmt_bytes_short gives "541.4M" next to "5.5M" next to "22.7G", which the
-/// eye has to re-parse per row. This is always four digits and a unit, right
-/// aligned with spaces: "  5M", " 541M", "1000M", "  19G". No decimals — at
-/// four significant digits they never change a decision.
 /// Zero is noise. A table where most cells read 0.0 hides the few that do
 /// not, so a measured zero is drawn as a dash and only real values carry
 /// digits.
@@ -36,27 +31,33 @@ pub(crate) fn z(v: f64, w: usize, shown: String) -> String {
     if v == 0.0 { format!("{:>w$}", "-") } else { shown }
 }
 
-/// A memory cell for the process table. Below a megabyte there is nothing
-/// worth reading: no decision is ever changed by whether a process holds 400K
-/// or 900K, and a column of four-digit kilobytes drowns the megabyte-scale
-/// rows that matter. Under 1 MiB reads as a dash.
+/// Memory is mebibytes. Always, everywhere, two decimals: "748.00 MiB".
+///
+/// One unit for every memory cell on every page. A column that slides to K
+/// under a megabyte and to G over a gigabyte makes the eye rescale each row
+/// before it can be compared with the one above, which is the entire job of a
+/// memory column — and it is how "356KiB" ends up looking bigger than
+/// "5.379MiB". Below a mebibyte there is nothing worth reading and this says
+/// so with digits, not by changing units.
+pub(crate) fn fmt_mib(bytes: f64) -> String {
+    format!("{:.2} MiB", bytes.max(0.0) / 1_048_576.0)
+}
+
+/// The same cell from a gibibyte figure. /proc reports several of these in GiB
+/// already, and converting at each call site is exactly how units drift apart.
+pub(crate) fn fmt_mib_g(gib: f64) -> String {
+    fmt_mib(gib * 1_073_741_824.0)
+}
+
+/// A memory cell in a table column, right aligned so the decimal points line
+/// up. 12 wide holds a 64GiB total ("65536.00 MiB"); past that it grows and
+/// the column grows with it rather than the number being cut.
 pub(crate) fn fmt_mem_cell(bytes: f64) -> String {
-    if bytes < 1_048_576.0 { format!("{:>5}", "-") } else { fmt_fixed(bytes) }
+    format!("{:>12}", fmt_mib(bytes))
 }
 
-pub(crate) fn fmt_fixed(bytes: f64) -> String {
-    let b = bytes.max(0.0);
-    // K is the floor, not B: "5000B" is a worse answer than "5K" and a column
-    // of process memory has no business showing four digits of bytes.
-    for (div, unit) in [(1024.0, 'K'), (1048576.0, 'M'), (1073741824.0, 'G')] {
-        let n = (b / div).round();
-        if n < 10000.0 {
-            return format!("{n:>4.0}{unit}");
-        }
-    }
-    format!("{:>4.0}T", b / 1099511627776.0)
-}
-
+/// Storage stays in gigabytes — a disk column and a memory column answer
+/// different questions and are never read against each other.
 pub(crate) fn fmt_gib(g: f64) -> String {
     if g >= 1.0 {
         format!("{g:.2}G")

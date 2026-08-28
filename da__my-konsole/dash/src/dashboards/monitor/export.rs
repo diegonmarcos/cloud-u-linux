@@ -4,7 +4,7 @@ use std::fs;
 use serde_json::Value;
 
 use crate::dashboards::monitor::data::{arr, num, text};
-use crate::dashboards::monitor::view::fmt::{fmt_bytes_short, fmt_g, fmt_gib, fmt_uptime};
+use crate::dashboards::monitor::view::fmt::{fmt_bytes_short, fmt_g, fmt_mib, fmt_mib_g, fmt_uptime};
 
 /// Everything on screen, written out twice: the snapshot verbatim as JSON and
 /// a readable report as Markdown.
@@ -152,8 +152,8 @@ fn report(
     row(&mut m, "uptime", fmt_uptime(n("totals.since_s")));
     row(&mut m, "cpu", text(s, "cpu_info.model"));
     row(&mut m, "cores", format!("{}", arr(s, "cores").len()));
-    row(&mut m, "memory", fmt_gib(n("mem_detail.total")));
-    row(&mut m, "swap", fmt_gib(n("swap_detail.total")));
+    row(&mut m, "memory", fmt_mib_g(n("mem_detail.total")));
+    row(&mut m, "swap", fmt_mib_g(n("swap_detail.total")));
 
     m.push_str("\n## Now\n\n| | |\n|---|---|\n");
     row(&mut m, "cpu", format!("{:.1}%", n("cpu")));
@@ -161,7 +161,7 @@ fn report(
     row(
         &mut m,
         "memory",
-        format!("{:.1}%  {} of {}", n("mem"), fmt_gib(n("mem_detail.used")), fmt_gib(n("mem_detail.total"))),
+        format!("{:.1}%  {} of {}", n("mem"), fmt_mib_g(n("mem_detail.used")), fmt_mib_g(n("mem_detail.total"))),
     );
     row(&mut m, "swap", format!("{:.1}%", n("swap")));
     row(
@@ -248,7 +248,7 @@ fn report(
             text(p, "name"),
             num(p, "cpu_pct"),
             num(p, "mem_pct"),
-            fmt_bytes_short(num(p, "mem_rss_bytes"))
+            fmt_mib(num(p, "mem_rss_bytes"))
         ));
     }
     // ── containers-i ───────────────────────────────────────────────────

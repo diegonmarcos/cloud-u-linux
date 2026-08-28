@@ -67,8 +67,8 @@ use model::keys::{
 use model::tabs::{Sub, Tab, TABS};
 use view::draw::{bbox, braille_graph, grad, meter, tabbox, DIM, GRAPH_FLOOR, LABEL};
 use view::fmt::{
-    fmt_bps, fmt_bytes_short, fmt_fixed, fmt_g, fmt_gib, fmt_mem_cell, fmt_rate, fmt_rate_mb,
-    fmt_uptime, push, trunc, z, zp,
+    fmt_bps, fmt_bytes_short, fmt_g, fmt_gib, fmt_mem_cell, fmt_mib, fmt_mib_g, fmt_rate,
+    fmt_rate_mb, fmt_uptime, push, trunc, z, zp,
 };
 
 
@@ -492,10 +492,10 @@ impl Monitor {
         let slices = arr(s, "slices");
         let mut l: Vec<Line> = vec![Line::from(vec![
             Span::styled(format!("{:<20}", "slice"), Style::default().fg(DIM)),
-            Span::styled(format!("{:>8}", "mem"), Style::default().fg(DIM)),
-            Span::styled(format!("{:>8}", "swap"), Style::default().fg(DIM)),
-            Span::styled(format!("{:>9}", "high"), Style::default().fg(DIM)),
-            Span::styled(format!("{:>9}", "max"), Style::default().fg(DIM)),
+            Span::styled(format!("{:>12}", "mem"), Style::default().fg(DIM)),
+            Span::styled(format!("{:>12}", "swap"), Style::default().fg(DIM)),
+            Span::styled(format!("{:>12}", "high"), Style::default().fg(DIM)),
+            Span::styled(format!("{:>12}", "max"), Style::default().fg(DIM)),
             Span::styled(format!("{:>6}", "pids"), Style::default().fg(DIM)),
             Span::styled(format!("{:>7}", "mem·io"), Style::default().fg(DIM)),
         ])];
@@ -517,9 +517,9 @@ impl Monitor {
             // no limit at all, which is not the same as a limit of zero.
             let lim = |v: f64| -> Span<'static> {
                 if v < 0.0 {
-                    Span::styled(format!("{:>9}", "—"), Style::default().fg(DIM))
+                    Span::styled(format!("{:>12}", "—"), Style::default().fg(DIM))
                 } else {
-                    Span::styled(format!("{:>9}", fmt_bytes_short(v)), Style::default().fg(Color::Gray))
+                    Span::styled(fmt_mem_cell(v), Style::default().fg(Color::Gray))
                 }
             };
             // Colour against whichever ceiling exists — max if set, else high.
@@ -532,8 +532,8 @@ impl Monitor {
                     format!("{}{:<width$}", if prot { "🔒" } else { "  " }, name, width = 18),
                     Style::default().fg(if prot { Color::Rgb(240, 160, 90) } else { Color::Gray }),
                 ),
-                Span::styled(format!("{:>8}", fmt_bytes_short(cur)), Style::default().fg(grad(frac))),
-                Span::styled(format!("{:>8}", fmt_bytes_short(num(sl, "swap"))), Style::default().fg(Color::Rgb(140, 150, 170))),
+                Span::styled(fmt_mem_cell(cur), Style::default().fg(grad(frac))),
+                Span::styled(fmt_mem_cell(num(sl, "swap")), Style::default().fg(Color::Rgb(140, 150, 170))),
                 lim(high),
                 lim(max),
                 Span::styled(format!("{:>6.0}", num(sl, "pids")), Style::default().fg(LABEL)),
@@ -1043,11 +1043,11 @@ impl Monitor {
         ));
         l.push(kv(
             "memory",
-            format!("{:.1}%  {} of {}", g("mem"), fmt_gib(num(&v, "mem_detail.used")), fmt_gib(num(&v, "mem_detail.total"))),
+            format!("{:.1}%  {} of {}", g("mem"), fmt_mib_g(num(&v, "mem_detail.used")), fmt_mib_g(num(&v, "mem_detail.total"))),
         ));
         l.push(kv(
             "swap",
-            format!("{:.1}%  {} of {}", g("swap"), fmt_gib(num(&v, "swap_detail.used")), fmt_gib(num(&v, "swap_detail.total"))),
+            format!("{:.1}%  {} of {}", g("swap"), fmt_mib_g(num(&v, "swap_detail.used")), fmt_mib_g(num(&v, "swap_detail.total"))),
         ));
         l.push(kv(
             "psi cpu / io / mem",
@@ -1427,7 +1427,25 @@ impl Monitor {
             Style::default().fg(accent).add_modifier(Modifier::BOLD),
         )));
         l.push(kv("cpu", or("cpu")));
-        l.push(kv("memory", format!("{}   {}", or("mem"), or("mem_pct"))));
+        l.push(kv(
+            "memory",
+            // docker's own string, re-read into the one unit the rest of the
+            // panel uses. Empty stays "—": unreadable is not zero.
+            {
+                let raw = text(c, "mem");
+                if raw.is_empty() {
+                    format!("—   {}", or("mem_pct"))
+                } else {
+                    let (used, lim) = ctr_mem(&raw);
+                    let cap = if lim.is_empty() {
+                        "no limit".to_string()
+                    } else {
+                        fmt_mib(ctr_num(&lim))
+                    };
+                    format!("{} / {}   {}", fmt_mib(ctr_num(&used)), cap, or("mem_pct"))
+                }
+            },
+        ));
         l.push(kv("net i/o", or("net")));
         l.push(kv("block i/o", or("block")));
         l.push(kv("pids", or("pids")));
@@ -2519,9 +2537,9 @@ impl Monitor {
             "rss now / 10s / 1m",
             format!(
                 "{}  {}  {}",
-                fmt_bytes_short(num(&p, "mem_rss_bytes")),
-                fmt_bytes_short(avg_or(&p, "10s", "mem_rss_bytes")),
-                fmt_bytes_short(avg_or(&p, "1m", "mem_rss_bytes"))
+                fmt_mib(num(&p, "mem_rss_bytes")),
+                fmt_mib(avg_or(&p, "10s", "mem_rss_bytes")),
+                fmt_mib(avg_or(&p, "1m", "mem_rss_bytes"))
             ),
         ));
         // smaps_rollup, read here rather than taken from the snapshot: this is
@@ -2546,7 +2564,7 @@ impl Monitor {
             (Some(c), Some(d)) => Some(c + d),
             (a, b) => a.or(b),
         };
-        let one = |v: Option<f64>| v.map(fmt_bytes_short).unwrap_or_else(|| "—".into());
+        let one = |v: Option<f64>| v.map(fmt_mib).unwrap_or_else(|| "—".into());
         l.push(kv(
             "rss / pss / uss",
             format!("{}  {}  {}", one(rk("Rss")), one(rk("Pss")), one(uss)),
@@ -2571,7 +2589,7 @@ impl Monitor {
         // is human-formatted, so parse the number off and match.
         let stb = |k: &str| -> String {
             match st(k).split_whitespace().next().and_then(|n| n.parse::<f64>().ok()) {
-                Some(kb) => fmt_bytes_short(kb * 1024.0),
+                Some(kb) => fmt_mib(kb * 1024.0),
                 None => st(k),
             }
         };
@@ -3679,7 +3697,9 @@ impl Dashboard for Monitor {
         let mem_b = bbox("mem", "");
         let mem_in = mem_b.inner(mid[0]);
         f.render_widget(mem_b, mid[0]);
-        let bw = (mem_in.width as usize).saturating_sub(24);
+        // 7 for the label plus "748.00 MiB / 952.00 MiB" — the bar gets what is
+        // left, because the numbers are the part that must not be clipped.
+        let bw = (mem_in.width as usize).saturating_sub(32);
         let mut ml: Vec<Line> = vec![];
         let bar = |label: &str, pct: f64, txt: String| -> Line<'static> {
             let mut sp = vec![Span::styled(format!("{label:<7}"), Style::default().fg(LABEL))];
@@ -3695,7 +3715,7 @@ impl Dashboard for Monitor {
             "RAM",
             Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
         )));
-        ml.push(bar("used", num(&s, "mem"), format!("{} / {}", fmt_gib(md("used")), fmt_gib(total))));
+        ml.push(bar("used", num(&s, "mem"), format!("{} / {}", fmt_mib_g(md("used")), fmt_mib_g(total))));
         // The composition line: these four are disjoint and sum to total, which
         // is what makes it a breakdown rather than four unrelated numbers.
         // anon = process memory, cached/buffers = reclaimable page cache,
@@ -3703,7 +3723,7 @@ impl Dashboard for Monitor {
         let part = |name: &str, v: f64, c: Color| -> Vec<Span<'static>> {
             vec![
                 Span::styled(format!(" {name} "), Style::default().fg(LABEL)),
-                Span::styled(fmt_gib(v), Style::default().fg(c)),
+                Span::styled(fmt_mib_g(v), Style::default().fg(c)),
                 Span::styled(format!(" {:>4.1}%", v / total * 100.0), Style::default().fg(DIM)),
             ]
         };
@@ -3717,25 +3737,25 @@ impl Dashboard for Monitor {
         ml.push(Line::from(comp2));
         ml.push(Line::from(vec![
             Span::styled("  buffers ", Style::default().fg(LABEL)),
-            Span::styled(fmt_gib(md("buffers")), Style::default().fg(Color::Gray)),
+            Span::styled(fmt_mib_g(md("buffers")), Style::default().fg(Color::Gray)),
             Span::styled(" shmem ", Style::default().fg(LABEL)),
-            Span::styled(fmt_gib(md("shmem")), Style::default().fg(Color::Gray)),
+            Span::styled(fmt_mib_g(md("shmem")), Style::default().fg(Color::Gray)),
             // The only figure that answers "can I start something big": it
             // already accounts for what the kernel would reclaim.
             Span::styled(" avail ", Style::default().fg(LABEL)),
             Span::styled(
-                fmt_gib(md("available")),
+                fmt_mib_g(md("available")),
                 Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
             ),
         ]));
         ml.push(Line::from(vec![
             Span::styled("  dirty ", Style::default().fg(LABEL)),
-            Span::styled(fmt_gib(md("dirty")), Style::default().fg(grad(md("dirty") / 2.0))),
+            Span::styled(fmt_mib_g(md("dirty")), Style::default().fg(grad(md("dirty") / 2.0))),
             Span::styled(" wb ", Style::default().fg(LABEL)),
-            Span::styled(fmt_gib(md("writeback")), Style::default().fg(Color::Gray)),
+            Span::styled(fmt_mib_g(md("writeback")), Style::default().fg(Color::Gray)),
             Span::styled(" commit ", Style::default().fg(LABEL)),
             Span::styled(
-                format!("{}/{}", fmt_gib(md("committed")), fmt_gib(md("commit_limit"))),
+                format!("{}/{}", fmt_mib_g(md("committed")), fmt_mib_g(md("commit_limit"))),
                 Style::default().fg(Color::Gray),
             ),
         ]));
@@ -3761,14 +3781,14 @@ impl Dashboard for Monitor {
                 ml.push(bar(
                     "dedicated",
                     u / t * 100.0,
-                    format!("{} / {}", fmt_bytes_short(u), fmt_bytes_short(t)),
+                    format!("{} / {}", fmt_mib(u), fmt_mib(t)),
                 ));
             }
             if let Some((u, t)) = shr {
                 ml.push(bar(
                     "shared",
                     u / t * 100.0,
-                    format!("{} / {}", fmt_bytes_short(u), fmt_bytes_short(t)),
+                    format!("{} / {}", fmt_mib(u), fmt_mib(t)),
                 ));
             }
         }
@@ -3777,17 +3797,17 @@ impl Dashboard for Monitor {
             "SWAP",
             Style::default().fg(Color::Rgb(190, 150, 240)).add_modifier(Modifier::BOLD),
         )));
-        ml.push(bar("used", num(&s, "swap"), format!("{} / {}", fmt_gib(sd("used")), fmt_gib(sd("total")))));
+        ml.push(bar("used", num(&s, "swap"), format!("{} / {}", fmt_mib_g(sd("used")), fmt_mib_g(sd("total")))));
         ml.push(Line::from(vec![
             Span::styled("  free ", Style::default().fg(LABEL)),
-            Span::styled(fmt_gib(sd("free")), Style::default().fg(Color::Gray)),
+            Span::styled(fmt_mib_g(sd("free")), Style::default().fg(Color::Gray)),
             // Pages that are on disk AND still resident. Faulting one back is
             // free, which is why swap "used" alone overstates the damage.
             Span::styled(" cached ", Style::default().fg(LABEL)),
-            Span::styled(fmt_gib(sd("cached")), Style::default().fg(Color::Gray)),
+            Span::styled(fmt_mib_g(sd("cached")), Style::default().fg(Color::Gray)),
             Span::styled(" zswap ", Style::default().fg(LABEL)),
             Span::styled(
-                format!("{}→{}", fmt_gib(sd("zswapped")), fmt_gib(sd("zswap"))),
+                format!("{}→{}", fmt_mib_g(sd("zswapped")), fmt_mib_g(sd("zswap"))),
                 Style::default().fg(Color::Gray),
             ),
         ]));
@@ -3796,7 +3816,7 @@ impl Dashboard for Monitor {
         ml.push(bar(
             "slice",
             num(&s, "slice_pct"),
-            format!("{} / {}", fmt_gib(num(&s, "slice_gib")), fmt_gib(num(&s, "slice_max_gib"))),
+            format!("{} / {}", fmt_mib_g(num(&s, "slice_gib")), fmt_mib_g(num(&s, "slice_max_gib"))),
         ));
         f.render_widget(Paragraph::new(ml), mem_in);
 
@@ -4070,10 +4090,10 @@ impl Dashboard for Monitor {
                 if lim > 0.0 { format!("{:.0}%", com / lim * 100.0) } else { "-".into() },
                 grad(if lim > 0.0 { com / lim } else { 0.0 }),
             ));
-            r2.extend(cell("dirty", fmt_g(md("dirty")), grad(md("dirty") / 2.0)));
+            r2.extend(cell("dirty", fmt_mib_g(md("dirty")), grad(md("dirty") / 2.0)));
             r2.extend(cell(
                 "slab",
-                fmt_g(md("slab_reclaimable") + md("slab_unreclaimable")),
+                fmt_mib_g(md("slab_reclaimable") + md("slab_unreclaimable")),
                 Color::Gray,
             ));
             // The one number nobody wants to be non-zero.
@@ -4370,10 +4390,10 @@ impl Dashboard for Monitor {
                     },
                 ));
             }
-            al.push(kv2("memory", fmt_gib(num(&s, "mem_detail.total"))));
+            al.push(kv2("memory", fmt_mib_g(num(&s, "mem_detail.total"))));
             let vsrc = text(&s, "vram_detail.source");
             let vsize = |k: &str| -> Option<String> {
-                num_opt(&s, &format!("vram_detail.{k}.total")).filter(|t| *t > 0.0).map(fmt_bytes_short)
+                num_opt(&s, &format!("vram_detail.{k}.total")).filter(|t| *t > 0.0).map(fmt_mib)
             };
             match (vsize("dedicated"), vsize("shared")) {
                 (None, None) => al.push(kv2(
@@ -4391,7 +4411,7 @@ impl Dashboard for Monitor {
                     }
                 }
             }
-            al.push(kv2("swap", fmt_gib(num(&s, "swap_detail.total"))));
+            al.push(kv2("swap", fmt_mib_g(num(&s, "swap_detail.total"))));
             for pool in arr(&s, "storage") {
                 let label = text(pool, "label");
                 al.push(kv2(
@@ -4780,9 +4800,14 @@ impl Dashboard for Monitor {
                             {
                                 let (used, _) = ctr_mem(&text(c, "mem"));
                                 Cell::from(if used.is_empty() {
-                                    format!("{:>10}", "-")
+                                    format!("{:>12}", "-")
                                 } else {
-                                    format!("{used:>10}")
+                                    // docker writes its own units — "356KiB"
+                                    // beside "954.2MiB" beside "5.379MiB" —
+                                    // and reads back to bytes so the column
+                                    // can be one unit like every other memory
+                                    // column.
+                                    fmt_mem_cell(ctr_num(&used))
                                 })
                                 .style(base.fg(Color::Gray))
                             },
@@ -4791,9 +4816,9 @@ impl Dashboard for Monitor {
                                 Cell::from(if lim.is_empty() {
                                     // No slash means no ceiling, which since
                                     // the caps came off is the normal case.
-                                    format!("{:>10}", "none")
+                                    format!("{:>12}", "none")
                                 } else {
-                                    format!("{lim:>10}")
+                                    fmt_mem_cell(ctr_num(&lim))
                                 })
                                 .style(base.fg(DIM))
                             },
@@ -4814,8 +4839,8 @@ impl Dashboard for Monitor {
                         Constraint::Length(19),
                         Constraint::Length(8),
                         Constraint::Length(8),
-                        Constraint::Length(11),
-                        Constraint::Length(11),
+                        Constraint::Length(13),
+                        Constraint::Length(13),
                         Constraint::Length(20),
                         Constraint::Length(20),
                         Constraint::Length(6),
@@ -5708,7 +5733,7 @@ impl Dashboard for Monitor {
                             ),
                         ]))
                     },
-                    Cell::from(format!("{:>6.1}G", num(&v, "mem_detail.total"))).style(base.fg(Color::Gray)),
+                    Cell::from(fmt_mem_cell(num(&v, "mem_detail.total") * 1_073_741_824.0)).style(base.fg(Color::Gray)),
                     // btrfs allocates in chunks and df cannot see that, so on a
                     // machine that publishes storage the pool figure is the
                     // true one; peers fall back to their own df.
@@ -5796,7 +5821,7 @@ impl Dashboard for Monitor {
                     Constraint::Length(5),  // mem
                     Constraint::Length(5),  // swap
                     Constraint::Length(12), // vram d/s
-                    Constraint::Length(7),  // ram total
+                    Constraint::Length(12), // ram total
                     Constraint::Length(5),  // disk %
                     Constraint::Length(7),  // disk used
                     Constraint::Length(17), // load 1/5/15
@@ -5817,7 +5842,7 @@ impl Dashboard for Monitor {
                 fh(" MEM%", "MEM%"),
                 fh("SWAP%", "SWAP%"),
                 fh("VRAM-d VRAM-s", ""),
-                fh("    RAM", "RAM"),
+                fh("         RAM", "RAM"),
                 fh("DISK%", "DISK%"),
                 fh("   DISK", "DISK%"),
                 fh(" LOAD  1     5   15", "LOAD"),
@@ -5970,7 +5995,7 @@ impl Dashboard for Monitor {
                     // smaps_rollup. A dash, not a zero — we do not know.
                     Cell::from(match num_opt(p, "mem_pss_bytes") {
                         Some(v) => fmt_mem_cell(v),
-                        None => "    —".into(),
+                        None => format!("{:>12}", "—"),
                     })
                     .style(base.fg(Color::Rgb(150, 170, 200))),
                     Cell::from(fmt_bps(num(p, "net_rx_bytes_per_s"))).style(base.fg(Color::Rgb(120, 200, 255))),
@@ -6055,8 +6080,8 @@ impl Dashboard for Monitor {
                 Constraint::Length(5),  // MEM%
                 Constraint::Length(5),  // M10s
                 Constraint::Length(5),  // M60s
-                Constraint::Length(5),  // RSS
-                Constraint::Length(5),  // PSS
+                Constraint::Length(12), // RSS
+                Constraint::Length(12), // PSS
                 Constraint::Length(6),  // D/s
                 Constraint::Length(6),  // U/s
                 Constraint::Length(6),  // R/s
