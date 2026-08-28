@@ -276,6 +276,27 @@ def sync_pinned(win_id):
         bar.sync()
 
 
+def _pinned_tab_url(tab):
+    """Best-effort URL for a pinned tab that may not have loaded yet.
+
+    url() is empty until the page commits, and with a lazy session restore it
+    stays empty until the tab is focused -- so a restored pinned tab was
+    invisible to seed_pinned's dedupe and got seeded a second time on every
+    single launch. Fall back to the requested URL, then to the session history
+    entry, so a tab is identifiable before it ever loads.
+    """
+    candidates = [tab.url(), tab.url(requested=True)]
+    try:
+        if len(tab.history) > 0:
+            candidates.append(tab.history.current_item().url())
+    except Exception:  # pragma: no cover - history access is backend-specific
+        pass
+    for url in candidates:
+        if url.isValid() and not url.isEmpty():
+            return url.toString()
+    return None
+
+
 def seed_pinned(win_id):
     """Open mybar.json's `pinned` URLs as real pinned tabs, once per window.
 
@@ -294,19 +315,32 @@ def seed_pinned(win_id):
     # as an ordinary row-3 tab, and counting that as "already open" would
     # suppress the row-2 pinned copy of the same page. A restored *pinned* tab
     # still dedupes, which is the case this guard exists for.
-    # Read .url() straight off the tab rather than tab_url(), which runs
-    # ensure_valid() and raises on a tab that has not loaded yet -- at seed
-    # time a restored pinned tab is still QUrl(''). An unloaded tab has no
-    # URL to dedupe against anyway, so skipping it is the correct answer.
     pinned_tabs = [w for w in (tabbed.widget.widget(i)
                                for i in range(tabbed.widget.count()))
                    if getattr(w, 'data', None) is not None and w.data.pinned]
-    open_urls = {w.url().toString() for w in pinned_tabs if w.url().isValid()}
+    open_urls = set()
+    for tab in pinned_tabs:
+        url = _pinned_tab_url(tab)
+        if url is None:
+            continue
+        if url in open_urls:
+            # Self-heal. Seeding used to be invisible to its own dedupe, so
+            # every launch restored the pinned row and then seeded it again;
+            # existing sessions carry several copies of each entry. Closing an
+            # exact-URL duplicate of a tab we already counted converges the row
+            # back to one tab per mybar.json entry.
+            log.misc.debug("my-browser bar: closing duplicate pinned %s" % url)
+            tabbed.close_tab(tab, add_undo=False)
+            continue
+        open_urls.add(url)
     for entry in entries:
-        if entry['url'] in open_urls:
+        # Normalise through QUrl so the entry string is compared the same way
+        # _pinned_tab_url stringifies a tab's URL.
+        url = QUrl(entry['url'])
+        if url.toString() in open_urls:
             continue
         try:
-            tab = tabbed.tabopen(QUrl(entry['url']), background=True)
+            tab = tabbed.tabopen(url, background=True)
             tab.set_pinned(True)
         except Exception:
             log.misc.exception(
