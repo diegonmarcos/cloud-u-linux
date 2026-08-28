@@ -57,7 +57,8 @@ use data::{arr, flag, kill_path, now_secs, num, read_json, snapshot_path, text, 
 use export::{exe_dir, export_snapshot, open_dir, proc_comm};
 use input::cmd;
 use model::columns::{
-    UnitRow, CMP_ACTIONS, CTR_ACTIONS, CTR_SORT, FLEET_SORT, IMG_ACTIONS, IMG_SORT, UNIT_ACTIONS,
+    UnitRow, CMP_ACTIONS, CMP_SORT, CTR_ACTIONS, CTR_SORT, FLEET_SORT, IMG_ACTIONS, IMG_SORT,
+    UNIT_ACTIONS,
 };
 use model::keys::{
     ACTIONS, BOX_NAMES, B_MESH, B_NET, B_PSI, B_SLICES, B_STORAGE, CMD_HELP, FRAME_RESERVED, FREE,
@@ -228,6 +229,9 @@ pub struct Monitor {
     /// The compose row the modal is open on, pinned by (file, service) so a
     /// re-sort on the next tick cannot slide a different service under it.
     cmp_pin: Option<(String, String)>,
+    /// Which CMP_SORT column the compose table is ranked by, and which way.
+    cmp_sort: usize,
+    cmp_desc: bool,
     /// The last complaint the transport made, kept verbatim so it can be
     /// un-said. Without this the mesh's own status latches into `msg` and
     /// stays there: "fetching…" is a live condition, not an event, and a
@@ -304,6 +308,12 @@ impl Monitor {
             ctr_pin: None,
             img_pin: None,
             cmp_pin: None,
+            cmp_sort: 0,
+            // Descending on PROJECT would be backwards, but the default column
+            // is PROJECT and a-z is what reads right there; ← once to DECLARED
+            // and the undeclared rows come to the top, which is the direction
+            // that question is always asked in.
+            cmp_desc: false,
             mesh_msg: None,
             about: false,
             firewall: false,
@@ -1566,15 +1576,15 @@ impl Monitor {
         });
     }
 
-    /// The compose table, flat and ordered.
+    /// The compose table, flat and ranked.
     ///
-    /// `(project, service, container, state, file, declared)`. Declared first,
-    /// grouped by project so a stack reads together; the undeclared ones last,
-    /// because they are the finding and the bottom of a list is where a
-    /// finding survives being scrolled past. One row per container, which is
-    /// what the cursor can act on — a project header is not a thing you can
-    /// start.
-    fn cmp_rows(s: &Value) -> Vec<CmpRow> {
+    /// `(project, service, container, state, file, declared)`, one row per
+    /// container — which is what the cursor can act on, where a project header
+    /// is not a thing you can start. Ranked by whichever CMP_SORT column ←/→
+    /// last landed on; undeclared rows carry an empty project, so the default
+    /// PROJECT ascending floats them to the top on its own, which is where the
+    /// finding belongs.
+    fn cmp_rows(&self, s: &Value) -> Vec<CmpRow> {
         let mut v: Vec<CmpRow> = arr(s, "compose")
             .iter()
             .map(|r| {
@@ -1588,8 +1598,24 @@ impl Monitor {
                 )
             })
             .collect();
+        let (label, _) = CMP_SORT[self.cmp_sort.min(CMP_SORT.len() - 1)];
+        // Every tie falls back to project/service/container, so two rows that
+        // rank equally never trade places between ticks — a table whose rows
+        // reshuffle under the cursor once a second cannot be acted on.
+        let key = |r: &CmpRow| (r.0.clone(), r.1.clone(), r.2.clone());
         v.sort_by(|a, b| {
-            b.5.cmp(&a.5).then(a.0.cmp(&b.0)).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2))
+            let ord = match label {
+                // false < true, so ascending puts the undeclared ones on top:
+                // the finding first, which is why this column is here.
+                "DECLARED" => a.5.cmp(&b.5),
+                "SERVICE" => a.1.to_lowercase().cmp(&b.1.to_lowercase()),
+                "CONTAINER" => a.2.to_lowercase().cmp(&b.2.to_lowercase()),
+                "STATE" => a.3.cmp(&b.3),
+                "FILE" => a.4.cmp(&b.4),
+                _ => a.0.to_lowercase().cmp(&b.0.to_lowercase()),
+            };
+            let ord = if self.cmp_desc { ord.reverse() } else { ord };
+            ord.then_with(|| key(a).cmp(&key(b)))
         });
         v
     }
@@ -3144,7 +3170,7 @@ impl Dashboard for Monitor {
             // cannot move a cursor through is a screenshot. Enter opens the
             // verbs; `d` still reaches the daemon directly, as it does on the
             // neighbouring pages.
-            let rowsv = Self::cmp_rows(&self.snap);
+            let rowsv = self.cmp_rows(&self.snap);
             let n = rowsv.len();
             match k {
                 KeyCode::Down | KeyCode::Char('j') => self.sel = (self.sel + 1).min(n.saturating_sub(1)),
@@ -3153,6 +3179,13 @@ impl Dashboard for Monitor {
                 KeyCode::PageUp => self.sel = self.sel.saturating_sub(10),
                 KeyCode::Home => self.sel = 0,
                 KeyCode::End => self.sel = n.saturating_sub(1),
+                // Same gesture as the container and image lists: ←/→ walks the
+                // column the table is ranked by, i flips the direction.
+                KeyCode::Left => {
+                    self.cmp_sort = (self.cmp_sort + CMP_SORT.len() - 1) % CMP_SORT.len()
+                }
+                KeyCode::Right => self.cmp_sort = (self.cmp_sort + 1) % CMP_SORT.len(),
+                KeyCode::Char('i') => self.cmp_desc = !self.cmp_desc,
                 KeyCode::Char('d') => {
                     self.acting_unit =
                         Some(("docker.service".to_string(), "system".to_string()));
@@ -4433,8 +4466,10 @@ impl Dashboard for Monitor {
         // with no such label is one nobody deployed the declared way, which is
         // the only drift signal available without a copy of the repo.
         if self.compose {
+            let (clabel, _) = CMP_SORT[self.cmp_sort.min(CMP_SORT.len() - 1)];
             let cb = self.tabs_box(&format!(
-                "compose · {} · ↑↓ pick · enter acts · d",
+                "{clabel}{} · ←→ rank · i inv · ↑↓ pick · enter acts · {} · d",
+                if self.cmp_desc { "▼" } else { "▲" },
                 Self::dockerd_label(&s)
             ));
             let cin = cb.inner(rows[4]);
@@ -4453,15 +4488,33 @@ impl Dashboard for Monitor {
                     format!("…{}", x.chars().skip(x.chars().count() - n + 1).collect::<String>())
                 }
             };
-            let rowsv = Self::cmp_rows(&s);
+            let rowsv = self.cmp_rows(&s);
             // One cursor serves every list, so arriving from a 52-container
             // page can park it past the end of a 3-service one.
             self.sel = self.sel.min(rowsv.len().saturating_sub(1));
             let declared = rowsv.iter().filter(|r| r.5).count();
-            let mut l: Vec<Line> = vec![Line::from(Span::styled(
-                "   PROJECT           SERVICE           CONTAINER                 STATE      FILE",
-                Style::default().fg(LABEL),
-            ))];
+            // The header says which column the rows are in the order of. A
+            // ranked table whose heading looks the same whatever it is ranked
+            // by is a table you have to guess at.
+            let head = |name: &str, w: usize| -> Span<'static> {
+                let lit = name == clabel;
+                Span::styled(
+                    format!("{:<w$}", if lit { format!("{name}{}", if self.cmp_desc { "▼" } else { "▲" }) } else { name.to_string() }),
+                    if lit {
+                        Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(LABEL)
+                    },
+                )
+            };
+            let mut l: Vec<Line> = vec![Line::from(vec![
+                Span::raw("  "),
+                head("PROJECT", 18),
+                head("SERVICE", 18),
+                head("CONTAINER", 26),
+                head("STATE", 11),
+                head("FILE", 4),
+            ])];
             if rowsv.is_empty() {
                 l.push(Line::from(Span::styled(
                     "  no containers — nothing to say whether anything was declared",

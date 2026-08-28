@@ -128,6 +128,23 @@ pub(crate) const UNIT_ACTIONS: [(&str, &str); 4] = [
 /// No `down` and no `rm`. Bringing a service back up is one keypress from
 /// here; the destructive pair belongs on a page where the thing being removed
 /// is the subject, not on the one you land on to see what is declared.
+/// What a compose row can be ranked by.
+///
+/// Same shape as CTR_SORT, but every field here is already a string in the
+/// snapshot, so the comparison is the text itself rather than a number pulled
+/// out of it. DECLARED is the odd one and the reason this list exists: it is
+/// the only column that answers "what is running here that nobody deployed",
+/// and until you can rank by it that answer is however many screens down the
+/// undeclared rows happen to fall.
+pub(crate) const CMP_SORT: &[(&str, &str)] = &[
+    ("PROJECT", "project"),
+    ("SERVICE", "service"),
+    ("CONTAINER", "container"),
+    ("STATE", "state"),
+    ("FILE", "file"),
+    ("DECLARED", "declared"),
+];
+
 pub(crate) const CMP_ACTIONS: [(&str, &str); 5] = [
     ("up", "create it from the file and start it"),
     ("restart", "stop and start it, same container"),
