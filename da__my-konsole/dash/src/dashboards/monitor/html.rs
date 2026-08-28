@@ -24,7 +24,22 @@ const PREFERRED: &[&str] = &[
     "storage", "proc_table",
 ];
 
-fn esc(s: &str) -> String {
+/// The parent each section hangs under in the sidebar. A flat list of tabs was
+/// fine at eight and is not at thirty, and this page grows every time the
+/// sampler learns a new array.
+///
+/// Same rule as PREFERRED above: this is an ordering hint, NOT a filter. A
+/// section no group claims lands under "other" rather than disappearing,
+/// because a field added to the sampler must never need an edit here to be
+/// visible.
+const GROUPS: &[(&str, &[&str])] = &[
+    ("docker", &["compose", "containers", "images", "volumes", "networks"]),
+    ("system", &["services", "slices", "proc_table", "units"]),
+    ("storage", &["disks", "storage", "mounts"]),
+    ("network", &["listening", "ifaces", "routes"]),
+];
+
+pub(crate) fn esc(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
@@ -50,21 +65,56 @@ fn sections(snap: &Value) -> Vec<String> {
 ///
 /// `title` names the machine and the moment, so a directory of these is
 /// readable without opening any of them.
-pub(crate) fn page(title: &str, envelope: &Value, markdown: &str) -> String {
+pub(crate) fn page(title: &str, envelope: &Value, markdown: &str, switcher: &str) -> String {
     let snap = envelope.get("snapshot").unwrap_or(&Value::Null);
     let tabs = sections(snap);
     let files = envelope.get("files").and_then(|f| f.as_array()).map(|a| a.len()).unwrap_or(0);
     let measured =
         envelope.get("measured").and_then(|m| m.as_str()).unwrap_or("local").to_string();
 
-    let mut nav = String::from(
-        "<button class=\"t on\" data-k=\"__report\">report</button>\
-         <button class=\"t\" data-k=\"__files\">files</button>",
-    );
-    for k in &tabs {
-        nav.push_str(&format!("<button class=\"t\" data-k=\"{}\">{}</button>", esc(k), esc(k)));
+    // The sidebar is built here rather than in the page's JavaScript because
+    // the row counts come from the snapshot, and a menu that can say how big
+    // each section is before you open it is the difference between navigating
+    // and guessing.
+    let count = |k: &str| snap.get(k).and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let item = |k: &str, n: Option<usize>, on: bool| -> String {
+        format!(
+            "<li><a class=\"t{}\" data-k=\"{}\">{}{}</a></li>",
+            if on { " on" } else { "" },
+            esc(k),
+            esc(k.trim_start_matches('_')),
+            n.map(|n| format!("<b>{n}</b>")).unwrap_or_default()
+        )
+    };
+    let open = |g: &str| format!("<div class=\"sidebar-section\"><h3>{}</h3><ul>", esc(g));
+
+    let mut nav = open("overview");
+    nav.push_str(&item("__report", None, true));
+    nav.push_str(&item("__files", Some(files), false));
+    nav.push_str(&item("__raw", None, false));
+    nav.push_str("</ul></div>");
+
+    let mut claimed: Vec<&str> = vec![];
+    for (g, keys) in GROUPS {
+        let mine: Vec<&String> = tabs.iter().filter(|t| keys.contains(&t.as_str())).collect();
+        if mine.is_empty() {
+            continue;
+        }
+        nav.push_str(&open(g));
+        for t in mine {
+            claimed.push(t.as_str());
+            nav.push_str(&item(t, Some(count(t)), false));
+        }
+        nav.push_str("</ul></div>");
     }
-    nav.push_str("<button class=\"t\" data-k=\"__raw\">raw</button>");
+    let rest: Vec<&String> = tabs.iter().filter(|t| !claimed.contains(&t.as_str())).collect();
+    if !rest.is_empty() {
+        nav.push_str(&open("other"));
+        for t in rest {
+            nav.push_str(&item(t, Some(count(t)), false));
+        }
+        nav.push_str("</ul></div>");
+    }
 
     // The envelope goes in as JSON inside a script tag of a non-JS type, so
     // the browser hands it over as text and nothing in it can execute. `</` is
@@ -88,6 +138,7 @@ pub(crate) fn page(title: &str, envelope: &Value, markdown: &str) -> String {
         .replace("__MEASURED__", &esc(&measured))
         .replace("__FILES__", &files.to_string())
         .replace("__NAV__", &nav)
+        .replace("__SWITCH__", switcher)
         .replace("__DATA__", &data)
 }
 
@@ -95,30 +146,98 @@ const TEMPLATE: &str = r##"<!doctype html><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>__TITLE__</title>
 <style>
-:root{--bg:#0b0e14;--fg:#c9d1d9;--dim:#6b7684;--acc:#7ee787;--warn:#e3b341;--bad:#f85149;--line:#1f2630}
+/* Same palette and shell as vm-pilot and the watchdog web page: one machine
+   panel should not look like a different product depending on which of the
+   three wrote it. */
+:root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--fg:#c9d1d9;--muted:#8b949e;--accent:#58a6ff;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--w:264px}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-header{padding:14px 18px;border-bottom:1px solid var(--line)}
-h1{margin:0;font-size:15px;color:var(--acc);font-weight:600}
-.sub{color:var(--dim);font-size:12px;margin-top:4px}
-nav{display:flex;flex-wrap:wrap;gap:4px;padding:10px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg)}
-.t{background:transparent;border:1px solid var(--line);color:var(--dim);padding:4px 10px;border-radius:3px;cursor:pointer;font:inherit}
-.t:hover{color:var(--fg)}
-.t.on{color:var(--bg);background:var(--acc);border-color:var(--acc)}
-main{padding:14px 18px}
-.wrap{overflow-x:auto}
-table{border-collapse:collapse;width:100%;min-width:max-content}
-th{text-align:left;color:var(--dim);font-weight:600;border-bottom:1px solid var(--line);padding:5px 12px 5px 0;white-space:nowrap}
-td{padding:3px 12px 3px 0;border-bottom:1px solid #12171f;white-space:nowrap}
-tr:hover td{background:#111721}
-pre{white-space:pre-wrap;word-break:break-word;margin:0}
-.count{color:var(--dim);margin-bottom:8px}
-.no{color:var(--dim)}
-.v-false{color:var(--bad)} .v-true{color:var(--acc)}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+pre{margin:0;white-space:pre-wrap;word-break:break-word;font:12px/1.6 ui-monospace,Menlo,Consolas,monospace}
+
+/* SIDEBAR — pinned on a wide screen, drawer on a narrow one. The hamburger
+   is not decoration: this list is the section index and it grows every time
+   the sampler learns a new array. */
+.hamburger{position:fixed;top:12px;left:12px;z-index:1000;background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:5px 11px;font-size:16px;cursor:pointer}
+.sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--w);z-index:999;background:var(--panel);border-right:1px solid var(--border);padding:16px;overflow-y:auto;transform:translateX(-100%);transition:transform .2s ease}
+.sidebar.open{transform:translateX(0)}
+.sidebar-header{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.sidebar-header h2{margin:0;font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.close-btn{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
+.sidebar-section{margin-top:18px}
+.sidebar-section h3{margin:0 0 6px;font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sidebar-section ul{margin:0;padding:0;list-style:none}
+.sidebar-section li{padding:1px 0}
+.sidebar-section a{display:flex;justify-content:space-between;gap:8px;padding:4px 8px;border-radius:6px;font-size:.85rem;color:var(--fg);cursor:pointer}
+.sidebar-section a:hover{background:#1f2630;text-decoration:none}
+.sidebar-section a.on{background:#1f6feb26;color:var(--accent);box-shadow:inset 2px 0 0 var(--accent)}
+.sidebar-section a b{font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+.sidebar-section a.on b{color:var(--accent)}
+.scrim{position:fixed;inset:0;background:#0008;z-index:998;display:none}
+.scrim.on{display:block}
+
+.content{padding:56px 16px 24px}
+.status-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--ok);flex:none}
+.crumb{color:var(--muted);font-size:.85rem}
+.crumb b{color:var(--fg);font-weight:600}
+
+/* PANEL — a table is a child of the section that names it, not a bare grid
+   dropped on the page. */
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;min-width:0;overflow:hidden}
+.panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border)}
+.panel-head h3{margin:0;font-size:.9rem}
+.panel-head .count{color:var(--muted);font-size:.78rem;font-variant-numeric:tabular-nums}
+.panel-body{padding:12px}
+/* Wide tables scroll inside their own panel; the page itself never does. */
+.scroll{overflow:auto;max-height:70vh}
+table{border-collapse:collapse;width:100%;font-size:.8rem}
+th,td{text-align:left;padding:5px 10px;white-space:nowrap;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--panel);z-index:1}
+tbody tr:hover td{background:#1f26304d}
+tr:last-child td{border-bottom:none}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.no{color:var(--muted)}
+.pill{padding:1px 7px;border-radius:10px;font-size:.72rem;border:1px solid var(--border);color:var(--muted)}
+.pill.ok{color:var(--ok);border-color:#3fb95066}
+.pill.bad{color:var(--bad);border-color:#f8514966}
+
+@media (min-width:1000px){
+  .hamburger,.scrim{display:none}
+  .sidebar{transform:none}
+  .content{margin-left:var(--w);padding-top:20px}
+}
 </style>
-<header><h1>__TITLE__</h1><div class="sub">measured: __MEASURED__ · __FILES__ paths · this page is the export, not a live view</div></header>
-<nav>__NAV__</nav>
-<main id="out"></main>
+
+<button class="hamburger" id="ham" aria-label="sections">&#9776;</button>
+<div class="scrim" id="scrim"></div>
+
+<aside class="sidebar" id="sb">
+  <div class="sidebar-header">
+    <h2>__TITLE__</h2>
+    <button class="close-btn" id="cls" aria-label="close">&times;</button>
+  </div>
+
+  <!-- MACHINES first: which box you are reading is a bigger question than
+       which section of it, so it sits above the sections rather than in
+       them. Plain links to sibling files — no fetch, works from a USB stick. -->
+  <div class="sidebar-section">
+    <h3>machine</h3>
+    <ul class="switch">__SWITCH__</ul>
+  </div>
+  __NAV__
+</aside>
+
+<div class="content">
+  <div class="status-bar">
+    <span class="dot"></span>
+    <span class="crumb"><b>__TITLE__</b></span>
+    <span class="crumb">· measured __MEASURED__ · __FILES__ paths</span>
+  </div>
+  <div id="out"></div>
+</div>
+
 <script type="application/json" id="d">__DATA__</script>
 <script>
 const E = JSON.parse(document.getElementById('d').textContent);
@@ -126,8 +245,9 @@ const S = E.snapshot || {};
 const out = document.getElementById('out');
 function esc(s){ return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 function cell(v){
-  if (v === null || v === undefined || v === '') return '<td class="no">—</td>';
-  if (typeof v === 'boolean') return '<td class="v-' + v + '">' + v + '</td>';
+  if (v === null || v === undefined || v === '') return '<td class="no">&mdash;</td>';
+  if (typeof v === 'boolean') return '<td><span class="pill ' + (v?'ok':'bad') + '">' + v + '</span></td>';
+  if (typeof v === 'number') return '<td class="num">' + v + '</td>';
   if (typeof v === 'object') return '<td>' + esc(JSON.stringify(v)) + '</td>';
   return '<td>' + esc(String(v)) + '</td>';
 }
@@ -138,15 +258,27 @@ function table(rows){
   for (const r of rows) for (const k of Object.keys(r)) if (!cols.includes(k)) cols.push(k);
   const head = cols.map(c => '<th>' + esc(c) + '</th>').join('');
   const body = rows.map(r => '<tr>' + cols.map(c => cell(r[c])).join('') + '</tr>').join('');
-  return '<div class="count">' + rows.length + ' rows</div><div class="wrap"><table><thead><tr>'
-       + head + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+  return '<div class="scroll"><table><thead><tr>' + head + '</tr></thead><tbody>'
+       + body + '</tbody></table></div>';
+}
+function panel(title, count, inner, pad){
+  return '<div class="panel"><div class="panel-head"><h3>' + esc(title) + '</h3>'
+       + (count === null ? '' : '<span class="count">' + count + '</span>')
+       + '</div>' + (pad ? '<div class="panel-body">' + inner + '</div>' : inner) + '</div>';
 }
 function show(k){
-  if (k === '__report') { out.innerHTML = '<pre>' + esc(E.report || '') + '</pre>'; return; }
-  if (k === '__files')  { const f = E.files || []; out.innerHTML = '<div class="count">' + f.length + ' paths</div><pre>' + esc(f.join('\n')) + '</pre>'; return; }
-  if (k === '__raw')    { out.innerHTML = '<pre>' + esc(JSON.stringify(E, null, 2)) + '</pre>'; return; }
-  out.innerHTML = table(S[k] || []);
+  if (k === '__report') { out.innerHTML = panel('report', null, '<pre>' + esc(E.report || '') + '</pre>', 1); }
+  else if (k === '__files') { const f = E.files || []; out.innerHTML = panel('files', f.length + ' paths', '<pre>' + esc(f.join('\n')) + '</pre>', 1); }
+  else if (k === '__raw') { out.innerHTML = panel('raw envelope', null, '<pre>' + esc(JSON.stringify(E, null, 2)) + '</pre>', 1); }
+  else { const rows = S[k] || []; out.innerHTML = panel(k, rows.length + ' rows', table(rows), 0); }
+  if (window.innerWidth < 1000) close();
+  window.scrollTo(0, 0);
 }
+const sb = document.getElementById('sb'), scrim = document.getElementById('scrim');
+function close(){ sb.classList.remove('open'); scrim.classList.remove('on'); }
+document.getElementById('ham').onclick = () => { sb.classList.add('open'); scrim.classList.add('on'); };
+document.getElementById('cls').onclick = close;
+scrim.onclick = close;
 document.querySelectorAll('.t').forEach(b => b.onclick = () => {
   document.querySelectorAll('.t').forEach(x => x.classList.remove('on'));
   b.classList.add('on');
@@ -155,35 +287,3 @@ document.querySelectorAll('.t').forEach(b => b.onclick = () => {
 show('__report');
 </script>
 "##;
-
-/// A directory listing, rewritten on every export.
-///
-/// Newest first, because the reason you open this is almost always "what did I
-/// just export". Plain links: the pages are files, and a file listing that
-/// needs a server to work is not a file listing.
-pub(crate) fn index(dir: &str) -> String {
-    let mut names: Vec<String> = std::fs::read_dir(dir)
-        .map(|rd| {
-            rd.filter_map(|e| e.ok())
-                .map(|e| e.file_name().to_string_lossy().into_owned())
-                .filter(|n| n.ends_with(".html") && n != "index.html")
-                .collect()
-        })
-        .unwrap_or_default();
-    names.sort();
-    names.reverse();
-    let items: String = names
-        .iter()
-        .map(|n| format!("<li><a href=\"{0}\">{0}</a></li>", esc(n)))
-        .collect();
-    format!(
-        r#"<!doctype html><meta charset="utf-8"><title>watchdog exports</title>
-<style>body{{margin:0;padding:24px;background:#0b0e14;color:#c9d1d9;font:13px/1.7 ui-monospace,Menlo,Consolas,monospace}}
-h1{{font-size:15px;color:#7ee787;margin:0 0 4px}}.sub{{color:#6b7684;margin-bottom:16px}}
-ul{{list-style:none;padding:0;margin:0}}a{{color:#c9d1d9;text-decoration:none}}a:hover{{color:#7ee787}}</style>
-<h1>watchdog exports</h1><div class="sub">{n} pages · newest first</div><ul>{items}</ul>
-"#,
-        n = names.len(),
-        items = items
-    )
-}

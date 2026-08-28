@@ -121,110 +121,32 @@ fn trim_units(v: &Value) -> Value {
 /// `fleet` EMPTY is the default and the common case: one export, one machine.
 /// Pass peers to fold the whole mesh into the same file — everything the
 /// panel could show, at the cost of a file several times the size.
-pub(crate) fn export_snapshot(
+/// The Markdown report for ONE machine.
+///
+/// Lifted out of export_snapshot unchanged so that every machine in a fleet
+/// export gets the same report, not just the one the cursor was on. A peer
+/// page whose report was a stub would be a page nobody opens twice.
+fn report(
     s: &Value,
-    target: Option<String>,
+    host: &str,
+    user: &str,
+    stamp: &str,
+    target: Option<&str>,
     files: &[String],
     fleet: &[(String, Value)],
-) -> Result<String, String> {
+) -> String {
     let hi = |k: &str| text(s, &format!("host_info.{k}"));
-    let host = if hi("host").is_empty() { "unknown".to_string() } else { hi("host") };
-    let user = if hi("user").is_empty() { "unknown".to_string() } else { hi("user") };
-    // date(1) rather than arithmetic on a unix counter: this name is for a
-    // human to find later, so it wants LOCAL time, and those rules live in the
-    // system's timezone database rather than in a formula worth rewriting.
-    let stamp = std::process::Command::new("date")
-        .arg("+%Y-%m-%d_%H-%M-%S")
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|x| x.trim().to_string())
-        .filter(|x| !x.is_empty())
-        .ok_or("could not read the clock")?;
-
-    let safe = |x: &str| -> String {
-        x.chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
-            .collect()
-    };
-    // ~/.watchdog, not $HOME: exports accumulate — one pair per press — and
-    // a home directory is the wrong place to accumulate anything. One
-    // directory means they are findable, listable and deletable as a set.
-    // Two directories under it, not one: `exports` is the machine-readable
-    // pair plus the report, `html` is the same export as a page. They were one
-    // flat directory, which meant the thing you open and the thing you feed to
-    // a tool were interleaved and neither could be listed on its own.
-    let home = std::env::var("HOME").map_err(|_| "no HOME".to_string())?;
-    let dir = format!("{home}/.watchdog/exports");
-    let html_dir = format!("{home}/.watchdog/html");
-    fs::create_dir_all(&dir).map_err(|e| format!("{dir}: {e}"))?;
-    fs::create_dir_all(&html_dir).map_err(|e| format!("{html_dir}: {e}"))?;
-    let name = format!("{}-{}-{stamp}", safe(&host), safe(&user));
-    let stem = format!("{dir}/{name}");
-
-    // ONE MACHINE BY DEFAULT — the one being measured, whichever that is.
-    // `target` picks it, so exporting while viewing a peer writes that peer's
-    // file under that peer's name, and the file tree is the one on screen.
-    //
-    // The fleet was 772KB of a 1030KB export and is now opt-in, because an
-    // export is normally a snapshot OF something and folding four other
-    // machines into it made the common case pay for the rare one.
-    //
-    // Still an envelope rather than the bare snapshot: the file tree is read
-    // from disk by the panel and never appears in what the sampler publishes.
-    let mut envelope = serde_json::Map::new();
-    envelope.insert("snapshot".into(), trim_units(s));
-    envelope.insert("files".into(), serde_json::json!(files));
-    envelope.insert("exported".into(), serde_json::json!(stamp));
-    envelope.insert(
-        "measured".into(),
-        serde_json::json!(target.clone().unwrap_or_else(|| "local".into())),
-    );
-
-    // DEDUPED BY MACHINE, not by alias. ~/.ssh/config gives several ways in to
-    // the same box — oci-analytics, -pub and -v6 are one host — and the fleet
-    // map is keyed by alias, so a naive dump wrote that machine's whole
-    // snapshot three times. The peer's own hostname is the identity; the
-    // aliases that reached it are recorded beside it, because which route
-    // answered is worth knowing and costs a string.
-    if !fleet.is_empty() {
-        let mut by_host: serde_json::Map<String, Value> = serde_json::Map::new();
-        let mut aliases: std::collections::BTreeMap<String, Vec<String>> = Default::default();
-        for (alias, v) in fleet {
-            let peer = text(v, "host_info.host");
-            let key = if peer.is_empty() { alias.clone() } else { peer };
-            aliases.entry(key.clone()).or_default().push(alias.clone());
-            by_host.entry(key).or_insert_with(|| trim_units(v));
-        }
-        envelope.insert("fleet".into(), Value::Object(by_host));
-        envelope.insert("fleet_aliases".into(), serde_json::json!(aliases));
-    }
-    let envelope = Value::Object(envelope);
-    // Compact, not pretty. Indentation was 35% of the file and this is the
-    // machine-readable half of the pair — the Markdown beside it is the one
-    // meant to be read. `jq .` puts the whitespace back for free.
-    let json = serde_json::to_string(&envelope).map_err(|e| e.to_string())?;
-    fs::write(format!("{stem}.json"), json).map_err(|e| format!("{stem}.json: {e}"))?;
-
-    // The same data as YAML, for feeding to a model. No braces, no commas, no
-    // quotes on most strings — the structure costs a fraction of the tokens
-    // JSON spends on punctuation, and nothing is dropped to get there.
-    let mut yaml = String::new();
-    to_yaml(&envelope, 0, &mut yaml);
-    fs::write(format!("{stem}.yaml"), yaml.trim_start_matches('\n'))
-        .map_err(|e| format!("{stem}.yaml: {e}"))?;
-
     let n = |k: &str| num(s, k);
     let mut m = String::new();
     m.push_str(&format!("# {host} · {stamp}\n\n"));
-    if let Some(a) = &target {
+    if let Some(a) = target {
         m.push_str(&format!(
             "> Collected from `{a}` over ssh by the hub, not published by that machine.\n\n"
         ));
     }
     let row = |m: &mut String, k: &str, v: String| m.push_str(&format!("| {k} | {v} |\n"));
     m.push_str("| | |\n|---|---|\n");
-    row(&mut m, "user", user.clone());
+    row(&mut m, "user", user.to_string());
     row(&mut m, "os", hi("os"));
     row(&mut m, "kernel", hi("kernel"));
     row(&mut m, "uptime", fmt_uptime(n("totals.since_s")));
@@ -446,18 +368,181 @@ pub(crate) fn export_snapshot(
          The YAML is the same content at roughly a third of the tokens.</sub>\n",
         if fleet.is_empty() { "" } else { " and every fleet peer" }
     ));
+    m
+}
+
+pub(crate) fn export_snapshot(
+    s: &Value,
+    target: Option<String>,
+    files: &[String],
+    fleet: &[(String, Value)],
+) -> Result<String, String> {
+    let hi = |k: &str| text(s, &format!("host_info.{k}"));
+    let host = if hi("host").is_empty() { "unknown".to_string() } else { hi("host") };
+    let user = if hi("user").is_empty() { "unknown".to_string() } else { hi("user") };
+    // date(1) rather than arithmetic on a unix counter: this name is for a
+    // human to find later, so it wants LOCAL time, and those rules live in the
+    // system's timezone database rather than in a formula worth rewriting.
+    let stamp = std::process::Command::new("date")
+        .arg("+%Y-%m-%d_%H-%M-%S")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|x| x.trim().to_string())
+        .filter(|x| !x.is_empty())
+        .ok_or("could not read the clock")?;
+
+    let safe = |x: &str| -> String {
+        x.chars()
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .collect()
+    };
+    // ~/.watchdog, not $HOME: exports accumulate — one pair per press — and
+    // a home directory is the wrong place to accumulate anything. One
+    // directory means they are findable, listable and deletable as a set.
+    // Two directories under it, not one: `exports` is the machine-readable
+    // pair plus the report, `html` is the same export as a page. They were one
+    // flat directory, which meant the thing you open and the thing you feed to
+    // a tool were interleaved and neither could be listed on its own.
+    let home = std::env::var("HOME").map_err(|_| "no HOME".to_string())?;
+    let dir = format!("{home}/.watchdog/exports");
+    let html_dir = format!("{home}/.watchdog/html");
+    fs::create_dir_all(&dir).map_err(|e| format!("{dir}: {e}"))?;
+    fs::create_dir_all(&html_dir).map_err(|e| format!("{html_dir}: {e}"))?;
+    let name = format!("{}-{}-{stamp}", safe(&host), safe(&user));
+    let stem = format!("{dir}/{name}");
+
+    // ONE MACHINE BY DEFAULT — the one being measured, whichever that is.
+    // `target` picks it, so exporting while viewing a peer writes that peer's
+    // file under that peer's name, and the file tree is the one on screen.
+    //
+    // The fleet was 772KB of a 1030KB export and is now opt-in, because an
+    // export is normally a snapshot OF something and folding four other
+    // machines into it made the common case pay for the rare one.
+    //
+    // Still an envelope rather than the bare snapshot: the file tree is read
+    // from disk by the panel and never appears in what the sampler publishes.
+    let mut envelope = serde_json::Map::new();
+    envelope.insert("snapshot".into(), trim_units(s));
+    envelope.insert("files".into(), serde_json::json!(files));
+    envelope.insert("exported".into(), serde_json::json!(stamp));
+    envelope.insert(
+        "measured".into(),
+        serde_json::json!(target.clone().unwrap_or_else(|| "local".into())),
+    );
+
+    // DEDUPED BY MACHINE, not by alias. ~/.ssh/config gives several ways in to
+    // the same box — oci-analytics, -pub and -v6 are one host — and the fleet
+    // map is keyed by alias, so a naive dump wrote that machine's whole
+    // snapshot three times. The peer's own hostname is the identity; the
+    // aliases that reached it are recorded beside it, because which route
+    // answered is worth knowing and costs a string.
+    if !fleet.is_empty() {
+        let mut by_host: serde_json::Map<String, Value> = serde_json::Map::new();
+        let mut aliases: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+        for (alias, v) in fleet {
+            let peer = text(v, "host_info.host");
+            let key = if peer.is_empty() { alias.clone() } else { peer };
+            aliases.entry(key.clone()).or_default().push(alias.clone());
+            by_host.entry(key).or_insert_with(|| trim_units(v));
+        }
+        envelope.insert("fleet".into(), Value::Object(by_host));
+        envelope.insert("fleet_aliases".into(), serde_json::json!(aliases));
+    }
+    let envelope = Value::Object(envelope);
+    // Compact, not pretty. Indentation was 35% of the file and this is the
+    // machine-readable half of the pair — the Markdown beside it is the one
+    // meant to be read. `jq .` puts the whitespace back for free.
+    let json = serde_json::to_string(&envelope).map_err(|e| e.to_string())?;
+    fs::write(format!("{stem}.json"), &json).map_err(|e| format!("{stem}.json: {e}"))?;
+
+    // The same data as YAML, for feeding to a model. No braces, no commas, no
+    // quotes on most strings — the structure costs a fraction of the tokens
+    // JSON spends on punctuation, and nothing is dropped to get there.
+    let mut yaml = String::new();
+    to_yaml(&envelope, 0, &mut yaml);
+    fs::write(format!("{stem}.yaml"), yaml.trim_start_matches('\n'))
+        .map_err(|e| format!("{stem}.yaml: {e}"))?;
+
+    let m = report(s, &host, &user, &stamp, target.as_deref(), files, fleet);
     fs::write(format!("{stem}.md"), &m).map_err(|e| format!("{stem}.md: {e}"))?;
 
     // The page, and the listing that finds it. Written last so a failure here
     // cannot cost the exports that already landed — it is the readable copy,
     // not the record.
-    let title = format!("{host} · {stamp}");
-    let html = crate::dashboards::monitor::html::page(&title, &envelope, &m);
-    let hp = format!("{html_dir}/{name}.html");
-    fs::write(&hp, html).map_err(|e| format!("{hp}: {e}"))?;
-    let ix = format!("{html_dir}/index.html");
-    fs::write(&ix, crate::dashboards::monitor::html::index(&html_dir))
-        .map_err(|e| format!("{ix}: {e}"))?;
+    // ONE DIRECTORY, EVERY MACHINE. `exports` is the record and is stamped so
+    // it accumulates; `html` is the VIEW and is overwritten, so it always
+    // describes now. That is why the names here are stable rather than
+    // stamped: a switcher whose links rot after the next export is not a
+    // switcher, and the fleet is only navigable if every page can reach every
+    // other one by a name known before either was written.
+    //
+    // The local machine is index.html rather than a file named after it,
+    // because opening this directory is how it gets read and index.html is
+    // what that opens.
+    let mut machines: Vec<(String, String, Value, Option<String>)> =
+        vec![(host.clone(), "index.html".to_string(), s.clone(), target.clone())];
+    for (alias, v) in fleet {
+        let peer = text(v, "host_info.host");
+        let label = if peer.is_empty() { alias.clone() } else { peer };
+        // Deduped by MACHINE, not alias, for the same reason the envelope is:
+        // -pub and -v6 are routes to one box, not three machines to switch
+        // between.
+        if machines.iter().any(|(l, ..)| *l == label) {
+            continue;
+        }
+        let file = format!("{}.html", safe(&label));
+        machines.push((label, file, v.clone(), Some(alias.clone())));
+    }
+
+    // Plain links, not a <select> driven by script: a link works from file://
+    // with the network off, which is the whole premise of this directory.
+    let switcher = |cur: &str| -> String {
+        let mut o = String::new();
+        for (label, file, _, _) in &machines {
+            o.push_str(&format!(
+                "<li><a class=\"m{}\" href=\"{}\">{}</a></li>",
+                if file.as_str() == cur { " on" } else { "" },
+                file,
+                crate::dashboards::monitor::html::esc(label)
+            ));
+        }
+        o
+    };
+
+    for (label, file, snap, from) in &machines {
+        let local = file.as_str() == "index.html";
+        // The file tree is read off disk by the panel and only exists for the
+        // machine it was read on; a peer page claiming the hub's directories
+        // would be worse than one with no files tab at all.
+        let mfiles: &[String] = if local { files } else { &[] };
+        let muser = if local { user.clone() } else { text(snap, "host_info.user") };
+        let mreport = report(snap, label, &muser, &stamp, from.as_deref(), mfiles, &[]);
+
+        let mut env = serde_json::Map::new();
+        env.insert("snapshot".into(), trim_units(snap));
+        env.insert("files".into(), serde_json::json!(mfiles));
+        env.insert("exported".into(), serde_json::json!(stamp));
+        env.insert(
+            "measured".into(),
+            serde_json::json!(from.clone().unwrap_or_else(|| "local".into())),
+        );
+        let env = Value::Object(env);
+
+        // The JSON BESIDE the page, not only inside it. The page keeps its
+        // inline copy because a file:// page cannot fetch a sibling — browsers
+        // read that as cross-origin — and a report that only opens off a server
+        // is not one you can double-click. This copy is what a person or a tool
+        // picks up, so the directory can be handed over whole.
+        let hj = format!("{html_dir}/{}.json", safe(label));
+        fs::write(&hj, serde_json::to_string(&env).map_err(|e| e.to_string())?)
+            .map_err(|e| format!("{hj}: {e}"))?;
+
+        let title = format!("{label} · {stamp}");
+        let hp = format!("{html_dir}/{file}");
+        fs::write(&hp, crate::dashboards::monitor::html::page(&title, &env, &mreport, &switcher(file)))
+            .map_err(|e| format!("{hp}: {e}"))?;
+    }
 
     Ok(stem)
 }

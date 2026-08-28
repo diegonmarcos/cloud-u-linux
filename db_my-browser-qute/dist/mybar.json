@@ -113,6 +113,10 @@
     {
       "name": "Web Search",
       "url": "file:///home/diego/.config/my-browser-qute/qute-websearch.html"
+    },
+    {
+      "name": "watchdog",
+      "url": "file:///home/diego/.watchdog/html/index.html"
     }
   ],
   "plugins": [

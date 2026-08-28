@@ -2027,17 +2027,18 @@ impl Monitor {
     fn export_now(&mut self, all: bool) {
         let snap = self.snap.clone();
         let t = self.mesh.target();
-        // Peers are collected only when asked for — fleet() is an ssh round
-        // trip per peer, so the default export does not pay for it at all.
-        let fleet: Vec<(String, Value)> = if all {
-            self.mesh
-                .fleet()
-                .into_iter()
-                .filter_map(|(k, v)| v.ok().map(|v| (k, v)))
-                .collect()
-        } else {
-            Vec::new()
-        };
+        // EVERY peer, every time. fleet() does not go out on the network — it
+        // clones the map the background poller already keeps, so the machines
+        // cost nothing here and gating them behind a second key only meant the
+        // usual export produced a directory that could not switch machines.
+        // `all` still says whether they are FOLDED into one envelope; it no
+        // longer decides whether they are written at all.
+        let fleet: Vec<(String, Value)> = self
+            .mesh
+            .fleet()
+            .into_iter()
+            .filter_map(|(k, v)| v.ok().map(|v| (k, v)))
+            .collect();
         // Exporting without having opened the files tab should still carry the
         // tree rather than an empty list.
         // Whatever is loaded for the machine currently being measured, and
@@ -2050,10 +2051,11 @@ impl Monitor {
         // the level that carries the shape of the tree without the leaf spray
         // of L4, and one pane is the whole of it.
         let files: Vec<String> = levels[2].clone();
-        self.msg = Some(match export_snapshot(&snap, t, &files, &fleet) {
+        let pages = fleet.len() + 1;
+        self.msg = Some(match export_snapshot(&snap, t, &files, &fleet, all) {
             Ok(stem) => {
-                let what = if all { format!(" + {} peers", fleet.len()) } else { String::new() };
-                (format!("exported {stem}.json .yaml .md{what}"), false)
+                let what = if all { " (fleet folded in)" } else { "" };
+                (format!("exported {stem}.json .yaml .md · {pages} pages + json → ~/.watchdog/html{what}"), false)
             }
             Err(e) => (format!("export failed: {e}"), true),
         });
