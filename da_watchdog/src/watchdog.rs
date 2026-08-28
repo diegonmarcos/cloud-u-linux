@@ -3655,6 +3655,38 @@ fn drain_kill_requests() {
 /// Publish atomically — a widget polling on its own timer must never read a
 /// half-written file. Write to a sibling temp then rename(2), same as the
 /// status line's publisher.
+/// ONE publisher per snapshot, enforced by the kernel.
+///
+/// Two watchdogs on the same machine both write the same path, and because
+/// `publish` lands by rename each one wins a WHOLE snapshot at a time — so a
+/// panel reading that file sees the two builds alternate, not merge. That is
+/// exactly what a deploy which replaces the binary without stopping the old
+/// process leaves behind: the old instance keeps running from a deleted inode
+/// and keeps publishing a snapshot missing every field added since, and the
+/// firewall page's ports appear and vanish on the beat of the two tick timers.
+///
+/// flock rather than a pidfile: the kernel drops the lock when the process
+/// dies however it dies, so a killed watchdog leaves nothing behind to clean
+/// up and the next one starts cleanly — where a stale pidfile needs liveness
+/// logic that is itself a race. The fd is deliberately leaked; closing it
+/// would release the lock while we are still the one publishing.
+///
+/// A lock that cannot be TAKEN (read-only runtime dir, a filesystem without
+/// flock) publishes anyway: going silent because we could not create a lock
+/// file would turn a missing nicety into a dead panel.
+fn claim_publisher(path: &PathBuf) -> bool {
+    use std::os::unix::io::AsRawFd;
+    let lock = path.with_extension("lock");
+    let Ok(f) = fs::OpenOptions::new().create(true).write(true).open(&lock) else {
+        return true;
+    };
+    if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        return false;
+    }
+    std::mem::forget(f);
+    true
+}
+
 fn publish(path: &PathBuf, body: &str) {
     let tmp = path.with_extension("tmp");
     if fs::write(&tmp, body).is_ok() {
@@ -3735,6 +3767,15 @@ pub fn spawn() {
         eprintln!("[watchdog] no writable runtime directory — not publishing metrics");
         return;
     };
+    // Before any sampling: if another watchdog already owns this snapshot,
+    // this process must not become a second writer of it.
+    if !claim_publisher(&path) {
+        eprintln!(
+            "[watchdog] another watchdog already publishes {} — not starting a second sampler",
+            path.display()
+        );
+        return;
+    }
     let ptn = proc_table_n();
     std::thread::spawn(move || {
         let (mut prev, mut prev_cores) = read_cpu_all();
