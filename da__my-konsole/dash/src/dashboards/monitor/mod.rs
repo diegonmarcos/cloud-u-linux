@@ -259,6 +259,29 @@ pub struct Monitor {
     detail_scroll: u16,
 }
 
+/// Write the report without a terminal: `my-konsole-dash export`.
+///
+/// The HTML was only reachable by pressing E inside the TUI, so it could not
+/// be refreshed by a timer, a hook, a login script or anything else that has
+/// no keyboard in front of it — and a page only a human can regenerate is a
+/// page that is always stale. That is exactly how ~/.watchdog/html came to
+/// hold a page written by a build since replaced twice over.
+///
+/// Same call the E key makes, so the two cannot drift apart.
+///
+/// This machine only. Folding the fleet in is what A does, and it needs the
+/// mesh poller — a background thread with ssh behind it. A one-shot has
+/// nothing to wait on and would write an empty peer list, which is worse than
+/// writing no peer list: it looks like the fleet is down.
+pub(crate) fn export_headless() -> Result<String, String> {
+    let p = snapshot_path();
+    let s = read_json(&p);
+    if text(&s, "host_info.host").is_empty() {
+        return Err(format!("no usable snapshot at {p} — is my-watchdog running?"));
+    }
+    export_snapshot(&s, None, &[], &[], false)
+}
+
 impl Monitor {
     pub fn new() -> Self {
         Monitor {
