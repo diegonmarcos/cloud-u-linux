@@ -5,15 +5,23 @@
 // and read by someone who does not have the panel — or by the same person, on
 // a phone, from a file the hub wrote hours ago.
 //
-// It is DATA-DRIVEN on purpose: the tab list is not a copy of the CLI's tab
-// list, it is whatever arrays-of-objects the snapshot actually holds. A field
-// added to the sampler shows up here on the next export with no edit, and a
-// section a machine cannot report simply has no tab instead of an empty one
-// that looks like a failure.
+// It looks like the panel on purpose. Same palette as view::draw (DIM borders,
+// LABEL column heads, the same light blue on the active thing), the same
+// rounded box with its title bracketed into the top edge and its count into
+// the bottom, and a monospace face throughout — because the thing being
+// described is a terminal, and a sans-serif card deck describing it reads as a
+// different product.
+//
+// STRUCTURE comes from the CLI, CONTENT comes from the snapshot. The sidebar
+// is TABS itself, so a tab added to the panel appears here with no edit; but
+// which rows exist is still whatever the snapshot actually holds, so a field
+// added to the sampler shows up on the next export and a machine that cannot
+// report a section gets a dimmed node rather than an empty table.
 //
 // Self-contained: no CDN, no fetch, no external font. The envelope is embedded
 // in the page, so the file works from a USB stick with the network off.
 
+use super::model::tabs::TABS;
 use serde_json::Value;
 
 /// The sections worth a tab, in the order the panel shows them. Anything else
@@ -24,19 +32,40 @@ const PREFERRED: &[&str] = &[
     "storage", "proc_table",
 ];
 
-/// The parent each section hangs under in the sidebar. A flat list of tabs was
-/// fine at eight and is not at thirty, and this page grows every time the
-/// sampler learns a new array.
+/// Which snapshot array backs each node of the CLI's tab tree.
 ///
-/// Same rule as PREFERRED above: this is an ordering hint, NOT a filter. A
-/// section no group claims lands under "other" rather than disappearing,
-/// because a field added to the sampler must never need an edit here to be
-/// visible.
-const GROUPS: &[(&str, &[&str])] = &[
-    ("docker", &["compose", "containers", "images", "volumes", "networks"]),
-    ("system", &["services", "slices", "proc_table", "units"]),
-    ("storage", &["disks", "storage", "mounts"]),
-    ("network", &["listening", "ifaces", "routes"]),
+/// The sidebar is the panel's own tree, not a second invention: TABS is the
+/// single source of the names, the order, the tab keys and the sub-tab
+/// numbering, so the two interfaces can be talked about in the same words —
+/// `:f2` is the second sub-tab in both. What TABS cannot know is which array
+/// in the exported snapshot holds a given view's rows, and that is all this
+/// table says.
+///
+/// An empty sub means the row belongs to the tab itself, which is how a tab
+/// with no sub-tabs gets children: `about` is four tables the panel keeps in
+/// its own header.
+///
+/// A node nothing claims still renders — dimmed and inert — because "the panel
+/// has this view and the export does not carry it" is worth seeing. Dropping
+/// it would read as the panel not having it either. Notably `logs` and
+/// `history`: both are live journal reads, and a snapshot is not a journal.
+const BACKED_BY: &[(&str, &str, &str)] = &[
+    ("proc", "normal", "proc_table"),
+    ("proc", "tree", "proc_spine"),
+    ("containers", "compose", "compose"),
+    ("containers", "images", "images"),
+    ("containers", "containers", "containers"),
+    ("containers", "volumes", "volumes"),
+    ("containers", "network", "networks"),
+    ("fleet", "storage", "storage"),
+    // Both firewalls are read from the one `listening` array; the panel's
+    // consolidated and container views are joins the export does not carry.
+    ("firewall", "os", "listening"),
+    ("files", "", "__files"),
+    ("about", "", "cores"),
+    ("about", "", "disks"),
+    ("about", "", "services"),
+    ("about", "", "slices"),
 ];
 
 pub(crate) fn esc(s: &str) -> String {
@@ -61,57 +90,98 @@ fn sections(snap: &Value) -> Vec<String> {
     out
 }
 
-/// One page: the envelope, the Markdown report, and the tabs.
+/// One page: the envelope, the Markdown report, and the panel's tab tree.
 ///
 /// `title` names the machine and the moment, so a directory of these is
-/// readable without opening any of them.
+/// readable from the tab bar alone. `switcher` is the other machines in the
+/// same export, already rendered — this module knows how a machine list looks,
+/// the exporter knows which machines there are.
 pub(crate) fn page(title: &str, envelope: &Value, markdown: &str, switcher: &str) -> String {
-    let snap = envelope.get("snapshot").unwrap_or(&Value::Null);
+    let snap = envelope.get("snapshot").unwrap_or(envelope);
     let tabs = sections(snap);
-    let files = envelope.get("files").and_then(|f| f.as_array()).map(|a| a.len()).unwrap_or(0);
-    let measured =
-        envelope.get("measured").and_then(|m| m.as_str()).unwrap_or("local").to_string();
+    let files =
+        envelope.get("files").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let measured = envelope.get("measured").and_then(|v| v.as_str()).unwrap_or("local").to_string();
 
-    // The sidebar is built here rather than in the page's JavaScript because
-    // the row counts come from the snapshot, and a menu that can say how big
-    // each section is before you open it is the difference between navigating
-    // and guessing.
     let count = |k: &str| snap.get(k).and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
-    let item = |k: &str, n: Option<usize>, on: bool| -> String {
-        format!(
-            "<li><a class=\"t{}\" data-k=\"{}\">{}{}</a></li>",
-            if on { " on" } else { "" },
-            esc(k),
-            esc(k.trim_start_matches('_')),
-            n.map(|n| format!("<b>{n}</b>")).unwrap_or_default()
-        )
-    };
-    let open = |g: &str| format!("<div class=\"sidebar-section\"><h3>{}</h3><ul>", esc(g));
+    let has = |k: &str| tabs.iter().any(|t| t == k);
 
-    let mut nav = open("overview");
-    nav.push_str(&item("__report", None, true));
-    nav.push_str(&item("__files", Some(files), false));
-    nav.push_str(&item("__raw", None, false));
+    // One row of the tree. `num` is the number the panel addresses the sub-tab
+    // by, kept visible for the same reason the panel prints it.
+    let row = |num: Option<usize>, label: &str, target: Option<&str>, badge: Option<String>| {
+        let n = num.map(|n| format!("<i class=\"n\">{n}</i>")).unwrap_or_default();
+        let b = badge.map(|b| format!("<b>{b}</b>")).unwrap_or_default();
+        match target {
+            Some(k) => {
+                format!("<li><a class=\"t\" data-k=\"{}\">{n}{}{b}</a></li>", esc(k), esc(label))
+            }
+            None => format!("<li><a class=\"off\">{n}{}</a></li>", esc(label)),
+        }
+    };
+    let head = |name: &str, key: &str| {
+        let k = if key.is_empty() {
+            String::new()
+        } else {
+            format!("<i class=\"k\">{}</i>", esc(key))
+        };
+        format!("<div class=\"grp\"><div class=\"tab\">{}{k}</div><ul>", esc(name))
+    };
+
+    let mut nav = head("overview", "");
+    nav.push_str("<li><a class=\"t on\" data-k=\"__report\">report</a></li>");
+    nav.push_str(&row(None, "raw envelope", Some("__raw"), None));
     nav.push_str("</ul></div>");
 
     let mut claimed: Vec<&str> = vec![];
-    for (g, keys) in GROUPS {
-        let mine: Vec<&String> = tabs.iter().filter(|t| keys.contains(&t.as_str())).collect();
-        if mine.is_empty() {
-            continue;
-        }
-        nav.push_str(&open(g));
-        for t in mine {
-            claimed.push(t.as_str());
-            nav.push_str(&item(t, Some(count(t)), false));
+    for t in TABS {
+        nav.push_str(&head(t.name, &t.key.to_string()));
+        if t.subs.is_empty() {
+            let mine: Vec<&str> = BACKED_BY
+                .iter()
+                .filter(|(tab, sub, _)| *tab == t.name && sub.is_empty())
+                .map(|(_, _, k)| *k)
+                .collect();
+            if mine.is_empty() {
+                nav.push_str(&row(None, t.name, None, None));
+            }
+            for k in mine {
+                if k == "__files" {
+                    nav.push_str(&row(None, "files", Some(k), Some(files.to_string())));
+                } else if has(k) {
+                    claimed.push(k);
+                    nav.push_str(&row(None, k, Some(k), Some(count(k).to_string())));
+                } else {
+                    nav.push_str(&row(None, k, None, None));
+                }
+            }
+        } else {
+            for (i, sb) in t.subs.iter().enumerate() {
+                let k = BACKED_BY
+                    .iter()
+                    .find(|(tab, sub, _)| *tab == t.name && *sub == sb.name)
+                    .map(|(_, _, k)| *k);
+                match k {
+                    Some(k) if has(k) => {
+                        claimed.push(k);
+                        nav.push_str(&row(
+                            Some(i + 1),
+                            sb.name,
+                            Some(k),
+                            Some(count(k).to_string()),
+                        ));
+                    }
+                    _ => nav.push_str(&row(Some(i + 1), sb.name, None, None)),
+                }
+            }
         }
         nav.push_str("</ul></div>");
     }
+
     let rest: Vec<&String> = tabs.iter().filter(|t| !claimed.contains(&t.as_str())).collect();
     if !rest.is_empty() {
-        nav.push_str(&open("other"));
+        nav.push_str(&head("other", ""));
         for t in rest {
-            nav.push_str(&item(t, Some(count(t)), false));
+            nav.push_str(&row(None, t, Some(t), Some(count(t).to_string())));
         }
         nav.push_str("</ul></div>");
     }
@@ -142,120 +212,151 @@ pub(crate) fn page(title: &str, envelope: &Value, markdown: &str, switcher: &str
         .replace("__DATA__", &data)
 }
 
-const TEMPLATE: &str = r##"<!doctype html><meta charset="utf-8">
+const TEMPLATE: &str = r##"<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>__TITLE__</title>
 <style>
-/* Same palette and shell as vm-pilot and the watchdog web page: one machine
-   panel should not look like a different product depending on which of the
-   three wrote it. */
-:root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--fg:#c9d1d9;--muted:#8b949e;--accent:#58a6ff;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--w:264px}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif}
-a{color:var(--accent);text-decoration:none}
-a:hover{text-decoration:underline}
-pre{margin:0;white-space:pre-wrap;word-break:break-word;font:12px/1.6 ui-monospace,Menlo,Consolas,monospace}
-
-/* SIDEBAR — pinned on a wide screen, drawer on a narrow one. The hamburger
-   is not decoration: this list is the section index and it grows every time
-   the sampler learns a new array. */
-.hamburger{position:fixed;top:12px;left:12px;z-index:1000;background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:5px 11px;font-size:16px;cursor:pointer}
-.sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--w);z-index:999;background:var(--panel);border-right:1px solid var(--border);padding:16px;overflow-y:auto;transform:translateX(-100%);transition:transform .2s ease}
-.sidebar.open{transform:translateX(0)}
-.sidebar-header{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
-.sidebar-header h2{margin:0;font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.close-btn{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
-.sidebar-section{margin-top:18px}
-.sidebar-section h3{margin:0 0 6px;font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.sidebar-section ul{margin:0;padding:0;list-style:none}
-.sidebar-section li{padding:1px 0}
-.sidebar-section a{display:flex;justify-content:space-between;gap:8px;padding:4px 8px;border-radius:6px;font-size:.85rem;color:var(--fg);cursor:pointer}
-.sidebar-section a:hover{background:#1f2630;text-decoration:none}
-.sidebar-section a.on{background:#1f6feb26;color:var(--accent);box-shadow:inset 2px 0 0 var(--accent)}
-.sidebar-section a b{font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
-.sidebar-section a.on b{color:var(--accent)}
-.scrim{position:fixed;inset:0;background:#0008;z-index:998;display:none}
-.scrim.on{display:block}
-
-.content{padding:56px 16px 24px}
-.status-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px}
-.dot{width:9px;height:9px;border-radius:50%;background:var(--ok);flex:none}
-.crumb{color:var(--muted);font-size:.85rem}
-.crumb b{color:var(--fg);font-weight:600}
-
-/* PANEL — a table is a child of the section that names it, not a bare grid
-   dropped on the page. */
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;min-width:0;overflow:hidden}
-.panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border)}
-.panel-head h3{margin:0;font-size:.9rem}
-.panel-head .count{color:var(--muted);font-size:.78rem;font-variant-numeric:tabular-nums}
-.panel-body{padding:12px}
-/* Wide tables scroll inside their own panel; the page itself never does. */
-.scroll{overflow:auto;max-height:70vh}
-table{border-collapse:collapse;width:100%;font-size:.8rem}
-th,td{text-align:left;padding:5px 10px;white-space:nowrap;border-bottom:1px solid var(--border)}
-th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--panel);z-index:1}
-tbody tr:hover td{background:#1f26304d}
-tr:last-child td{border-bottom:none}
-td.num{text-align:right;font-variant-numeric:tabular-nums}
-td.no{color:var(--muted)}
-.pill{padding:1px 7px;border-radius:10px;font-size:.72rem;border:1px solid var(--border);color:var(--muted)}
-.pill.ok{color:var(--ok);border-color:#3fb95066}
-.pill.bad{color:var(--bad);border-color:#f8514966}
-
-@media (min-width:1000px){
-  .hamburger,.scrim{display:none}
-  .sidebar{transform:none}
-  .content{margin-left:var(--w);padding-top:20px}
+/* view::draw's palette, lifted value for value. The panel and this page
+   describe the same machine and should not look like two products. */
+:root{
+  --bg:#0b0e14;      /* the terminal under the panel */
+  --dim:#3a3e4a;     /* draw::DIM — every border the panel draws */
+  --label:#788091;   /* draw::LABEL — column heads, inactive tabs */
+  --accent:#78c8ff;  /* the active tab and every box title */
+  --ok:#40dc78;      /* grad(0.0) */
+  --warn:#f0de40;    /* grad(0.5) */
+  --bad:#f04848;     /* grad(1.0) */
+  --fg:#c8ccd4;
+  --rule:#1b1f27;
+  --w:272px;
 }
-</style>
+*{box-sizing:border-box}
+/* Monospace throughout: the subject is a terminal. */
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,"DejaVu Sans Mono",monospace}
 
-<button class="hamburger" id="ham" aria-label="sections">&#9776;</button>
+/* ── the frame's top line ────────────────────────────────────────────────── */
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 16px}
+.chip{background:var(--accent);color:var(--bg);font-weight:700;padding:1px 8px}
+.asof{color:var(--label)}
+.tag{color:var(--label);border:1px solid var(--dim);padding:0 6px;font-size:11px}
+.keys{color:var(--dim);font-size:11px;margin-left:auto}
+
+/* ── the drawer ──────────────────────────────────────────────────────────── */
+.ham{position:fixed;top:10px;left:10px;z-index:60;background:var(--bg);color:var(--accent);
+  border:1px solid var(--dim);border-radius:5px;padding:2px 9px;font:inherit;cursor:pointer}
+.scrim{position:fixed;inset:0;background:#000a;opacity:0;pointer-events:none;
+  transition:opacity .18s;z-index:39}
+.scrim.on{opacity:1;pointer-events:auto}
+.sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--w);z-index:40;
+  background:var(--bg);border-right:1px solid var(--dim);padding:10px 0 28px;overflow-y:auto;
+  transform:translateX(-100%);transition:transform .18s ease}
+.sidebar.open{transform:none}
+.sb-head{display:flex;align-items:center;justify-content:space-between;padding:2px 12px 8px}
+.sb-head h2{margin:0;font-size:12px;color:var(--accent);font-weight:700}
+.x{background:none;border:none;color:var(--label);font:inherit;font-size:16px;cursor:pointer}
+
+/* ── the tab tree ────────────────────────────────────────────────────────── */
+.grp{margin-top:10px}
+.tab{display:flex;align-items:center;gap:6px;padding:0 12px 3px;
+  color:var(--label);font-size:11px;letter-spacing:.09em;text-transform:uppercase}
+.tab .k{color:var(--dim);border:1px solid var(--dim);border-radius:3px;
+  padding:0 4px;font-size:10px;font-style:normal}
+.grp ul{list-style:none;margin:0;padding:0}
+/* The spine and the elbows, drawn rather than typed: same shape the panel
+   prints, and it stays right when a branch is the last one. */
+.grp li{position:relative;padding-left:24px}
+.grp li::before{content:"";position:absolute;left:14px;top:0;height:100%;
+  border-left:1px solid var(--dim)}
+.grp li:last-child::before{height:50%}
+.grp li::after{content:"";position:absolute;left:14px;top:50%;width:6px;
+  border-top:1px solid var(--dim)}
+.grp a{display:flex;align-items:baseline;gap:6px;padding:2px 12px 2px 0;
+  color:var(--label);text-decoration:none;cursor:pointer}
+.grp a:hover{color:var(--fg)}
+.grp a.on{color:var(--accent);font-weight:700}
+/* A view the panel has that this export does not carry. Shown, not hidden. */
+.grp a.off{color:var(--dim);cursor:default}
+.grp a .n{color:var(--dim);font-style:normal;font-size:11px}
+.grp a b{margin-left:auto;color:var(--dim);font-weight:400;font-size:11px}
+.grp a.on b{color:var(--accent)}
+
+/* ── content ─────────────────────────────────────────────────────────────── */
+.content{padding:52px 16px 40px}
+@media (min-width:1000px){
+  .ham,.scrim,.x{display:none}
+  .sidebar{transform:none}
+  .content{margin-left:var(--w);padding-top:18px}
+}
+
+/* draw::bbox — rounded frame, title bracketed into the top edge, the count
+   bracketed into the bottom-right where the panel parks its hint. */
+.panel{position:relative;border:1px solid var(--dim);border-radius:6px;margin:0 0 18px}
+.panel-head h3{position:absolute;top:-9px;left:12px;margin:0;padding:0 3px;background:var(--bg);
+  font-size:12px;font-weight:700;color:var(--accent)}
+.panel-head h3::before{content:"\2524";color:var(--dim);font-weight:400}
+.panel-head h3::after{content:"\251C";color:var(--dim);font-weight:400}
+.panel-head .count{position:absolute;bottom:-9px;right:12px;padding:0 3px;background:var(--bg);
+  color:var(--dim);font-size:11px}
+.panel-head .count::before{content:"\2524"}
+.panel-head .count::after{content:"\251C"}
+.panel-body{padding:16px 13px 13px}
+pre{margin:0;white-space:pre-wrap;word-break:break-word;color:var(--fg);font:inherit}
+
+/* Wide tables scroll inside their own box; the page itself never does. */
+.scroll{overflow:auto;max-height:76vh;margin:14px 2px 6px;border-radius:0 0 5px 5px}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{text-align:left;padding:3px 10px;white-space:nowrap;border-bottom:1px solid var(--rule)}
+th{position:sticky;top:0;z-index:1;background:var(--bg);color:var(--label);font-weight:400;
+  font-size:11px;letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--dim)}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.nil{color:var(--dim)}
+tr:hover td{background:#141821}
+tr:last-child td{border-bottom:none}
+.pill{border:1px solid var(--dim);border-radius:3px;padding:0 5px;font-size:11px}
+.pill.ok{color:var(--ok);border-color:#235c3a}
+.pill.warn{color:var(--warn);border-color:#5c5423}
+.pill.bad{color:var(--bad);border-color:#5c2323}
+</style></head><body>
+<button class="ham" id="ham">&#9776;</button>
 <div class="scrim" id="scrim"></div>
-
-<aside class="sidebar" id="sb">
-  <div class="sidebar-header">
-    <h2>__TITLE__</h2>
-    <button class="close-btn" id="cls" aria-label="close">&times;</button>
-  </div>
-
-  <!-- MACHINES first: which box you are reading is a bigger question than
-       which section of it, so it sits above the sections rather than in
-       them. Plain links to sibling files — no fetch, works from a USB stick. -->
-  <div class="sidebar-section">
-    <h3>machine</h3>
-    <ul class="switch">__SWITCH__</ul>
-  </div>
+<nav class="sidebar" id="sb">
+  <div class="sb-head"><h2>my-konsole</h2><button class="x" id="cls">&times;</button></div>
+  <div class="grp"><div class="tab">machine</div><ul>__SWITCH__</ul></div>
   __NAV__
-</aside>
-
-<div class="content">
-  <div class="status-bar">
-    <span class="dot"></span>
-    <span class="crumb"><b>__TITLE__</b></span>
-    <span class="crumb">· measured __MEASURED__ · __FILES__ paths</span>
+</nav>
+<main class="content">
+  <div class="bar">
+    <span class="chip">__TITLE__</span>
+    <span class="asof">measured __MEASURED__</span>
+    <span class="tag">static</span>
+    <span class="keys">__FILES__ files tracked</span>
   </div>
   <div id="out"></div>
-</div>
-
-<script type="application/json" id="d">__DATA__</script>
+</main>
+<script type="application/json" id="env">__DATA__</script>
 <script>
-const E = JSON.parse(document.getElementById('d').textContent);
+const E = JSON.parse(document.getElementById('env').textContent);
 const S = E.snapshot || {};
 const out = document.getElementById('out');
-function esc(s){ return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+/* The panel colours a socket by who can reach it; so does this. */
+const SCOPE = { world:'bad', mesh:'warn', loopback:'ok', running:'ok', exited:'bad', dead:'bad' };
 function cell(v){
-  if (v === null || v === undefined || v === '') return '<td class="no">&mdash;</td>';
+  if (v === null || v === undefined || v === '') return '<td class="nil">-</td>';
   if (typeof v === 'boolean') return '<td><span class="pill ' + (v?'ok':'bad') + '">' + v + '</span></td>';
   if (typeof v === 'number') return '<td class="num">' + v + '</td>';
   if (typeof v === 'object') return '<td>' + esc(JSON.stringify(v)) + '</td>';
-  return '<td>' + esc(String(v)) + '</td>';
+  const c = SCOPE[String(v).toLowerCase()];
+  if (c) return '<td><span class="pill ' + c + '">' + esc(v) + '</span></td>';
+  return '<td>' + esc(v) + '</td>';
 }
 function table(rows){
-  // Columns are the UNION of every row's keys: a row missing one is a row
-  // missing a value, not a reason to drop the column for everyone else.
+  if (!rows.length) return '<div class="panel-body"><pre>no rows</pre></div>';
+  /* Union of keys, not the first row's: a row that carries one extra field
+     must not make that field invisible for the whole table. */
   const cols = [];
-  for (const r of rows) for (const k of Object.keys(r)) if (!cols.includes(k)) cols.push(k);
+  rows.forEach(r => Object.keys(r).forEach(k => { if (!cols.includes(k)) cols.push(k); }));
   const head = cols.map(c => '<th>' + esc(c) + '</th>').join('');
   const body = rows.map(r => '<tr>' + cols.map(c => cell(r[c])).join('') + '</tr>').join('');
   return '<div class="scroll"><table><thead><tr>' + head + '</tr></thead><tbody>'
@@ -286,4 +387,5 @@ document.querySelectorAll('.t').forEach(b => b.onclick = () => {
 });
 show('__report');
 </script>
+</body></html>
 "##;
