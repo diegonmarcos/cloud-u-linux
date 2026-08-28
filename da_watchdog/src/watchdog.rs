@@ -3674,10 +3674,13 @@ fn drain_kill_requests() {
 /// A lock that cannot be TAKEN (read-only runtime dir, a filesystem without
 /// flock) publishes anyway: going silent because we could not create a lock
 /// file would turn a missing nicety into a dead panel.
-fn claim_publisher(path: &PathBuf) -> bool {
+fn claim_publisher(path: &std::path::Path) -> bool {
     use std::os::unix::io::AsRawFd;
     let lock = path.with_extension("lock");
-    let Ok(f) = fs::OpenOptions::new().create(true).write(true).open(&lock) else {
+    // Never truncated: the lock lives in the fd, not in the bytes, and a
+    // second instance must not be able to disturb the holder's file at all.
+    let Ok(f) = fs::OpenOptions::new().create(true).write(true).truncate(false).open(&lock)
+    else {
         return true;
     };
     if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
