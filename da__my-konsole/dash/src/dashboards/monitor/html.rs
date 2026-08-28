@@ -141,8 +141,11 @@ pub(crate) fn page(title: &str, envelope: &Value, markdown: &str, switcher: &str
                 .filter(|(tab, sub, _)| *tab == t.name && sub.is_empty())
                 .map(|(_, _, k)| *k)
                 .collect();
+            // Neither sub-tabs nor an array behind it. Label the node with
+            // what the tab IS rather than repeating the name one line above
+            // it — which is the only thing `desc` is good for out here.
             if mine.is_empty() {
-                nav.push_str(&row(None, t.name, None, None));
+                nav.push_str(&row(None, t.desc, None, None));
             }
             for k in mine {
                 if k == "__files" {
