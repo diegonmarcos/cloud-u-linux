@@ -357,7 +357,12 @@ impl Monitor {
                     // Addressed to the machine, not a pid — saying "pid 0"
                     // here would be technically true and completely useless.
                     "REAP" => "reap → queued: SIGCHLD to every zombie's parent".to_string(),
-                    "RECLAIM" => "reclaim → queued: pushing this session's cold pages out".to_string(),
+                    "RECLAIM clean" => {
+                        "reclaim clean → queued: file-backed pages only, no swap".to_string()
+                    }
+                    "RECLAIM full" => {
+                        "reclaim full → queued: anonymous pages too, expect swap writes".to_string()
+                    }
                     "RESTART" => format!("restart → pid {pid} queued for the daemon"),
                     _ => format!("SIG{sig} → pid {pid} queued for the daemon"),
                 },
@@ -2133,7 +2138,9 @@ impl Monitor {
                 // pid 0: these are addressed to the machine, not a process.
                 // The daemon answers them before its per-pid guards.
                 "REAP" => me.request_kill(0, "REAP"),
-                "RECLAIM" => me.request_kill(0, "RECLAIM"),
+                // The mode rides along on the same mailbox line, so the daemon
+                // still decides what a reclaim is allowed to do.
+                v @ ("RECLAIM clean" | "RECLAIM full") => me.request_kill(0, v),
                 _ => {
                     me.orphans = !me.orphans;
                     me.msg = Some((

@@ -37,7 +37,7 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const INTERVAL_MS: u64 = 2_000;
@@ -3341,6 +3341,41 @@ fn reap_zombies() -> String {
     format!("{seen} zombies, nudged {nudged} parents with SIGCHLD")
 }
 
+/// How hard a reclaim is allowed to push.
+///
+/// The distinction is what it costs to give the page back, not how much is
+/// asked for. Clean pages are file-backed — the kernel already has them on
+/// disk, so dropping one costs a re-read and nothing else. Anonymous pages
+/// have nowhere to go but swap, so freeing one costs a write now and a fault
+/// later, and it is the difference between a tidy-up and a stall.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Reclaim {
+    /// File-backed pages only, never swap. Safe to run on a busy machine.
+    Clean,
+    /// Everything the kernel will give up, anonymous pages included, repeated
+    /// until it stops making progress.
+    Full,
+}
+
+impl Reclaim {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "clean" => Some(Reclaim::Clean),
+            "full" => Some(Reclaim::Full),
+            _ => None,
+        }
+    }
+}
+
+/// One reclaim pass is one write. Full mode repeats until a pass frees less
+/// than this, so it stops when the kernel stops giving rather than after an
+/// arbitrary number of rounds.
+const RECLAIM_FLOOR: u64 = 4 * 1024 * 1024;
+
+/// Full mode still needs a ceiling, or a cgroup that reclaims a trickle every
+/// pass keeps the loop alive forever.
+const RECLAIM_ROUNDS: usize = 16;
+
 /// Ask the kernel to reclaim memory from this user's session.
 ///
 /// Not drop_caches: that is root-only and system-wide, and dropping the page
@@ -3352,37 +3387,73 @@ fn reap_zombies() -> String {
 /// The kernel reclaims up to the requested amount and may return EAGAIN having
 /// reclaimed less; that is not an error worth reporting as one, so the result
 /// is measured — memory.current before and after — rather than believed.
-fn reclaim_session(bytes: u64) -> String {
+pub fn reclaim_session(bytes: u64, mode: Reclaim) -> String {
     let base = format!(
         "/sys/fs/cgroup/user.slice/user-{}.slice/user@{}.service",
         current_uid(),
         current_uid()
     );
+    let path = format!("{base}/memory.reclaim");
+    if !Path::new(&path).exists() {
+        // cgroup v1, a non-systemd session, or a kernel without the knob. Say
+        // which, rather than reporting zero freed and letting it read as "there
+        // was nothing to reclaim".
+        return format!("no memory.reclaim at {path} — cgroup v2 delegation not available here");
+    }
     let cur = || -> u64 {
         fs::read_to_string(format!("{base}/memory.current"))
             .ok()
             .and_then(|s| s.trim().parse().ok())
             .unwrap_or(0)
     };
-    let before = cur();
-    if let Err(e) = fs::write(format!("{base}/memory.reclaim"), bytes.to_string()) {
-        // EAGAIN means "reclaimed some, could not reach the target", which is
-        // a normal outcome and not worth surfacing as a failure.
-        if e.raw_os_error() != Some(libc::EAGAIN) {
-            return format!("memory.reclaim: {e}");
+    // swappiness=0 is what makes clean mode clean: it tells the kernel to take
+    // file pages and leave anonymous ones alone. Kernels before 6.4 reject the
+    // argument outright, so a rejected write falls back to a plain target
+    // rather than failing — an older kernel gets a less selective reclaim, not
+    // no reclaim.
+    let one = |want: u64| -> Result<(), std::io::Error> {
+        if mode == Reclaim::Clean && fs::write(&path, format!("{want} swappiness=0")).is_ok() {
+            return Ok(());
         }
+        fs::write(&path, want.to_string())
+    };
+
+    let before = cur();
+    let mut rounds = 0;
+    let mut last = before;
+    loop {
+        rounds += 1;
+        if let Err(e) = one(bytes) {
+            // EAGAIN means "reclaimed some, could not reach the target", which
+            // is a normal outcome and not worth surfacing as a failure.
+            if e.raw_os_error() != Some(libc::EAGAIN) {
+                return format!("memory.reclaim: {e}");
+            }
+        }
+        let now = cur();
+        if mode == Reclaim::Clean
+            || rounds >= RECLAIM_ROUNDS
+            || last.saturating_sub(now) < RECLAIM_FLOOR
+        {
+            break;
+        }
+        last = now;
     }
     let after = cur();
     format!(
-        "session memory {} -> {} (freed {})",
+        "{} pass{} · session memory {} -> {} (freed {})",
+        rounds,
+        if rounds == 1 { "" } else { "es" },
         fmt_mib(before),
         fmt_mib(after),
         fmt_mib(before.saturating_sub(after))
     )
 }
 
+/// Memory is mebibytes, two decimals, like every other memory number the panel
+/// and the daemon print.
 fn fmt_mib(b: u64) -> String {
-    format!("{:.0}M", b as f64 / 1_048_576.0)
+    format!("{:.2} MiB", b as f64 / 1_048_576.0)
 }
 
 /// A signal requested from the panel. QML cannot signal a process, and giving a
@@ -3613,8 +3684,15 @@ fn drain_kill_requests() {
             continue;
         }
         if sig.eq_ignore_ascii_case("RECLAIM") {
-            let want: u64 = it.next().and_then(|x| x.parse().ok()).unwrap_or(1_073_741_824);
-            eprintln!("[watchdog] reclaim: {}", reclaim_session(want));
+            // "RECLAIM", "RECLAIM full", "RECLAIM clean 2147483648" — the word
+            // is optional so the old numeric-only line still means what it did.
+            let arg = it.next().unwrap_or("");
+            let (mode, size) = match Reclaim::parse(arg) {
+                Some(m) => (m, it.next()),
+                None => (Reclaim::Clean, Some(arg)),
+            };
+            let want: u64 = size.and_then(|x| x.parse().ok()).unwrap_or(1_073_741_824);
+            eprintln!("[watchdog] reclaim: {}", reclaim_session(want, mode));
             continue;
         }
         let restart = sig.eq_ignore_ascii_case("RESTART");

@@ -114,16 +114,43 @@ fn main() {
 
     if flag("--help") || flag("-h") {
         println!(
-            "usage: my-watchdog [--no-tray] [--once]\n\
+            "usage: my-watchdog [--no-tray] [--once]\n       \
+             my-watchdog reclaim [clean|full] [MiB]\n\
              \n\
              Samples this machine every {}ms and publishes one JSON snapshot,\n\
              then drains the kill/restart mailbox beside it.\n\
              \n\
              --no-tray   run headless (systemd, a server, a container)
                          (builds for the fleet have no tray compiled in at all)\n\
-             --once      write one snapshot to stdout and exit",
+             --once      write one snapshot to stdout and exit\n\
+             \n\
+             reclaim     hand memory back to the kernel from this user's\n\
+             \x20           session, and say how much actually moved\n\
+             \x20 clean   file-backed pages only, never swap — safe on a busy\n\
+             \x20           machine, costs a re-read and nothing more (default)\n\
+             \x20 full    anonymous pages too, so swap writes, repeated until\n\
+             \x20           the kernel stops giving anything back\n\
+             \x20 MiB     how much to ask for per pass (default 1024)",
             watchdog::interval_ms()
         );
+        return;
+    }
+
+    // Unprivileged and scoped to this user's cgroup, so it needs no daemon and
+    // no mailbox round trip: the tool IS the thing the mailbox verb calls.
+    if args.first().map(String::as_str) == Some("reclaim") {
+        let mode = match args.get(1) {
+            None => watchdog::Reclaim::Clean,
+            Some(a) => match watchdog::Reclaim::parse(a) {
+                Some(m) => m,
+                None => {
+                    eprintln!("my-watchdog reclaim: expected 'clean' or 'full', got {a:?}");
+                    std::process::exit(2);
+                }
+            },
+        };
+        let mib: u64 = args.get(2).and_then(|x| x.parse().ok()).unwrap_or(1024);
+        println!("{}", watchdog::reclaim_session(mib * 1_048_576, mode));
         return;
     }
 

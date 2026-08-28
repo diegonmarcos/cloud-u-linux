@@ -32,16 +32,21 @@ pub(crate) const ACTIONS: [(&str, &str); 8] = [
 /// Every one of them is a request on the same mailbox the signals use, so the
 /// daemon applies the same protected-slice policy to all of them. The panel
 /// decides nothing.
-pub(crate) const FREE: [(&str, &str, &str); 3] = [
+pub(crate) const FREE: [(&str, &str, &str); 4] = [
     (
         "REAP",
         "reap zombies",
         "SIGCHLD to each zombie's parent — one cannot be killed, only collected",
     ),
     (
-        "RECLAIM",
-        "reclaim session memory",
-        "push this session's cold pages out — scoped, not system-wide drop_caches",
+        "RECLAIM clean",
+        "reclaim clean memory",
+        "file-backed pages only, never swap — costs a re-read, safe while busy",
+    ),
+    (
+        "RECLAIM full",
+        "reclaim everything it will give",
+        "anonymous pages too, so swap writes — repeats until the kernel stops",
     ),
     (
         "ORPHANS",
