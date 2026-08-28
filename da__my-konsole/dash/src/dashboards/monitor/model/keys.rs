@@ -26,13 +26,21 @@ pub(crate) const ACTIONS: [(&str, &str); 8] = [
     ("KILL", "unignorable, no cleanup"),
 ];
 
-/// The `x` menu: things that give memory back, in increasing order of how
-/// much they disturb.
+/// The `x` key and the menu's "optimize" entry: everything that gives
+/// resources back, in increasing order of how much it disturbs.
 ///
 /// Every one of them is a request on the same mailbox the signals use, so the
 /// daemon applies the same protected-slice policy to all of them. The panel
 /// decides nothing.
-pub(crate) const FREE: [(&str, &str, &str); 4] = [
+///
+/// Nothing here needs root, which is a design constraint rather than a
+/// limitation: an optimization that asks for a password is one nobody runs,
+/// and the system journal, /var and the block device are not this user's to
+/// trim. What IS this user's — their session's pages, their cache directory,
+/// their journal, their docker, the nix store's garbage — is all of it.
+///
+/// Exactly nine, because the picker dispatches on the digits 1-9.
+pub(crate) const OPTIMIZE: [(&str, &str, &str); 9] = [
     (
         "REAP",
         "reap zombies",
@@ -47,6 +55,31 @@ pub(crate) const FREE: [(&str, &str, &str); 4] = [
         "RECLAIM full",
         "reclaim everything it will give",
         "anonymous pages too, so swap writes — repeats until the kernel stops",
+    ),
+    (
+        "OPTIMIZE cache",
+        "trim the cold user cache",
+        "~/.cache files untouched for 30 days — thumbnails, shaders, pip, npm",
+    ),
+    (
+        "OPTIMIZE journal",
+        "trim this user's journal",
+        "vacuum to 7 days — the system journal belongs to root and is untouched",
+    ),
+    (
+        "OPTIMIZE docker",
+        "prune docker leftovers",
+        "dangling images, stopped containers, build cache — nothing in use",
+    ),
+    (
+        "OPTIMIZE nix-gc",
+        "collect nix garbage",
+        "drop old profile generations, then GC the store — minutes, detached",
+    ),
+    (
+        "OPTIMIZE nix-optimise",
+        "dedup the nix store",
+        "hardlink identical store files — slow, frees a lot, changes nothing",
     ),
     (
         "ORPHANS",
@@ -113,7 +146,7 @@ pub(crate) const OTHER_KEYS: &[(&str, &str, &str)] = &[
     // skips this section for that reason.
     ("modal", "o", "in the detail view: open the binary's folder"),
     ("modal", ".", "in the files tab: show or hide dotfiles"),
-    ("acting", "x", "free memory — reap zombies, reclaim, find orphans"),
+    ("acting", "x", "system optimization — memory, cache, journal, docker, nix"),
     ("acting", "E", "export THIS machine — {host}-{user}-{time}.json, .yaml, .md"),
     ("acting", "A", "export all — the same, with every fleet peer folded in"),
     ("moving", "1-9", "jump to a sub-tab by the number the strip shows"),
@@ -127,7 +160,7 @@ pub(crate) const OTHER_KEYS: &[(&str, &str, &str)] = &[
     ("frame", "a", "auto-refresh on/off"),
     ("frame", "q", "quit — the frame takes this one before the panel sees it"),
     ("leaving", "esc", "the help page — it does NOT quit"),
-    ("leaving", "m", "the main menu — measure, options, help, quit"),
+    ("leaving", "m", "the main menu — measure, options, optimize, help, quit"),
     ("leaving", ":", "the command line — :f2 :fleet :wg-public-ipv6 :q"),
     ("leaving", "h ? F1", "this page"),
     ("leaving", "ctrl-c ctrl-d", "quit. the only keys that do"),
@@ -150,9 +183,13 @@ pub(crate) const CMD_HELP: &[(&str, &str)] = &[
 ];
 
 /// The btop-style Esc menu.
-pub(crate) const MENU: [(&str, &str); 4] = [
+///
+/// "quit" stays last on purpose — it is the way out, and a test walks to the
+/// bottom of this list and asserts it lands there.
+pub(crate) const MENU: [(&str, &str); 5] = [
     ("measure", "this machine, or any mesh peer over ssh"),
     ("options", "sorting, averaging window, which boxes are shown"),
+    ("optimize", "system optimization — memory, cache, journal, docker, nix"),
     ("help", "every key this dashboard binds"),
     ("quit", "leave the dashboard"),
 ];

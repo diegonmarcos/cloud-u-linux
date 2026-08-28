@@ -115,7 +115,8 @@ fn main() {
     if flag("--help") || flag("-h") {
         println!(
             "usage: my-watchdog [--no-tray] [--once]\n       \
-             my-watchdog reclaim [clean|full] [MiB]\n\
+             my-watchdog reclaim [clean|full] [MiB]\n       \
+             my-watchdog optimize <what>\n\
              \n\
              Samples this machine every {}ms and publishes one JSON snapshot,\n\
              then drains the kill/restart mailbox beside it.\n\
@@ -130,7 +131,15 @@ fn main() {
              \x20           machine, costs a re-read and nothing more (default)\n\
              \x20 full    anonymous pages too, so swap writes, repeated until\n\
              \x20           the kernel stops giving anything back\n\
-             \x20 MiB     how much to ask for per pass (default 1024)",
+             \x20 MiB     how much to ask for per pass (default 1024)\n\
+             \n\
+             optimize    one system optimization, the same ones the panel's x\n\
+             \x20           menu queues. All unprivileged, all this user's own:\n\
+             \x20 cache          ~/.cache files untouched for 30 days\n\
+             \x20 journal        vacuum this user's journal to 7 days\n\
+             \x20 docker         dangling images, dead containers, build cache\n\
+             \x20 nix-gc         drop old generations, then GC the store\n\
+             \x20 nix-optimise   hardlink identical store files together",
             watchdog::interval_ms()
         );
         return;
@@ -151,6 +160,22 @@ fn main() {
         };
         let mib: u64 = args.get(2).and_then(|x| x.parse().ok()).unwrap_or(1024);
         println!("{}", watchdog::reclaim_session(mib * 1_048_576, mode));
+        return;
+    }
+
+    // Same list the mailbox verb allows, reached without the round trip.
+    if args.first().map(String::as_str) == Some("optimize") {
+        let what = args.get(1).map(String::as_str).unwrap_or("");
+        match watchdog::optimize(what) {
+            Some(out) => println!("{out}"),
+            None => {
+                eprintln!(
+                    "my-watchdog optimize: expected one of {}, got {what:?}",
+                    watchdog::OPTIMIZE_KINDS.join(", ")
+                );
+                std::process::exit(2);
+            }
+        }
         return;
     }
 

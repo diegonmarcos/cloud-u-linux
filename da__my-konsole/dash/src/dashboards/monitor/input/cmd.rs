@@ -37,17 +37,17 @@ pub(crate) fn menu_cmd(i: usize) -> Cmd {
     match i {
         0 => Cmd::Open(Overlay::Target),
         1 => Cmd::Open(Overlay::Boxes),
-        2 => Cmd::Open(Overlay::Help),
+        2 => Cmd::Open(Overlay::Optimize),
+        3 => Cmd::Open(Overlay::Help),
         _ => Cmd::Quit,
     }
 }
 
-/// The verbs that are NOT in the main menu. The menu's own four come from
+/// The verbs that are NOT in the main menu. The menu's own entries come from
 /// MENU itself, so the picker cannot offer an entry the menu does not have,
 /// and cannot miss one it does — which is exactly what happened: measure and
 /// options were reachable by key and by menu, and invisible to `:`.
 const VERBS: &[(&str, &str)] = &[
-    ("free", "free memory — reap zombies, reclaim, find orphans"),
     ("units", "add or drop the declared units that are stopped or idle"),
     ("export", "write this machine to ~/.watchdog"),
     ("export all", "the same, with every fleet peer folded in"),
@@ -180,7 +180,8 @@ pub(crate) fn resolve(line: &str, cur: usize) -> Cmd {
         "q" | "quit" => return Cmd::Quit,
         "h" | "help" => return Cmd::Open(Overlay::Help),
         "m" | "menu" => return Cmd::Open(Overlay::Menu),
-        "free" => return Cmd::Open(Overlay::Free),
+        // the old name, still typed by fingers that learned it
+        "free" => return Cmd::Open(Overlay::Optimize),
         "units" | "v" => return Cmd::Units,
         "e" | "export" => return Cmd::Export(false),
         "ea" | "export all" => return Cmd::Export(true),
@@ -263,7 +264,7 @@ mod tests {
         assert_eq!(matches("", proc).len(), candidates(proc).len());
     }
 
-    // The main menu and the command line must offer the SAME four things.
+    // The main menu and the command line must offer the SAME things.
     // measure and options were reachable by key and by menu and invisible to
     // `:`, which is the whole reason MENU is read here rather than copied.
     #[test]
@@ -280,7 +281,7 @@ mod tests {
             );
         }
         // The non-menu verbs are there too.
-        for n in ["free", "units", "export", "export all"] {
+        for n in ["units", "export", "export all"] {
             assert!(names.iter().any(|x| x == n), "{n:?} missing from the picker");
         }
     }

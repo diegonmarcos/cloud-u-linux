@@ -61,8 +61,8 @@ use model::columns::{
     UNIT_ACTIONS,
 };
 use model::keys::{
-    ACTIONS, BOX_NAMES, B_MESH, B_NET, B_PSI, B_SLICES, B_STORAGE, CMD_HELP, FRAME_RESERVED, FREE,
-    MENU, OTHER_KEYS, SORT_KEYS,
+    ACTIONS, BOX_NAMES, B_MESH, B_NET, B_PSI, B_SLICES, B_STORAGE, CMD_HELP, FRAME_RESERVED, MENU,
+    OPTIMIZE, OTHER_KEYS, SORT_KEYS,
 };
 use model::tabs::{Sub, Tab, TABS};
 use view::draw::{bbox, braille_graph, grad, meter, tabbox, DIM, GRAPH_FLOOR, LABEL};
@@ -91,8 +91,9 @@ enum Overlay {
     Help,
     Kill,
     Detail,
-    /// The `x` menu of memory-freeing tools.
-    Free,
+    /// The `x` key and the menu's "optimize": everything that hands
+    /// resources back — memory, cache, journal, docker, nix.
+    Optimize,
     /// start/stop/restart a declared unit the cursor is parked on.
     Unit,
     /// One machine's totals, opened from the fleet view.
@@ -224,7 +225,7 @@ pub struct Monitor {
     /// own threads so a dead peer's connect timeout cannot stall a render.
     mesh: crate::dashboards::mesh::Mesh,
     target_sel: usize,
-    free_sel: usize,
+    opt_sel: usize,
     unit_sel: usize,
     /// The compose row the modal is open on, pinned by (file, service) so a
     /// re-sort on the next tick cannot slide a different service under it.
@@ -328,7 +329,7 @@ impl Monitor {
             show: [true; BOX_NAMES.len()],
             mesh: crate::dashboards::mesh::Mesh::start(),
             target_sel: 0,
-            free_sel: 0,
+            opt_sel: 0,
             unit_sel: 0,
             fleet_sel: 0,
             fleet_armed: None,
@@ -362,6 +363,23 @@ impl Monitor {
                     }
                     "RECLAIM full" => {
                         "reclaim full → queued: anonymous pages too, expect swap writes".to_string()
+                    }
+                    "OPTIMIZE cache" => {
+                        "trim cache → queued: ~/.cache files cold for 30 days".to_string()
+                    }
+                    "OPTIMIZE journal" => {
+                        "trim journal → queued: this user's journal, 7 days kept".to_string()
+                    }
+                    "OPTIMIZE docker" => {
+                        "prune docker → queued: dangling images, dead containers, build cache"
+                            .to_string()
+                    }
+                    "OPTIMIZE nix-gc" => {
+                        "nix gc → queued: old generations, then a store GC. minutes.".to_string()
+                    }
+                    "OPTIMIZE nix-optimise" => {
+                        "nix optimise → queued: hardlinking identical store files. minutes."
+                            .to_string()
                     }
                     "RESTART" => format!("restart → pid {pid} queued for the daemon"),
                     _ => format!("SIG{sig} → pid {pid} queued for the daemon"),
@@ -615,7 +633,7 @@ impl Monitor {
 
     fn render_menu(&self, f: &mut Frame, area: Rect) {
         let accent = Color::Rgb(120, 200, 255);
-        let inner = Self::modal(f, area, 68, MENU.len() as u16 + 4, "menu", accent);
+        let inner = Self::modal(f, area, 74, MENU.len() as u16 + 4, "menu", accent);
         let mut lines = vec![Line::from(Span::styled("", Style::default()))];
         for (i, (item, why)) in MENU.iter().enumerate() {
             let on = i == self.menu_sel;
@@ -706,13 +724,15 @@ impl Monitor {
     }
 
     /// The `x` menu. Each entry says what it actually does, because "clean
-    /// memory" means four different things and three of them are myths.
-    fn render_free(&self, f: &mut Frame, area: Rect) {
+    /// memory" means four different things and three of them are myths, and
+    /// the same is true of every other word on this list.
+    fn render_optimize(&self, f: &mut Frame, area: Rect) {
         let accent = Color::Rgb(120, 220, 140);
-        let inner = Self::modal(f, area, 86, FREE.len() as u16 * 2 + 4, "free memory", accent);
+        let h = OPTIMIZE.len() as u16 * 2 + 4;
+        let inner = Self::modal(f, area, 90, h, "system optimization", accent);
         let mut l: Vec<Line> = vec![];
-        for (i, (_, title, why)) in FREE.iter().enumerate() {
-            let sel = i == self.free_sel;
+        for (i, (_, title, why)) in OPTIMIZE.iter().enumerate() {
+            let sel = i == self.opt_sel;
             l.push(Line::from(vec![
                 Span::styled(if sel { "▶  " } else { "   " }, Style::default().fg(accent)),
                 Span::styled(format!("{}  ", i + 1), Style::default().fg(DIM)),
@@ -874,7 +894,7 @@ impl Monitor {
                 self.menu_sel = 0;
                 self.target_sel = 0;
                 self.box_sel = 0;
-                self.free_sel = 0;
+                self.opt_sel = 0;
                 self.overlay = o;
             }
             cmd::Cmd::Quit => self.quit = true,
@@ -971,7 +991,7 @@ impl Monitor {
             Overlay::Help => self.render_help(f, area),
             Overlay::Detail => self.render_detail(f, area),
             Overlay::Target => self.render_target(f, area),
-            Overlay::Free => self.render_free(f, area),
+            Overlay::Optimize => self.render_optimize(f, area),
             Overlay::Unit => self.render_unit(f, area),
             Overlay::Machine => self.render_machine(f, area),
             Overlay::FleetAct => self.render_fleet_act(f, area),
@@ -2132,40 +2152,46 @@ impl Monitor {
         self.goto(self.tab, next);
     }
 
-    fn free_key(&mut self, k: KeyCode) {
+    fn optimize_key(&mut self, k: KeyCode) {
         let run = |me: &mut Self, i: usize| {
-            match FREE[i].0 {
-                // pid 0: these are addressed to the machine, not a process.
-                // The daemon answers them before its per-pid guards.
-                "REAP" => me.request_kill(0, "REAP"),
-                // The mode rides along on the same mailbox line, so the daemon
-                // still decides what a reclaim is allowed to do.
-                v @ ("RECLAIM clean" | "RECLAIM full") => me.request_kill(0, v),
-                _ => {
+            match OPTIMIZE[i].0 {
+                // Not an action at all — a filter on the process list, applied
+                // here rather than queued anywhere.
+                "ORPHANS" => {
                     me.orphans = !me.orphans;
                     me.msg = Some((
                         if me.orphans {
-                            "showing orphans only — reparented to init, under no unit. k to act.".into()
+                            "showing orphans only — reparented to init, under no unit. k to act."
+                                .into()
                         } else {
                             "showing every process again".to_string()
                         },
                         false,
                     ));
                 }
+                // pid 0: these are addressed to the machine, not a process, and
+                // the daemon answers them before its per-pid guards. The whole
+                // verb rides the mailbox line — "RECLAIM full", "OPTIMIZE
+                // nix-gc" — so the daemon still decides what each one may do.
+                //
+                // A catch-all rather than a list: an entry added to OPTIMIZE
+                // and forgotten here used to fall through to the orphan filter,
+                // which looks like the key doing nothing.
+                v => me.request_kill(0, v),
             }
             me.overlay = Overlay::None;
         };
         match k {
-            KeyCode::Down => self.free_sel = (self.free_sel + 1) % FREE.len(),
-            KeyCode::Up => self.free_sel = (self.free_sel + FREE.len() - 1) % FREE.len(),
+            KeyCode::Down => self.opt_sel = (self.opt_sel + 1) % OPTIMIZE.len(),
+            KeyCode::Up => self.opt_sel = (self.opt_sel + OPTIMIZE.len() - 1) % OPTIMIZE.len(),
             KeyCode::Char(c) if c.is_ascii_digit() => {
                 let i = c.to_digit(10).unwrap_or(0) as usize;
-                if i >= 1 && i <= FREE.len() {
+                if i >= 1 && i <= OPTIMIZE.len() {
                     run(self, i - 1);
                 }
             }
             KeyCode::Enter => {
-                let i = self.free_sel;
+                let i = self.opt_sel;
                 run(self, i);
             }
             _ => self.overlay = Overlay::None,
@@ -3007,7 +3033,7 @@ impl Dashboard for Monitor {
         };
         match self.overlay {
             Overlay::Kill => return self.kill_key(k),
-            Overlay::Free => return self.free_key(k),
+            Overlay::Optimize => return self.optimize_key(k),
             Overlay::FleetAct => return self.fleet_act_key(k),
             Overlay::Ctr => return self.ctr_img_key(k, true),
             Overlay::Img => return self.ctr_img_key(k, false),
@@ -3407,8 +3433,8 @@ impl Dashboard for Monitor {
             KeyCode::Char('i') => self.desc = !self.desc,
             KeyCode::Char('w') => self.win = self.win.next(),
             KeyCode::Char('x') => {
-                self.free_sel = 0;
-                self.overlay = Overlay::Free;
+                self.opt_sel = 0;
+                self.overlay = Overlay::Optimize;
             }
             KeyCode::Char('v') => {
                 self.units = !self.units;

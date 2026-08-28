@@ -3456,6 +3456,105 @@ fn fmt_mib(b: u64) -> String {
     format!("{:.2} MiB", b as f64 / 1_048_576.0)
 }
 
+/// The system optimizations, by the name the mailbox and the CLI both use.
+///
+/// An allow-list, not a dispatch table with a default: the mailbox is a file
+/// any process of this user can append to, so "whatever word came next" is
+/// never handed to a process spawner. An unknown name returns None and the
+/// caller says so.
+///
+/// Nothing here needs root, and that is the design rather than a shortfall.
+/// The system journal, /var and the block device are not this user's to trim,
+/// and an optimization that stops to ask for a password is one nobody runs.
+/// What IS this user's — their cache directory, their journal, their docker,
+/// the store's garbage — is all of it.
+pub const OPTIMIZE_KINDS: [&str; 5] = ["cache", "journal", "docker", "nix-gc", "nix-optimise"];
+
+/// Run one of them and describe what moved. Slow — minutes, for the nix two —
+/// so callers on a timed loop must not call this inline.
+pub fn optimize(kind: &str) -> Option<String> {
+    Some(match kind {
+        "cache" => trim_user_cache(30),
+        // --user, always: the system journal is root's, and vacuuming it is
+        // not something a user daemon should be able to ask for by accident.
+        "journal" => run_tool("journalctl", &["--user", "--vacuum-time=7d"]),
+        // prune, not "prune -a": -a also deletes every image no container is
+        // running right now, which on this fleet is most of them.
+        "docker" => run_tool("docker", &["system", "prune", "-f"]),
+        "nix-gc" => run_tool("nix-collect-garbage", &["-d"]),
+        "nix-optimise" => run_tool("nix", &["store", "optimise"]),
+        _ => return None,
+    })
+}
+
+/// Spawn one tool and fold its outcome into a single line.
+///
+/// The LAST non-empty line it wrote, because every one of these tools ends
+/// with its own summary ("Total reclaimed space: 1.2GB", "freed 3.21 GiB") and
+/// the hundred lines above it are a progress log nobody reads afterwards.
+///
+/// stdout, and then stderr if stdout was empty. docker prints its total on
+/// stdout; nix and journalctl print theirs on stderr, because to them a
+/// summary is progress. Falling through rather than hardcoding which stream
+/// belongs to which tool means a tool that moves its output does not go quiet.
+fn run_tool(bin: &str, args: &[&str]) -> String {
+    let last = |b: &[u8]| -> Option<String> {
+        String::from_utf8_lossy(b)
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .map(|l| l.trim().to_string())
+    };
+    match clean_command(bin).args(args).output() {
+        Ok(o) if o.status.success() => {
+            last(&o.stdout).or_else(|| last(&o.stderr)).unwrap_or_else(|| "ok".into())
+        }
+        Ok(o) => format!("failed: {}", last(&o.stderr).unwrap_or_else(|| "no output".into())),
+        Err(e) => format!("{bin}: {e}"),
+    }
+}
+
+/// Delete the cache entries nothing has touched in `days`.
+///
+/// Cold, not everything. ~/.cache is regenerable by definition — that is what
+/// the directory is for — but emptying it throws away warm state the running
+/// session is about to want back, and a "cleaner" that makes the next hour
+/// slower is not one. An atime-free 30-day mtime cut takes the shader caches,
+/// the thumbnails and the package downloads from months ago and leaves today's.
+///
+/// Only regular files, and DirEntry::metadata does not follow symlinks, so a
+/// cache directory that symlinks out of ~/.cache cannot become a route to
+/// deleting something that is not a cache.
+fn trim_user_cache(days: u64) -> String {
+    let Some(home) = std::env::var_os("HOME") else {
+        return "no HOME in the environment".into();
+    };
+    let root = PathBuf::from(home).join(".cache");
+    let Some(cutoff) =
+        std::time::SystemTime::now().checked_sub(std::time::Duration::from_secs(days * 86_400))
+    else {
+        return "the clock is older than the cutoff".into();
+    };
+    let (mut freed, mut gone) = (0u64, 0usize);
+    let mut stack = vec![root.clone()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            let Ok(md) = e.metadata() else { continue };
+            if md.is_dir() {
+                stack.push(e.path());
+            } else if md.is_file()
+                && md.modified().is_ok_and(|m| m < cutoff)
+                && fs::remove_file(e.path()).is_ok()
+            {
+                freed += md.len();
+                gone += 1;
+            }
+        }
+    }
+    format!("{gone} cold files removed from {}, {} freed", root.display(), fmt_mib(freed))
+}
+
 /// A signal requested from the panel. QML cannot signal a process, and giving a
 /// widget an exec path is worse than giving the daemon a mailbox: the daemon
 /// already runs as this user, so it can only ever signal what the user could.
@@ -3681,6 +3780,23 @@ fn drain_kill_requests() {
                 ),
                 Err(e) => eprintln!("[watchdog] {verb} {name}: {e}"),
             }
+            continue;
+        }
+        // "0 OPTIMIZE <kind>" — the disk-side optimizations. Every one of
+        // them can outlive a tick, so it runs on a thread of its own: the
+        // sampler must not stop publishing because someone asked for a store
+        // GC. The result lands in the journal like every other verb's does.
+        if sig.eq_ignore_ascii_case("OPTIMIZE") {
+            let kind = it.next().unwrap_or("").to_string();
+            if !OPTIMIZE_KINDS.contains(&kind.as_str()) {
+                eprintln!("[watchdog] refusing optimize request {kind:?}");
+                continue;
+            }
+            eprintln!("[watchdog] optimize {kind}: started");
+            std::thread::spawn(move || {
+                let out = optimize(&kind).unwrap_or_default();
+                eprintln!("[watchdog] optimize {kind}: {out}");
+            });
             continue;
         }
         if sig.eq_ignore_ascii_case("RECLAIM") {
