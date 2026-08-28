@@ -21,7 +21,7 @@ the nudge is PostToolUse. The guard is **fail-closed** (unreadable registry ⇒ 
 | deny | 9 | PreToolUse:Bash |
 | warn | 34 | PreToolUse:Bash |
 | nudge | 1 | PostToolUse |
-| inject | 7 | SessionStart |
+| inject | 2 | SessionStart, UserPromptSubmit |
 
 Irreversible rules (audit-first when relaxing anything):
 
@@ -115,10 +115,5 @@ Irreversible rules (audit-first when relaxing anything):
 
 | id | fragment | tiers |
 |---|---|---|
-| `inject-reference-sessionstart` | `hooks-fragments/reference.md` | SessionStart |
-| `inject-core-principles` | `hooks-fragments/core-principles.md` | SessionStart |
-| `inject-fire-rules` | `hooks-fragments/fire-rules.md` | SessionStart |
-| `inject-stack-philosophy` | `hooks-fragments/stack-philosophy.md` | SessionStart |
-| `inject-pre-action-checklist` | `hooks-fragments/pre-action-checklist.md` | SessionStart |
-| `inject-forbidden-patterns` | `hooks-fragments/forbidden-patterns.md` | SessionStart |
-| `inject-dead-shell-recovery` | `hooks-fragments/dead-shell-recovery.md` | SessionStart |
+| `inject-principles-compact-sessionstart` | `hooks-fragments/principles-compact.md` | SessionStart |
+| `inject-cgc-query-first-userpromptsubmit` | `hooks-fragments/cgc-query-first.md` | UserPromptSubmit |

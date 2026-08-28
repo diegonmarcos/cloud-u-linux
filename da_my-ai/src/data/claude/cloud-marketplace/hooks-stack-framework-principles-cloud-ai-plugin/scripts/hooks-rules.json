@@ -22,6 +22,16 @@
       "reason": "Compact SessionStart summary (~950B) replacing 7 separate long fragments (~9.5KB combined: reference/core-principles/fire-rules/stack-philosophy/pre-action-checklist/forbidden-patterns/dead-shell-recovery). Originals left intact on disk for on-demand reading; see 'Full reference' line in the compact fragment."
     },
     {
+      "id": "inject-cgc-query-first-userpromptsubmit",
+      "level": "inject",
+      "category": "arch-guessing",
+      "tiers": [
+        "UserPromptSubmit"
+      ],
+      "fragment": "hooks-fragments/cgc-query-first.md",
+      "reason": "one line per prompt: reach for the code graph before assuming"
+    },
+    {
       "id": "allow-npm-readonly",
       "level": "allow",
       "category": "read-only",
