@@ -238,7 +238,13 @@ class PinBar(QTabBar):
                           window=self._win_id).widget
 
     def sync(self):
-        """Rebuild from the real tab list. Cheap; called on every tab change."""
+        """Rebuild from the real tab list. Cheap; called on every tab change.
+
+        A pinned tab is labelled with mybar.json's `name` when it has one --
+        the watchdog page calls itself "watchdog exports", and the row should
+        say what the user named it. Tabs pinned by hand are not in mybar.json
+        and keep their page title.
+        """
         try:
             widget = self._widget()
         except KeyError:
@@ -248,10 +254,15 @@ class PinBar(QTabBar):
             while self.count():
                 self.removeTab(0)
             self._indices = []
+            # Built once per sync, not per tab: sync runs on every tab change
+            # and _load() re-reads mybar.json from disk each call.
+            names = {_url_key(QUrl(e['url'])): e.get('name')
+                     for e in _load()['pinned'] if e.get('url')}
             for i in range(widget.count()):
                 tab = widget.widget(i)
                 if tab is not None and tab.data.pinned:
-                    self.addTab(widget.page_title(i) or '')
+                    title = widget.page_title(i) or ''
+                    self.addTab(names.get(_pinned_tab_url(tab)) or title)
                     self._indices.append(i)
             cur = widget.currentIndex()
             self.setCurrentIndex(
@@ -276,6 +287,24 @@ def sync_pinned(win_id):
         bar.sync()
 
 
+# Two URLs name the same pinned page when they differ only by fragment or a
+# trailing slash. The filebrowser at :8000 is a hash-routed SPA that lands on
+# ".../#/", so the raw string never equalled mybar.json's ":8000" and the tab
+# was re-seeded on every launch. Dropping the fragment also means whatever
+# route the SPA is on still counts as the one pinned tab, which is what a
+# pinned tab means.
+_URL_KEY_OPTS = (QUrl.UrlFormattingOption.RemoveFragment
+                 | QUrl.UrlFormattingOption.StripTrailingSlash
+                 | QUrl.UrlFormattingOption.NormalizePathSegments)
+
+
+def _url_key(url):
+    """Canonical form used to decide whether two URLs are the same pinned page."""
+    # rstrip: StripTrailingSlash leaves the ROOT slash alone, so ":8000" and
+    # ":8000/" would still differ without it.
+    return url.adjusted(_URL_KEY_OPTS).toString().rstrip('/')
+
+
 def _pinned_tab_url(tab):
     """Best-effort URL for a pinned tab that may not have loaded yet.
 
@@ -293,7 +322,7 @@ def _pinned_tab_url(tab):
         pass
     for url in candidates:
         if url.isValid() and not url.isEmpty():
-            return url.toString()
+            return _url_key(url)
     return None
 
 
@@ -334,10 +363,8 @@ def seed_pinned(win_id):
             continue
         open_urls.add(url)
     for entry in entries:
-        # Normalise through QUrl so the entry string is compared the same way
-        # _pinned_tab_url stringifies a tab's URL.
         url = QUrl(entry['url'])
-        if url.toString() in open_urls:
+        if _url_key(url) in open_urls:
             continue
         try:
             tab = tabbed.tabopen(url, background=True)
