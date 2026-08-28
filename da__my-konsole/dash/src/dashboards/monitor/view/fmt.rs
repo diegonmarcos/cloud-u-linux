@@ -33,14 +33,32 @@ pub(crate) fn z(v: f64, w: usize, shown: String) -> String {
 
 /// Memory is mebibytes. Always, everywhere, two decimals: "748.00 MiB".
 ///
-/// One unit for every memory cell on every page. A column that slides to K
-/// under a megabyte and to G over a gigabyte makes the eye rescale each row
-/// before it can be compared with the one above, which is the entire job of a
-/// memory column — and it is how "356KiB" ends up looking bigger than
-/// "5.379MiB". Below a mebibyte there is nothing worth reading and this says
-/// so with digits, not by changing units.
+/// WHOLE mebibytes. The fraction is dropped rather than rounded, so those two
+/// decimal places are always "00" — they hold the column's shape, they do not
+/// report a quantity. This cell exists to be compared with the one above it,
+/// and 0.16 of a mebibyte has never been the difference between two rows;
+/// printing it just adds four digits of noise to every number on the page and
+/// pushes the ones that matter off the right edge.
+///
+/// So anything under a mebibyte reads "0.00 MiB". That is the true answer to
+/// "how many megabytes is this", which is the question the column is asking.
+///
+/// One unit for every memory cell on every page, too. A column that slides to
+/// K under a megabyte and to G over a gigabyte makes the eye rescale each row
+/// before it can be compared with the one above — and it is how "356KiB" ends
+/// up looking bigger than "5.379MiB".
 pub(crate) fn fmt_mib(bytes: f64) -> String {
-    format!("{:.2} MiB", bytes.max(0.0) / 1_048_576.0)
+    format!("{:.2} MiB", (bytes.max(0.0) / 1_048_576.0).floor())
+}
+
+/// A "used/total" pair, with the unit written once for both.
+///
+/// Two figures in the same unit do not need it named twice, and in a detail
+/// line that already names it four times it is what pushes the row past the
+/// right edge. Built from fmt_mib_g rather than converting again, so there is
+/// still exactly one place where a gibibyte becomes a mebibyte.
+pub(crate) fn fmt_mib_pair_g(a: f64, sep: &str, b: f64) -> String {
+    format!("{}{sep}{}", fmt_mib_g(a).trim_end_matches(" MiB"), fmt_mib_g(b))
 }
 
 /// The same cell from a gibibyte figure. /proc reports several of these in GiB

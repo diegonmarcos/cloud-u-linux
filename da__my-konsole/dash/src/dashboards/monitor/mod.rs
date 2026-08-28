@@ -67,7 +67,8 @@ use model::keys::{
 use model::tabs::{Sub, Tab, TABS};
 use view::draw::{bbox, braille_graph, grad, meter, tabbox, DIM, GRAPH_FLOOR, LABEL};
 use view::fmt::{
-    fmt_bps, fmt_bytes_short, fmt_g, fmt_gib, fmt_mem_cell, fmt_mib, fmt_mib_g, fmt_rate,
+    fmt_bps, fmt_bytes_short, fmt_g, fmt_gib, fmt_mem_cell, fmt_mib, fmt_mib_g, fmt_mib_pair_g,
+    fmt_rate,
     fmt_rate_mb, fmt_uptime, push, trunc, z, zp,
 };
 
@@ -3718,7 +3719,11 @@ impl Dashboard for Monitor {
 
         // ── mem | storage | net ───────────────────────────────────────────────
         let mid = Layout::horizontal(if self.show[B_STORAGE] {
-            vec![Constraint::Percentage(36), Constraint::Percentage(37), Constraint::Percentage(27)]
+            // mem took 4 points off net when every memory cell grew to
+            // "#####.00 MiB". net is two sparklines and an address, and loses
+            // nothing by being narrower; storage holds full subvolume paths
+            // and could not give anything up.
+            vec![Constraint::Percentage(40), Constraint::Percentage(37), Constraint::Percentage(23)]
         } else {
             vec![Constraint::Percentage(48), Constraint::Percentage(52)]
         })
@@ -3730,9 +3735,33 @@ impl Dashboard for Monitor {
         let mem_b = bbox("mem", "");
         let mem_in = mem_b.inner(mid[0]);
         f.render_widget(mem_b, mid[0]);
-        // 7 for the label plus "748.00 MiB / 952.00 MiB" — the bar gets what is
-        // left, because the numbers are the part that must not be clipped.
-        let bw = (mem_in.width as usize).saturating_sub(32);
+        let md = |k: &str| num(&s, &format!("mem_detail.{k}"));
+        let sd = |k: &str| num(&s, &format!("swap_detail.{k}"));
+        let total = md("total").max(0.001);
+        // The NUMBERS get what they need and the bar gets the rest, not the
+        // other way round. A hardcoded 32-column reserve was sized for
+        // "748.00 MiB / 952.00 MiB"; the moment a box held five digits of
+        // mebibytes it clipped the row to "7772.16 Mi", and a memory figure cut
+        // off mid-unit is not a cosmetic fault, it is a wrong number.
+        //
+        // Measured off the widest total this box will draw, so it is right for
+        // a 1GiB VM and a 64GiB workstation without being tuned for either.
+        // Every bar this box can draw, VRAM included — that one reports bytes
+        // rather than gibibytes, so it is measured as the string it will print
+        // instead of as a number in some other unit.
+        let widest = [
+            fmt_mib_g(total),
+            fmt_mib_g(sd("total")),
+            fmt_mib_g(num(&s, "slice_max_gib")),
+            fmt_mib(num_opt(&s, "vram_detail.dedicated.total").unwrap_or(0.0)),
+            fmt_mib(num_opt(&s, "vram_detail.shared.total").unwrap_or(0.0)),
+        ]
+        .iter()
+        .fold(0usize, |w, t| w.max(t.chars().count()));
+        // label + bar + " " + "<used> / <total>". The label field is 9 rather
+        // than the 7 the format string pads to, because "dedicated" is 9 and
+        // {:<7} pads short labels without shortening long ones.
+        let bw = (mem_in.width as usize).saturating_sub(10 + widest * 2 + 3).max(6);
         let mut ml: Vec<Line> = vec![];
         let bar = |label: &str, pct: f64, txt: String| -> Line<'static> {
             let mut sp = vec![Span::styled(format!("{label:<7}"), Style::default().fg(LABEL))];
@@ -3740,9 +3769,6 @@ impl Dashboard for Monitor {
             sp.push(Span::styled(format!(" {txt}"), Style::default().fg(Color::Gray)));
             Line::from(sp)
         };
-        let md = |k: &str| num(&s, &format!("mem_detail.{k}"));
-        let sd = |k: &str| num(&s, &format!("swap_detail.{k}"));
-        let total = md("total").max(0.001);
 
         ml.push(Line::from(Span::styled(
             "RAM",
@@ -3788,7 +3814,7 @@ impl Dashboard for Monitor {
             Span::styled(fmt_mib_g(md("writeback")), Style::default().fg(Color::Gray)),
             Span::styled(" commit ", Style::default().fg(LABEL)),
             Span::styled(
-                format!("{}/{}", fmt_mib_g(md("committed")), fmt_mib_g(md("commit_limit"))),
+                fmt_mib_pair_g(md("committed"), "/", md("commit_limit")),
                 Style::default().fg(Color::Gray),
             ),
         ]));
@@ -3840,7 +3866,7 @@ impl Dashboard for Monitor {
             Span::styled(fmt_mib_g(sd("cached")), Style::default().fg(Color::Gray)),
             Span::styled(" zswap ", Style::default().fg(LABEL)),
             Span::styled(
-                format!("{}→{}", fmt_mib_g(sd("zswapped")), fmt_mib_g(sd("zswap"))),
+                fmt_mib_pair_g(sd("zswapped"), "→", sd("zswap")),
                 Style::default().fg(Color::Gray),
             ),
         ]));
