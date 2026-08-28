@@ -63,10 +63,14 @@ def _load():
         with open(_config_path(), encoding='utf-8') as f:
             data = json.load(f)
     except OSError:
-        return {'bookmarks': [], 'plugins': []}
+        data = {}
     except ValueError:
         log.misc.warning("my-browser bar: invalid JSON in %s" % _config_path())
-        return {'bookmarks': [], 'plugins': []}
+        data = {}
+    # Fall through so every key is defaulted in ONE place. The old early
+    # returns omitted 'pinned', so seed_pinned's _load()['pinned'] raised
+    # KeyError and killed startup whenever mybar.json was missing or invalid
+    # (a fresh profile, or --temp-basedir).
     data.setdefault('bookmarks', [])
     data.setdefault('pinned', [])
     data.setdefault('plugins', [])
@@ -290,10 +294,14 @@ def seed_pinned(win_id):
     # as an ordinary row-3 tab, and counting that as "already open" would
     # suppress the row-2 pinned copy of the same page. A restored *pinned* tab
     # still dedupes, which is the case this guard exists for.
-    open_urls = {tabbed.widget.tab_url(i).toString()
-                 for i in range(tabbed.widget.count())
-                 if getattr(tabbed.widget.widget(i), 'data', None) is not None
-                 and tabbed.widget.widget(i).data.pinned}
+    # Read .url() straight off the tab rather than tab_url(), which runs
+    # ensure_valid() and raises on a tab that has not loaded yet -- at seed
+    # time a restored pinned tab is still QUrl(''). An unloaded tab has no
+    # URL to dedupe against anyway, so skipping it is the correct answer.
+    pinned_tabs = [w for w in (tabbed.widget.widget(i)
+                               for i in range(tabbed.widget.count()))
+                   if getattr(w, 'data', None) is not None and w.data.pinned]
+    open_urls = {w.url().toString() for w in pinned_tabs if w.url().isValid()}
     for entry in entries:
         if entry['url'] in open_urls:
             continue
