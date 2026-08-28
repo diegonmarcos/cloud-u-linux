@@ -6,11 +6,11 @@
 
 import enum
 
-from qutebrowser.qt.core import pyqtSlot, pyqtProperty, QUrl
+from qutebrowser.qt.core import pyqtSlot, pyqtProperty, QUrl, Qt
 
 from qutebrowser.mainwindow.statusbar import textbase
 from qutebrowser.config import stylesheet
-from qutebrowser.utils import usertypes, urlutils
+from qutebrowser.utils import usertypes, urlutils, utils, message
 
 
 class UrlType(enum.Enum):
@@ -75,6 +75,22 @@ class UrlText(textbase.TextBase):
         self._hover_url = None
         self._normal_url = None
         self._normal_url_type = UrlType.normal
+        self.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.setCursor(Qt.CursorShape.IBeamCursor)
+
+    def mouseDoubleClickEvent(self, e):
+        """Yank the whole URL on double click, rather than one word.
+
+        self.text() is the full URL -- TextBase only elides at paint time.
+        """
+        if e.button() != Qt.MouseButton.LeftButton or not self.text():
+            super().mouseDoubleClickEvent(e)
+            return
+        e.accept()
+        self.setSelection(0, len(self.text()))
+        utils.set_clipboard(self.text())
+        message.info("Yanked URL to clipboard: {}".format(self.text()))
 
     @pyqtProperty(str)  # type: ignore[type-var]
     def urltype(self):

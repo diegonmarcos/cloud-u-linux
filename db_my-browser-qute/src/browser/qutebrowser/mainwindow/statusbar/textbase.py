@@ -65,7 +65,13 @@ class TextBase(QLabel):
 
     def paintEvent(self, e):
         """Override QLabel::paintEvent to draw elided text."""
-        if self._elidemode == Qt.TextElideMode.ElideNone:
+        # ponytail: hand back to QLabel while text is selected -- our elided
+        # QPainter path draws no selection highlight, so a selection would be
+        # invisible. QLabel lays the highlight out over the *full* text, which
+        # is exactly what it then paints here. Upgrade path if the unelided
+        # text overflowing during a drag ever bothers: draw the highlight rect
+        # ourselves from selectionStart()/selectedText() over _elided_text.
+        if self._elidemode == Qt.TextElideMode.ElideNone or self.hasSelectedText():
             super().paintEvent(e)
         else:
             e.accept()
