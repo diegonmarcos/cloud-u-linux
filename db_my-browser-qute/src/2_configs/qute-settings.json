@@ -46,7 +46,7 @@
   },
   "downloads": {
     "location": {
-      "directory": "~/Downloads",
+      "directory": "~/others/Downloads",
       "prompt": false
     },
     "remove_finished": 5000
