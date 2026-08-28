@@ -376,6 +376,7 @@ pub(crate) fn export_snapshot(
     target: Option<String>,
     files: &[String],
     fleet: &[(String, Value)],
+    fold: bool,
 ) -> Result<String, String> {
     let hi = |k: &str| text(s, &format!("host_info.{k}"));
     let host = if hi("host").is_empty() { "unknown".to_string() } else { hi("host") };
@@ -437,7 +438,11 @@ pub(crate) fn export_snapshot(
     // snapshot three times. The peer's own hostname is the identity; the
     // aliases that reached it are recorded beside it, because which route
     // answered is worth knowing and costs a string.
-    if !fleet.is_empty() {
+    // The fleet is ALWAYS written as its own page and its own json under
+    // `html`; folding it into this one envelope as well is the opt-in, because
+    // it was 772KB of a 1030KB file and the record is normally about one
+    // machine.
+    if fold && !fleet.is_empty() {
         let mut by_host: serde_json::Map<String, Value> = serde_json::Map::new();
         let mut aliases: std::collections::BTreeMap<String, Vec<String>> = Default::default();
         for (alias, v) in fleet {
