@@ -143,7 +143,7 @@
     "bin": "my-konsole",
     "dash": "my-konsole-dash",
     "store": "~/.local/share/my-konsole",
-    "clone_dir": "~/git/cloud-infra-desktop",
+    "clone_dir": "~/git/cloud-u-linux",
     "subdir": "da__my-konsole"
   }
 }
