@@ -1,0 +1,321 @@
+// Authored source for dist/report.css. Compile with ./build.sh.
+//
+// This dresses the report my-konsole-dash exports to ~/.watchdog/html, which
+// embeds the compiled file at build time. Kept beside watchdog.scss rather
+// than inside the Rust that emits the page, because a stylesheet written as a
+// Rust string literal cannot be compiled, linted, or diffed as a stylesheet.
+//
+// Its own pair rather than a second skin on watchdog.scss: the live panel is a
+// different document — #sidebar, #host-info, .panels, polling a live snapshot —
+// and one sheet serving two DOMs is how both end up half-styled.
+//
+// The subject is a terminal, so the page is one: a monospace cell grid under a
+// phosphor surface, meters made of the block glyphs the panel actually prints,
+// and reverse video where the web would reach for a tint.
+//
+// THE PALETTE IS NOT A CHOICE MADE HERE. Every value below is lifted from
+// dash/src/dashboards/monitor/view/draw.rs. Change it there and change it
+// here; nowhere else gets a vote.
+
+// ── draw.rs, value for value ───────────────────────────────────────────────
+$dim:    #3a3e4a;   // draw::DIM        Rgb(58,62,74)   — every border it draws
+$floor:  #404040;   // draw::GRAPH_FLOOR Rgb(64,64,64)  — btop's graph floor
+$label:  #788091;   // draw::LABEL      Rgb(120,128,145) — column heads
+$accent: #78c8ff;   // the focused tab  Rgb(120,200,255)
+$ok:     #40dc78;   // grad(0.0)
+$warn:   #f0de40;   // grad(0.5)
+$bad:    #f04848;   // grad(1.0)
+$bg:     #0b0e14;
+$lift:   #101520;
+$rule:   #171c26;
+$fg:     #c8ccd4;
+
+$sidebar-w: 272px;
+$wide: 1100px;      // where the dash row splits into three, like the panel
+$drawer: 1000px;    // above this the tree is always open; the panel has no
+                    // drawer at all, so the drawer only exists to be dismissed
+
+// A terminal font, and the fallbacks that actually carry U+2580–259F and
+// U+2800–28FF: the meters are those blocks and the sparklines that braille. The
+// last resort is still monospace, because a proportional face breaks the grid.
+$mono: ui-monospace, "JetBrainsMono Nerd Font", "JetBrains Mono",
+       "FiraCode Nerd Font", "Fira Code", "Cascadia Code", Menlo, Consolas,
+       "DejaVu Sans Mono", "Liberation Mono", monospace;
+
+// Lit rather than printed. Bloom is most of what separates a CRT from a merely
+// dark stylesheet, and it is the one effect worth spending contrast on.
+@mixin glow($c: $accent, $a: .35) {
+  text-shadow: 0 0 8px rgba(120, 200, 255, $a);
+}
+// draw::bbox parks a title in a gap in its own border. So does this.
+@mixin inlaid($color: $accent) {
+  position: absolute;
+  padding: 0 3px;
+  background: var(--bg);
+  color: $color;
+  &::before { content: "\2524"; color: var(--dim); font-weight: 400; text-shadow: none; }
+  &::after  { content: "\251C"; color: var(--dim); font-weight: 400; text-shadow: none; }
+}
+
+:root {
+  --bg: #{$bg};      --lift: #{$lift};   --rule: #{$rule};
+  --dim: #{$dim};    --floor: #{$floor}; --label: #{$label};
+  --accent: #{$accent};
+  --ok: #{$ok};      --warn: #{$warn};   --bad: #{$bad};
+  --fg: #{$fg};      --w: #{$sidebar-w};
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: $mono;
+  font-size: 13px;
+  line-height: 1.55;
+  // "->" as one arrow glyph is a single cell where the panel prints two.
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+
+  // ── the phosphor surface ────────────────────────────────────────────────
+  // Two fixed, inert overlays: scanlines over a vignette that pulls the
+  // corners down the way a curved tube does. Subtle on purpose — it should
+  // say "terminal" at a glance and then get out of the way, because the
+  // numbers underneath are the point.
+  &::before, &::after { content: ""; position: fixed; inset: 0; pointer-events: none; }
+  &::before {
+    z-index: 98;
+    background:
+      radial-gradient(130% 100% at 50% 42%, transparent 52%, rgba(0,0,0,.62) 100%),
+      radial-gradient(90% 60% at 50% 0%, rgba(120,200,255,.045), transparent 70%);
+  }
+  &::after {
+    z-index: 99; opacity: .55;
+    background: repeating-linear-gradient(180deg,
+      rgba(0,0,0,.22) 0 1px, transparent 1px 3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::after { display: none; }
+}
+
+a { color: var(--fg); text-decoration: none; }
+::selection { background: var(--accent); color: var(--bg); }
+
+// ── the header line ────────────────────────────────────────────────────────
+.bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 8px 14px; padding: 0 4px 10px;
+  border-bottom: 1px solid var(--rule);
+
+  h1 {
+    margin: 0; font-size: 13px; font-weight: 700; color: $accent;
+    letter-spacing: .04em; @include glow($a: .45);
+    &::before { content: "\2500\2500\2524\00a0"; color: var(--dim); font-weight: 400; text-shadow: none; }
+    &::after  { content: "\00a0\251C\2500\2500"; color: var(--dim); font-weight: 400; text-shadow: none; }
+  }
+  .chip { border: 1px solid var(--dim); border-radius: 3px; padding: 0 6px; font-size: 11px; color: var(--label); }
+  .tag  { color: var(--accent); font-size: 11px; }
+  .asof { color: var(--label); font-size: 11px; }
+  // The command line is part of the frame; the page looks unfinished without
+  // its cursor still blinking, even though nothing types into it.
+  .keys {
+    color: var(--dim); font-size: 11px; margin-left: auto;
+    &::after { content: "\00a0:\2588"; color: var(--accent); animation: blink 1.1s steps(1) infinite; }
+  }
+}
+@keyframes blink { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
+@media (prefers-reduced-motion: reduce) { .bar .keys::after { animation: none } }
+
+// ── drawer, scrim, tree ────────────────────────────────────────────────────
+.ham {
+  position: fixed; top: 10px; left: 10px; z-index: 60;
+  background: var(--bg); color: var(--accent);
+  border: 1px solid var(--dim); border-radius: 4px;
+  font: inherit; font-size: 15px; line-height: 1; padding: 5px 9px; cursor: pointer;
+  &:hover { border-color: var(--accent); box-shadow: 0 0 12px rgba(120,200,255,.25); }
+}
+.scrim {
+  position: fixed; inset: 0; z-index: 50; background: rgba(4,6,10,.72);
+  opacity: 0; visibility: hidden; transition: opacity .18s;
+  &.on { opacity: 1; visibility: visible; }
+}
+.sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0; width: var(--w); z-index: 55;
+  background: var(--lift); border-right: 1px solid var(--dim);
+  overflow-y: auto; transform: translateX(-100%); transition: transform .2s;
+  &.open { transform: none; }
+}
+.sb-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 12px 10px; border-bottom: 1px solid var(--rule);
+  h2 {
+    margin: 0; font-size: 12px; font-weight: 700; color: var(--accent);
+    letter-spacing: .1em; text-transform: uppercase; @include glow($a: .4);
+  }
+}
+.x {
+  margin-left: auto; background: none; border: 0; color: var(--label);
+  font: inherit; font-size: 17px; line-height: 1; cursor: pointer;
+  &:hover { color: var(--bad); }
+}
+
+.grp {
+  margin-top: 10px;
+  ul { list-style: none; margin: 0; padding: 0; }
+
+  .tab {
+    display: flex; align-items: center; gap: 6px; padding: 0 12px 3px;
+    color: var(--label); font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+    .k { color: var(--dim); border: 1px solid var(--dim); border-radius: 3px;
+         padding: 0 4px; font-size: 10px; font-style: normal; }
+  }
+
+  // The spine and the elbows, drawn rather than typed: the shape the panel
+  // prints, and it stays right when a branch is the last one.
+  li {
+    position: relative; padding-left: 24px;
+    &::before { content: ""; position: absolute; left: 14px; top: 0; height: 100%;
+                border-left: 1px solid var(--dim); }
+    &:last-child::before { height: 50%; }
+    &::after  { content: ""; position: absolute; left: 14px; top: 50%; width: 6px;
+                border-top: 1px solid var(--dim); }
+  }
+
+  a {
+    display: flex; align-items: baseline; gap: 6px; padding: 2px 12px 2px 0;
+    color: var(--label); cursor: pointer;
+    &:hover { color: var(--fg); }
+    // Reverse video, the way a terminal marks the row under the cursor. A
+    // tinted background is the web's idea of selection; this is the panel's.
+    &.on {
+      color: var(--bg); background: var(--accent); font-weight: 700;
+      box-shadow: 0 0 14px rgba(120,200,255,.35);
+      .n, b { color: var(--bg); opacity: .7; }
+    }
+    // A view the panel has that this export does not carry. Shown, not hidden.
+    &.off { color: var(--dim); cursor: default; }
+    .n { color: var(--dim); font-style: normal; font-size: 11px; }
+    b  { margin-left: auto; color: var(--dim); font-weight: 400; font-size: 11px; }
+  }
+}
+
+// ── content ────────────────────────────────────────────────────────────────
+.content { padding: 52px 16px 40px; }
+@media (min-width: $drawer) {
+  .ham, .scrim, .x { display: none; }
+  .sidebar { transform: none; }
+  .content { margin-left: var(--w); padding-top: 18px; }
+}
+
+// draw::bbox — rounded frame, title bracketed into the top edge, the count
+// bracketed into the bottom-right where the panel parks its hint.
+.panel {
+  position: relative; border: 1px solid var(--dim); border-radius: 6px;
+  margin: 0 0 18px;
+  background: linear-gradient(180deg, rgba(120,200,255,.02), transparent 120px);
+  &:hover { border-color: #4a5060; }
+}
+.panel-head {
+  h3 { @include inlaid; top: -9px; left: 12px; margin: 0;
+       font-size: 12px; font-weight: 700; @include glow; }
+  .count { @include inlaid(var(--dim)); bottom: -9px; right: 12px; font-size: 11px; }
+}
+.panel-body { padding: 16px 13px 13px; }
+pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: var(--fg); font: inherit; }
+
+// ── the dashboard grid ─────────────────────────────────────────────────────
+// The panel's own split for that row: mem widest, then storage, then net —
+// net is two rates and an address and loses nothing by being narrow. Below the
+// breakpoint they stack, which is what the panel does on a short terminal.
+.dash {
+  display: grid; gap: 0 14px; grid-template-columns: 1fr;
+  @media (min-width: $wide) {
+    grid-template-columns: 40fr 37fr 23fr;
+    .w3 { grid-column: 1 / -1; }
+    .w2 { grid-column: span 2; }
+  }
+}
+
+// One bar row: label, meter, numbers. The label is a fixed cell count so every
+// meter in a box starts on the same column, the way they do when a terminal
+// prints them.
+.r {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 1px 0; font-size: 12px; white-space: nowrap;
+  .lb { color: var(--label); flex: 0 0 9ch; overflow: hidden; text-overflow: ellipsis; }
+  .v  { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .v.ip { color: var(--accent); }
+
+  // The detail lines under a bar: dim key, bright value, several to a row.
+  &.dt {
+    gap: 0; flex-wrap: wrap; color: var(--fg);
+    .dk { color: var(--label); margin: 0 5px 0 0; padding-left: 9px;
+          &:first-child { padding-left: 0; } }
+    .dv { color: var(--fg); font-variant-numeric: tabular-nums; }
+  }
+}
+
+// draw::meter in a browser: a run of U+2588 over a run of U+2591, coloured by
+// grad() at the same fraction. The real glyphs, not a styled div — so it lands
+// on the same cell grid as the text beside it and still means something when
+// it is copied out of the page. The empty half sits at GRAPH_FLOOR, where the
+// panel leaves it.
+.mtr {
+  white-space: pre; letter-spacing: -.5px;
+  .e { color: var(--floor); }
+  &.nolimit { color: var(--dim); font-style: italic; }
+}
+td .mtr { margin-right: 8px; }
+
+// RAM / SWAP / VRAM — the panel writes these in the accent above their bars.
+.sub {
+  color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .1em;
+  margin: 9px 0 2px; @include glow($a: .3);
+  &:first-child { margin-top: 0; }
+}
+
+// ── tables ─────────────────────────────────────────────────────────────────
+// Wide tables scroll inside their own box; the page itself never does.
+.scroll { overflow: auto; max-height: 76vh; margin: 14px 2px 6px; border-radius: 0 0 5px 5px; }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th, td {
+  text-align: left; padding: 3px 10px; white-space: nowrap;
+  border-bottom: 1px solid var(--rule);
+}
+th {
+  position: sticky; top: 0; z-index: 1; background: var(--bg); color: var(--label);
+  font-weight: 400; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  border-bottom: 1px solid var(--dim);
+}
+td {
+  &.num { text-align: right; font-variant-numeric: tabular-nums; }
+  &.nil { color: var(--dim); }
+}
+tr {
+  // The cursor row, the way the panel marks the process under the cursor.
+  &:hover td { background: #141821; color: #e6ebf2; &.nil { color: var(--label); } }
+  &:last-child td { border-bottom: none; }
+}
+
+.pill {
+  border: 1px solid var(--dim); border-radius: 3px; padding: 0 5px; font-size: 11px;
+  &.ok   { color: var(--ok);   border-color: #235c3a; }
+  &.warn { color: var(--warn); border-color: #5c5423; }
+  &.bad  { color: var(--bad);  border-color: #5c2323; }
+}
+
+// Scrollbars that belong to the same machine as the rest of it.
+* {
+  scrollbar-width: thin; scrollbar-color: var(--dim) var(--bg);
+  &::-webkit-scrollbar { width: 9px; height: 9px; }
+  &::-webkit-scrollbar-track { background: var(--bg); }
+  &::-webkit-scrollbar-thumb {
+    background: var(--dim); border: 2px solid var(--bg); border-radius: 5px;
+    &:hover { background: var(--label); }
+  }
+}

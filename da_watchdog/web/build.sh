@@ -10,16 +10,20 @@ cd "$(dirname "$0")"
 
 if command -v sass >/dev/null 2>&1; then
   sass --no-source-map --style=expanded src/watchdog.scss dist/watchdog.css
+  # The exported report's sheet. Its own pair because the live panel is a
+  # different document; one sheet over two DOMs half-styles both.
+  sass --no-source-map --style=expanded src/report.scss dist/report.css
   echo "[build] scss -> dist/watchdog.css"
 else
-  echo "[build] no sass; dist/watchdog.css left as committed"
+  echo "[build] no sass; dist/*.css left as committed"
 fi
 
 if command -v esbuild >/dev/null 2>&1; then
   esbuild src/watchdog.ts --outfile=dist/watchdog.js --format=iife --target=es2017
+  esbuild src/report.ts --outfile=dist/report.js --format=iife --target=es2017
   echo "[build] ts -> dist/watchdog.js"
 else
-  echo "[build] no esbuild; dist/watchdog.js left as committed"
+  echo "[build] no esbuild; dist/*.js left as committed"
 fi
 
 # The offline fallback is a SAMPLE of this machine, refreshed only on request:

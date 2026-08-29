@@ -426,6 +426,27 @@ pub(crate) fn export_snapshot(
     let mut envelope = serde_json::Map::new();
     envelope.insert("snapshot".into(), trim_units(s));
     envelope.insert("files".into(), serde_json::json!(files));
+    // Every machine this user can reach, listed whether or not it was probed.
+    // The snapshot describes one box; the report is read as "what have I got",
+    // and a MACHINE section that names only the box you are standing on
+    // answers a question nobody asked. Straight from ~/.ssh/config, which is
+    // the declaration — no ssh, no probe, nothing to wait on, so a one-shot
+    // export lists the fleet as completely as a running panel does.
+    envelope.insert(
+        "machines".into(),
+        Value::Array(
+            crate::dashboards::mesh::peers_from_ssh_config()
+                .into_iter()
+                .map(|m| {
+                    serde_json::json!({
+                        "alias": m.alias,
+                        "ip": m.ip,
+                        "local": m.local,
+                    })
+                })
+                .collect(),
+        ),
+    );
     envelope.insert("exported".into(), serde_json::json!(stamp));
     envelope.insert(
         "measured".into(),
