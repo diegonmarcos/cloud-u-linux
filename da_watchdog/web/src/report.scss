@@ -351,7 +351,14 @@ tr {
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
 }
-[data-view="mobile"] .tui { font-size: 8px; padding: 2px; }
+// 104 columns at ~0.6em per cell is ~62em; sized in vw so the whole grid
+// lands inside the viewport with no horizontal scroll at all, and pinch-zoom
+// (the viewport meta allows it) is there for reading a number closely.
+[data-view="mobile"] .tui {
+  font-size: min(2.6vw, 11px);
+  padding: 2px;
+  line-height: 1.15;
+}
 
 // ── the mobile page ────────────────────────────────────────────────────────
 // index-mobile.html is the same document with data-view="mobile" on <body>,

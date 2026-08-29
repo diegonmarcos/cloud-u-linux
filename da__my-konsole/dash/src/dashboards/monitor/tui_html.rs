@@ -34,6 +34,21 @@ use ratatui::Terminal;
 pub(crate) const COLS: u16 = 200;
 pub(crate) const ROWS: u16 = 64;
 
+/// The phone grid.
+///
+/// A phone does not get the desktop transcript shrunk to fit: 200 columns
+/// across 390 points is about three pixels a character, which is not small
+/// text, it is a texture. So the panel is drawn AGAIN at a width a phone can
+/// actually hold, and ratatui lays it out for that width the way it would on a
+/// narrow terminal — which is the whole reason the panel is being asked to
+/// draw rather than being imitated.
+///
+/// 104 columns still gives the mem box its numbers: the bar derives its width
+/// from the widest figure it must print and gives up cells rather than
+/// clipping them. Taller because everything is narrower and wraps into rows.
+pub(crate) const M_COLS: u16 = 104;
+pub(crate) const M_ROWS: u16 = 90;
+
 /// ratatui's palette, as CSS.
 ///
 /// The Rgb arm is the one that matters: every colour draw.rs picks — DIM,
@@ -86,9 +101,9 @@ fn esc(s: &str) -> String {
 /// Cells are coalesced into runs of identical style rather than emitted one
 /// span per character: a 200x64 grid is 12,800 cells, and one span each would
 /// be a megabyte of markup to say what a few hundred spans say.
-pub(crate) fn render(dash: &mut Monitor) -> Result<String, String> {
+pub(crate) fn render(dash: &mut Monitor, cols: u16, rows: u16) -> Result<String, String> {
     let mut term =
-        Terminal::new(TestBackend::new(COLS, ROWS)).map_err(|e| format!("backend: {e}"))?;
+        Terminal::new(TestBackend::new(cols, rows)).map_err(|e| format!("backend: {e}"))?;
     term.draw(|f| {
         let area = f.area();
         dash.render(f, area);
@@ -97,7 +112,7 @@ pub(crate) fn render(dash: &mut Monitor) -> Result<String, String> {
 
     let buf = term.backend().buffer().clone();
     let mut out = String::from("<pre class=\"tui\">");
-    for y in 0..ROWS {
+    for y in 0..rows {
         // One run at a time, flushed when the style changes or the row ends.
         let mut open: Option<String> = None;
         let mut run = String::new();
@@ -111,7 +126,7 @@ pub(crate) fn render(dash: &mut Monitor) -> Result<String, String> {
             }
             run.clear();
         };
-        for x in 0..COLS {
+        for x in 0..cols {
             let cell = &buf[(x, y)];
             let mut style = String::new();
             if let Some(c) = css(cell.fg) {

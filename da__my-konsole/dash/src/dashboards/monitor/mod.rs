@@ -281,11 +281,16 @@ pub struct Monitor {
 /// network rates are deltas between two refreshes: a single pass reads as
 /// zero for every rate on the page, which looks like an idle machine rather
 /// than an unmeasured one.
-pub(crate) fn overview_html() -> Result<String, String> {
+pub(crate) fn overview_html() -> Result<(String, String), String> {
     let mut m = Monitor::new();
     m.update();
     m.update();
-    tui_html::render(&mut m)
+    // Drawn twice, at two widths. The same Monitor, so both transcripts
+    // describe the same sample — re-sampling between them would give a page
+    // whose two halves disagree about the machine.
+    let wide = tui_html::render(&mut m, tui_html::COLS, tui_html::ROWS)?;
+    let narrow = tui_html::render(&mut m, tui_html::M_COLS, tui_html::M_ROWS)?;
+    Ok((wide, narrow))
 }
 
 pub(crate) fn export_headless() -> Result<String, String> {

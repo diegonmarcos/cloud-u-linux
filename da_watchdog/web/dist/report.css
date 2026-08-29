@@ -601,8 +601,9 @@ tr:last-child td {
 }
 
 [data-view=mobile] .tui {
-  font-size: 8px;
+  font-size: min(2.6vw, 11px);
   padding: 2px;
+  line-height: 1.15;
 }
 
 [data-view=mobile] {

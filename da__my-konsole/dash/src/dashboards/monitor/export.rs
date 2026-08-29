@@ -641,8 +641,9 @@ pub(crate) fn export_snapshot(
         // THIS machine, and a peer's page carrying it would be showing the
         // hub's screen under the peer's name.
         if local {
-            if let Some(t) = tui.as_deref() {
-                env.insert("tui".into(), serde_json::json!(t));
+            if let Some((wide, narrow)) = tui.as_ref() {
+                env.insert("tui".into(), serde_json::json!(wide));
+                env.insert("tui_narrow".into(), serde_json::json!(narrow));
             }
         }
         env.insert("exported".into(), serde_json::json!(stamp));

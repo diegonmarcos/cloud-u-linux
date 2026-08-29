@@ -16,7 +16,7 @@ const MIB = 1048576, GIB = 1073741824;
 
 interface Machine { alias: string; ip?: string; local?: boolean }
 interface Envelope {
-  snapshot?: Snap; report?: string; files?: string[]; tui?: string;
+  snapshot?: Snap; report?: string; files?: string[]; tui?: string; tui_narrow?: string;
   machines?: Machine[]; exported?: string; measured?: string;
 }
 type Dict = Record<string, any>;
@@ -326,7 +326,11 @@ function overview(): string {
   // not reproduced here — they arrive already correct, because draw() drew
   // them. The boxes below are the fallback for an envelope written before the
   // exporter could do this, or by a build that could not.
-  if (E.tui) return E.tui;
+  // The phone gets its own transcript, drawn by the panel at 104 columns
+  // rather than the 200-column one scaled down — 200 across a 390pt screen is
+  // about three pixels a character, which is a texture, not text.
+  const t = MOBILE ? (E.tui_narrow || E.tui) : E.tui;
+  if (t) return t;
   return legacyOverview();
 }
 

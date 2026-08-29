@@ -252,7 +252,8 @@
     return panel("mesh", ms.length + " machines", b, true);
   }
   function overview() {
-    if (E.tui) return E.tui;
+    const t = MOBILE ? E.tui_narrow || E.tui : E.tui;
+    if (t) return t;
     return legacyOverview();
   }
   function legacyOverview() {
