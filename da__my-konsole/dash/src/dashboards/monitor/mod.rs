@@ -537,15 +537,37 @@ impl Monitor {
     /// calm, which is why each row carries its own pressure.
     fn slice_lines(&self, s: &Value, width: u16, height: u16) -> Vec<Line<'static>> {
         let slices = arr(s, "slices");
-        let mut l: Vec<Line> = vec![Line::from(vec![
+        // WHAT FITS, AND IN WHAT ORDER.
+        //
+        // This row was 81 columns wide in a box that gets a third of the
+        // terminal, so everything from `max` rightwards was clipped — and the
+        // pressure column, the only one that answers "which slice is causing
+        // this", was last and therefore always the first thing lost. The panel
+        // reported 17% io.full system-wide and cut off the per-slice figure
+        // that names the cause.
+        //
+        // So pressure sits directly after mem, where it cannot be cut, and the
+        // memory ceilings — which read "—" for most slices most of the time —
+        // only appear when there is width to spare. And `width` is now used
+        // rather than discarded, which is what let the overflow go unnoticed.
+        let w = width as usize;
+        let show_swap = w >= 64;
+        let show_lims = w >= 88;
+        let mut head = vec![
             Span::styled(format!("{:<20}", "slice"), Style::default().fg(DIM)),
             Span::styled(format!("{:>12}", "mem"), Style::default().fg(DIM)),
-            Span::styled(format!("{:>12}", "swap"), Style::default().fg(DIM)),
-            Span::styled(format!("{:>12}", "high"), Style::default().fg(DIM)),
-            Span::styled(format!("{:>12}", "max"), Style::default().fg(DIM)),
-            Span::styled(format!("{:>6}", "pids"), Style::default().fg(DIM)),
-            Span::styled(format!("{:>7}", "mem·io"), Style::default().fg(DIM)),
-        ])];
+            Span::styled(format!("{:>7}", "io"), Style::default().fg(DIM)),
+            Span::styled(format!("{:>7}", "cpu"), Style::default().fg(DIM)),
+        ];
+        if show_swap {
+            head.push(Span::styled(format!("{:>12}", "swap"), Style::default().fg(DIM)));
+        }
+        if show_lims {
+            head.push(Span::styled(format!("{:>12}", "high"), Style::default().fg(DIM)));
+            head.push(Span::styled(format!("{:>12}", "max"), Style::default().fg(DIM)));
+        }
+        head.push(Span::styled(format!("{:>6}", "pids"), Style::default().fg(DIM)));
+        let mut l: Vec<Line> = vec![Line::from(head)];
         if slices.is_empty() {
             l.push(Line::from(Span::styled(
                 "  no cgroup data — daemon too old to publish slices",
@@ -553,8 +575,16 @@ impl Monitor {
             )));
             return l;
         }
-        let _ = width;
-        for sl in slices.iter().take((height as usize).saturating_sub(2)) {
+        // Worst first. This box is read to answer "who", not to inventory the
+        // cgroup tree, so the slice under the most pressure is the top row
+        // rather than wherever the alphabet put it. io before cpu because io
+        // pressure is what stalls a machine outright.
+        let mut slices: Vec<&Value> = slices.iter().collect();
+        slices.sort_by(|a, b| {
+            let k = |x: &Value| num(x, "io_psi").max(num(x, "cpu_psi"));
+            k(b).partial_cmp(&k(a)).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        for &sl in slices.iter().take((height as usize).saturating_sub(2)) {
             let name = text(sl, "name");
             let cur = num(sl, "current");
             let max = num(sl, "max");
@@ -572,20 +602,40 @@ impl Monitor {
             // Colour against whichever ceiling exists — max if set, else high.
             let ceil = if max > 0.0 { max } else { high };
             let frac = if ceil > 0.0 { cur / ceil } else { 0.0 };
-            let mpsi = num(sl, "mem_psi");
             let iopsi = num(sl, "io_psi");
-            l.push(Line::from(vec![
+            let cpupsi = num(sl, "cpu_psi");
+            // Two decimals, not none. These were "39" and "15" in three
+            // columns, and the difference between 0.4 and 0.04 is the
+            // difference between a slice that is stalling and one that is not.
+            //
+            // Scaled against 50 rather than 100: a cgroup stalled 50% of the
+            // time is already the worst thing on the machine, so the colour
+            // should have reached red well before then. Against 100 everything
+            // real stays green.
+            let psi = |v: f64| -> Span<'static> {
+                Span::styled(format!("{v:>7.2}"), Style::default().fg(grad(v / 50.0)))
+            };
+            let mut row = vec![
                 Span::styled(
                     format!("{}{:<width$}", if prot { "🔒" } else { "  " }, name, width = 18),
                     Style::default().fg(if prot { Color::Rgb(240, 160, 90) } else { Color::Gray }),
                 ),
                 Span::styled(fmt_mem_cell(cur), Style::default().fg(grad(frac))),
-                Span::styled(fmt_mem_cell(num(sl, "swap")), Style::default().fg(Color::Rgb(140, 150, 170))),
-                lim(high),
-                lim(max),
-                Span::styled(format!("{:>6.0}", num(sl, "pids")), Style::default().fg(LABEL)),
-                Span::styled(format!("{mpsi:>3.0}·{iopsi:<3.0}"), Style::default().fg(grad(mpsi.max(iopsi) / 20.0))),
-            ]));
+                psi(iopsi),
+                psi(cpupsi),
+            ];
+            if show_swap {
+                row.push(Span::styled(
+                    fmt_mem_cell(num(sl, "swap")),
+                    Style::default().fg(Color::Rgb(140, 150, 170)),
+                ));
+            }
+            if show_lims {
+                row.push(lim(high));
+                row.push(lim(max));
+            }
+            row.push(Span::styled(format!("{:>6.0}", num(sl, "pids")), Style::default().fg(LABEL)));
+            l.push(Line::from(row));
         }
         l
     }
