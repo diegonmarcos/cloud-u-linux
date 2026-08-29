@@ -138,7 +138,10 @@ case "${1:-fetch}" in
         sleep 1
         pkill -9 -x $BIN 2>/dev/null || true
         systemctl --user start my-watchdog 2>/dev/null || true
-        n=\$(pgrep -cx $BIN 2>/dev/null || echo 0)
+        # Counted with ps, not `pgrep -c`: that flag is not everywhere, and on
+        # the box that lacks it pgrep prints its usage and exits 1, which this
+        # check read as "zero instances" and reported a healthy daemon as down.
+        n=\$(ps -eo comm= 2>/dev/null | grep -cx $BIN || true)
         [ "\$n" = 1 ] || echo "  WARNING: \$n instances of $BIN running"
 EOF
       # Same policy document to every peer — that is what makes it one source
