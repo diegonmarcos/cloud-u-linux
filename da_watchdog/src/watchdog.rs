@@ -1323,7 +1323,28 @@ fn build_proc_table(
         });
     }
 
-    rows.sort_unstable_by(|a, b| b.cpu_pct.partial_cmp(&a.cpu_pct).unwrap_or(std::cmp::Ordering::Equal));
+    // CPU first, then resident set — and the second key is not a tidiness
+    // detail, it is what makes the table readable at all on a quiet machine.
+    //
+    // A box with 2% total process CPU has a hundred and fifty processes tied at
+    // 0.0, and an unstable sort breaks that tie in readdir order, which is
+    // roughly pid order, which is kernel threads. oci-mail published forty rows
+    // of which thirty-three were kworkers and rcu_* while dockerd, containerd,
+    // maddy and fluent-bit — the things actually running the machine — did not
+    // appear at all. The panel was least useful exactly when it was needed,
+    // because "nothing is using CPU" handed the whole table to the tiebreak.
+    //
+    // RSS is the right second key and costs nothing: it is already read. A
+    // kernel thread has no mm and therefore no VmRSS, so every one of them
+    // sinks below every real process automatically, without a special case and
+    // without ever being hidden — a kworker that IS burning CPU still sorts up
+    // on the first key, which is the only time anyone wants to see one.
+    rows.sort_unstable_by(|a, b| {
+        b.cpu_pct
+            .partial_cmp(&a.cpu_pct)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(b.rss_bytes.partial_cmp(&a.rss_bytes).unwrap_or(std::cmp::Ordering::Equal))
+    });
     rows.truncate(n);
     // After the truncate, never before — and not on every tick.
     //
