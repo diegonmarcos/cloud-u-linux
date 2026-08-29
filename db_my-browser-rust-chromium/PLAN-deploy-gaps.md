@@ -112,12 +112,42 @@ Once this lands the browser installs the same way everything else here does, and
 
 ---
 
+## P6 — qutebrowser's BUILT-IN keymap (audited 2026-08-29: entirely missing)
+
+`2_configs/keybindings.json` contains only the 44 **custom overrides**. It does
+not contain qutebrowser's own default keymap, so none of that was ever built.
+Verified absent by direct lookup, not assumed:
+
+| Missing | What it is |
+| --- | --- |
+| `f` / `F` | link hints — the most-used qutebrowser feature of all |
+| `/` `?` `n` `N` | in-page search |
+| `j` `k` `gg` `G` | scrolling |
+| `d` | close tab |
+| `i` / `v` | insert / caret mode |
+
+Implemented modes are normal/insert/command only — no hint, caret or
+passthrough mode — and `:` has no completion engine.
+
+**All of this is blocked on P3, not merely unbuilt.** Hints, find and scrolling
+each require reaching into the page's DOM. While content is a cross-origin
+iframe that is impossible, full stop. Once content is its own CEF browser, CEF
+exposes a real find API and JS can be injected into a browser we own.
+
+So the accurate statement of where this browser stands: it reproduces the qute
+*configuration* faithfully (bindings, bookmarks, pins, plugins, palette, row
+order) and none of qutebrowser's *built-in behaviour*. Do not describe it as
+"matching qute" until this phase is done.
+
+---
+
 ## Sequencing
 
 ```
 P0 ─┬─> P3 ─> P5
     └─> P1 ─> P2
 P4 runs in parallel with everything (touches only src/nix + flake)
+P6 (qute's built-in keymap) depends on P3 -- it needs DOM access to the content
 ```
 
 P0, P1 and P4 are independent and can be worked at the same time. P2 depends on
