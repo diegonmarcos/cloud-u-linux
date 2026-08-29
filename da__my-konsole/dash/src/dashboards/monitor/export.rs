@@ -389,7 +389,7 @@ fn report(
 /// machines turns six machines into sixteen rows of noise. Keyed by address,
 /// shortest alias wins, and entries that resolve to no address at all (github.com)
 /// are not machines.
-fn machines() -> Vec<Value> {
+fn fleet_machines() -> Vec<Value> {
     let mut out: Vec<Value> = vec![];
     let mut seen: Vec<String> = vec![];
 
@@ -518,7 +518,7 @@ pub(crate) fn export_snapshot(
     let mut envelope = serde_json::Map::new();
     envelope.insert("snapshot".into(), trim_units(s));
     envelope.insert("files".into(), serde_json::json!(files));
-    envelope.insert("machines".into(), Value::Array(machines()));
+    envelope.insert("machines".into(), Value::Array(fleet_machines()));
     envelope.insert("exported".into(), serde_json::json!(stamp));
     envelope.insert(
         "measured".into(),
@@ -608,6 +608,11 @@ pub(crate) fn export_snapshot(
         o
     };
 
+    // The same list on every page, so it is built once rather than per page.
+    // Named apart from `machines` above, which is the pages being written and
+    // is a different thing entirely — that collision is what hid this bug.
+    let fleet = Value::Array(fleet_machines());
+
     for (label, file, snap, from) in &machines {
         let local = file.as_str() == "index.html";
         // The file tree is read off disk by the panel and only exists for the
@@ -620,6 +625,11 @@ pub(crate) fn export_snapshot(
         let mut env = serde_json::Map::new();
         env.insert("snapshot".into(), trim_units(snap));
         env.insert("files".into(), serde_json::json!(mfiles));
+        // The page's OWN envelope, which is the one the browser reads. The
+        // outer envelope beside it feeds the .json/.yaml/.md export and is not
+        // what the HTML embeds — putting the fleet only there meant MACHINE
+        // rendered empty on every page while the json beside it was correct.
+        env.insert("machines".into(), fleet.clone());
         env.insert("exported".into(), serde_json::json!(stamp));
         env.insert(
             "measured".into(),
