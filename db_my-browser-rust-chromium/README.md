@@ -1,4 +1,4 @@
-# da_my-browser-rust-chromium
+# db_my-browser-rust-chromium
 
 **Rust front-end + Chromium (CEF) backend** — the sibling to `db_my-browser-qute`.
 
@@ -56,14 +56,18 @@ the exact thing qute fails.
 
 ## Layout (mirrors db_my-browser-qute)
 
+What is actually on disk today — the rest is aspiration, tracked in `PLAN.md`:
+
 ```
-da_my-browser-rust-chromium/
+db_my-browser-rust-chromium/
 ├── build.sh              engine (verbs: build / run / release / clean)
-├── build.json            project metadata + engine config
+├── build.json            project metadata + engine config (base example = `osr`)
+├── PLAN.md               phases, measurements, what to clone
+├── 2_configs/
+│   └── my-browser-chromium-homepage.html   baked dashboard (phase 1c, done)
 └── src/
-    ├── flake.nix         rust toolchain + prebuilt libcef (fixed-output)
-    ├── Cargo.toml        cef-rs + winit
-    ├── main.rs           entry — CEF init + window (skeleton)
-    └── 2_configs/
-        └── keybindings.json   (shared shape with qute's SoT)
+    └── flake.nix         rust toolchain + prebuilt libcef
+
+not yet written:  src/Cargo.toml   src/main.rs   src/patches/
+                  2_configs/keybindings.json  (shared shape with qute's SoT)
 ```
