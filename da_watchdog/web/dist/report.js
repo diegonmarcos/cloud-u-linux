@@ -7,6 +7,8 @@
   const S = E.snapshot || {};
   const out = document.getElementById("out");
   const MOBILE = document.body.dataset.view === "mobile";
+  let fitNow = () => {
+  };
   const BAR = MOBILE ? 10 : 20;
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const num = (o, k) => {
@@ -323,8 +325,9 @@
       const rows = S[k] || [];
       out.innerHTML = panel(k, rows.length + " rows", table(rows));
     }
-    if (window.innerWidth < 1e3) closeDrawer();
+    if (window.innerWidth < 1e3 || MOBILE) closeDrawer();
     window.scrollTo(0, 0);
+    if (MOBILE) requestAnimationFrame(fitNow);
   }
   const sb = document.getElementById("sb");
   const scrim = document.getElementById("scrim");
@@ -345,5 +348,53 @@
       show(b.dataset.k || "__overview");
     };
   });
+  if (MOBILE) {
+    const bar2 = document.createElement("div");
+    bar2.className = "appbar";
+    const ham = document.getElementById("ham");
+    bar2.appendChild(ham);
+    const title = document.createElement("span");
+    title.className = "t";
+    const h = S.host_info || {};
+    title.textContent = String(h.host || "my-watchdog");
+    bar2.appendChild(title);
+    const age = document.createElement("span");
+    age.className = "age";
+    age.textContent = E.exported ? String(E.exported) : "";
+    bar2.appendChild(age);
+    const zoom = document.createElement("button");
+    zoom.className = "zoom";
+    zoom.type = "button";
+    zoom.textContent = "1:1";
+    zoom.setAttribute("aria-pressed", "false");
+    zoom.setAttribute("aria-label", "actual size");
+    bar2.appendChild(zoom);
+    document.body.insertBefore(bar2, document.body.firstChild);
+    const root = document.documentElement;
+    const fit = () => {
+      const pre = document.querySelector(".tui");
+      const wrap = document.querySelector(".tui-wrap");
+      if (!pre || !wrap) return;
+      if (root.classList.contains("zoom1")) {
+        pre.style.transform = "";
+        wrap.style.height = "";
+        return;
+      }
+      pre.style.transform = "";
+      wrap.style.height = "";
+      const k = Math.min(1, wrap.clientWidth / Math.max(1, pre.scrollWidth));
+      pre.style.transform = `scale(${k})`;
+      wrap.style.height = `${pre.offsetHeight * k}px`;
+    };
+    zoom.onclick = () => {
+      const on = root.classList.toggle("zoom1");
+      zoom.setAttribute("aria-pressed", String(on));
+      zoom.textContent = on ? "fit" : "1:1";
+      fit();
+    };
+    window.addEventListener("resize", fit);
+    fitNow = fit;
+  }
   show("__overview");
+  if (MOBILE) requestAnimationFrame(fitNow);
 })();

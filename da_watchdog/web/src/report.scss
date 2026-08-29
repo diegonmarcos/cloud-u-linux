@@ -518,3 +518,70 @@ a:focus-visible, button:focus-visible {
   .tui { box-shadow: none; padding: 0; }
   .tui-wrap { padding: 0; }
 }
+
+
+// ── the app shell ──────────────────────────────────────────────────────────
+// index-mobile.html is the APK's UI, so it is an application, not a report
+// that happens to be narrow: a fixed top bar, a drawer, and a body that
+// scrolls under them. Everything here is scoped to the mobile page.
+//
+// THE CONSTRAINT THAT SHAPES ALL OF IT: 104 columns of monospace need about
+// 6px a character to fit 390 points, and 6px is not text. A terminal grid on
+// a phone must either scroll or scale, and there is no third option — so the
+// page does both and lets the reader choose, defaulting to the one that shows
+// the whole screen at once.
+[data-view="mobile"] {
+  // Under the notch and above the gesture bar. Without these the app bar
+  // sits beneath the status bar on every phone made since 2017.
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --appbar: 52px;
+
+  // The page itself never scrolls sideways. Only the transcript does, inside
+  // its own box, which is what keeps the app bar and drawer where they are.
+  overflow-x: hidden;
+
+  .appbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 70;
+    height: calc(var(--appbar) + var(--safe-t));
+    padding: var(--safe-t) 8px 0;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--lift);
+    border-bottom: 1px solid var(--dim);
+    // The bar is above the phosphor overlay, or it dims as you scroll under it.
+    box-shadow: 0 1px 0 rgba(0, 0, 0, .4);
+  }
+  .appbar .t {
+    font-size: 13px; font-weight: 700; color: var(--accent);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .appbar .age { margin-left: auto; font-size: 11px; color: var(--label); }
+  .appbar .zoom {
+    background: none; border: 1px solid var(--dim); border-radius: 6px;
+    color: var(--label); font: inherit; font-size: 11px;
+    min-width: 44px; min-height: 36px; padding: 0 10px; cursor: pointer;
+    &[aria-pressed="true"] { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+  }
+
+  .ham { position: static; transform: none; box-shadow: none; }
+  .content { padding-top: calc(var(--appbar) + var(--safe-t) + 8px); }
+  .bar { display: none; }        // the app bar replaces the report header
+  .sidebar { padding-top: var(--safe-t); }
+  .grp { padding-bottom: calc(var(--safe-b) + 24px); }
+
+  // Fit-to-width: the grid is scaled as a whole so every column keeps its
+  // position relative to every other. Scaling is the only way to shrink a
+  // terminal without breaking alignment — reflowing it breaks every column at
+  // once, which is the failure this whole approach exists to end.
+  .tui-wrap { padding: 0 0 calc(var(--safe-b) + 16px); overflow: hidden; }
+  .tui {
+    padding: 6px; box-shadow: none; border-radius: 0;
+    transform-origin: top left;
+  }
+  // 1:1, for reading a number rather than seeing the shape. The transcript
+  // scrolls inside its own box; the page still does not.
+  &.zoom1 {
+    .tui-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tui { transform: none !important; font-size: 11px; }
+  }
+}

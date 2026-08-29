@@ -35,6 +35,9 @@ const out = document.getElementById('out') as HTMLElement;
 // is written, so a phone in landscape gets the phone page and a narrow window
 // on a desktop does not.
 const MOBILE = document.body.dataset.view === 'mobile';
+// Assigned by the phone shell below; a no-op on the desktop page so every
+// caller can just call it without asking which page it is on.
+let fitNow: () => void = () => {};
 // A 20-cell meter needs ~20ch beside a label and two figures. That fits a
 // terminal and does not fit 390px, so the bar gives up cells rather than
 // letting the numbers wrap — the numbers are the part being read.
@@ -403,8 +406,9 @@ function show(k: string): void {
     const rows: Dict[] = (S as Dict)[k] || [];
     out.innerHTML = panel(k, rows.length + ' rows', table(rows));
   }
-  if (window.innerWidth < 1000) closeDrawer();
+  if (window.innerWidth < 1000 || MOBILE) closeDrawer();
   window.scrollTo(0, 0);
+  if (MOBILE) requestAnimationFrame(fitNow);
 }
 
 const sb = document.getElementById('sb') as HTMLElement;
@@ -422,4 +426,75 @@ document.querySelectorAll<HTMLElement>('.t').forEach(b => {
     show(b.dataset.k || '__overview');
   };
 });
+// ── the phone application ──────────────────────────────────────────────────
+// index-mobile.html is the APK's UI, so it gets an app bar rather than the
+// report's header line. Built here rather than in the Rust template: a second
+// template is a second place for the two pages to drift, and everything this
+// needs is already in the DOM — the hamburger is simply moved into the bar it
+// belongs to.
+if (MOBILE) {
+  const bar = document.createElement('div');
+  bar.className = 'appbar';
+  const ham = document.getElementById('ham') as HTMLElement;
+  bar.appendChild(ham);
+
+  const title = document.createElement('span');
+  title.className = 't';
+  const h = S.host_info || {};
+  title.textContent = String(h.host || 'my-watchdog');
+  bar.appendChild(title);
+
+  // How old the sample is, which is the one fact that decides whether
+  // anything else on the page can be believed.
+  const age = document.createElement('span');
+  age.className = 'age';
+  age.textContent = E.exported ? String(E.exported) : '';
+  bar.appendChild(age);
+
+  // Fit-to-width by default, 1:1 on demand. Scaling keeps every column in
+  // position relative to every other; reflowing a terminal grid breaks all of
+  // them at once, which is the failure this whole approach exists to end.
+  const zoom = document.createElement('button');
+  zoom.className = 'zoom';
+  zoom.type = 'button';
+  zoom.textContent = '1:1';
+  zoom.setAttribute('aria-pressed', 'false');
+  zoom.setAttribute('aria-label', 'actual size');
+  bar.appendChild(zoom);
+  document.body.insertBefore(bar, document.body.firstChild);
+
+  const root = document.documentElement;
+  // A scaled element keeps its ORIGINAL box for layout, so the wrapper has to
+  // be told the scaled height or the page carries a screenful of empty space
+  // under the transcript.
+  const fit = () => {
+    const pre = document.querySelector('.tui') as HTMLElement | null;
+    const wrap = document.querySelector('.tui-wrap') as HTMLElement | null;
+    if (!pre || !wrap) return;
+    if (root.classList.contains('zoom1')) {
+      pre.style.transform = '';
+      wrap.style.height = '';
+      return;
+    }
+    pre.style.transform = '';
+    wrap.style.height = '';
+    const k = Math.min(1, wrap.clientWidth / Math.max(1, pre.scrollWidth));
+    pre.style.transform = `scale(${k})`;
+    wrap.style.height = `${pre.offsetHeight * k}px`;
+  };
+  zoom.onclick = () => {
+    const on = root.classList.toggle('zoom1');
+    zoom.setAttribute('aria-pressed', String(on));
+    zoom.textContent = on ? 'fit' : '1:1';
+    fit();
+  };
+  // Rotation changes the available width, so the fit is recomputed rather
+  // than left at whatever the launch orientation happened to need.
+  window.addEventListener('resize', fit);
+  fitNow = fit;
+}
+
 show('__overview');
+// The first fit has to wait for layout: scrollWidth is 0 until the browser
+// has measured the <pre> it was just handed.
+if (MOBILE) requestAnimationFrame(fitNow);

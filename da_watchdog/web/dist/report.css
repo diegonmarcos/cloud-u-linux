@@ -782,3 +782,89 @@ a:focus-visible, button:focus-visible {
     padding: 0;
   }
 }
+[data-view=mobile] {
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --appbar: 52px;
+  overflow-x: hidden;
+}
+[data-view=mobile] .appbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 70;
+  height: calc(var(--appbar) + var(--safe-t));
+  padding: var(--safe-t) 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--lift);
+  border-bottom: 1px solid var(--dim);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+[data-view=mobile] .appbar .t {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-view=mobile] .appbar .age {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--label);
+}
+[data-view=mobile] .appbar .zoom {
+  background: none;
+  border: 1px solid var(--dim);
+  border-radius: 6px;
+  color: var(--label);
+  font: inherit;
+  font-size: 11px;
+  min-width: 44px;
+  min-height: 36px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+[data-view=mobile] .appbar .zoom[aria-pressed=true] {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+[data-view=mobile] .ham {
+  position: static;
+  transform: none;
+  box-shadow: none;
+}
+[data-view=mobile] .content {
+  padding-top: calc(var(--appbar) + var(--safe-t) + 8px);
+}
+[data-view=mobile] .bar {
+  display: none;
+}
+[data-view=mobile] .sidebar {
+  padding-top: var(--safe-t);
+}
+[data-view=mobile] .grp {
+  padding-bottom: calc(var(--safe-b) + 24px);
+}
+[data-view=mobile] .tui-wrap {
+  padding: 0 0 calc(var(--safe-b) + 16px);
+  overflow: hidden;
+}
+[data-view=mobile] .tui {
+  padding: 6px;
+  box-shadow: none;
+  border-radius: 0;
+  transform-origin: top left;
+}
+[data-view=mobile].zoom1 .tui-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+[data-view=mobile].zoom1 .tui {
+  transform: none !important;
+  font-size: 11px;
+}
