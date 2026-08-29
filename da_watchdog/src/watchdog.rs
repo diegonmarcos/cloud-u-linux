@@ -1334,8 +1334,8 @@ fn build_proc_table(
     // appear at all. The panel was least useful exactly when it was needed,
     // because "nothing is using CPU" handed the whole table to the tiebreak.
     //
-    // RSS is the right second key and costs nothing: it is already read. A
-    // kernel thread has no mm and therefore no VmRSS, so every one of them
+    // RSS is the right second key and costs nothing: rss_kb is already read.
+    // A kernel thread has no mm and therefore no VmRSS, so every one of them
     // sinks below every real process automatically, without a special case and
     // without ever being hidden — a kworker that IS burning CPU still sorts up
     // on the first key, which is the only time anyone wants to see one.
@@ -1343,7 +1343,7 @@ fn build_proc_table(
         b.cpu_pct
             .partial_cmp(&a.cpu_pct)
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then(b.rss_bytes.partial_cmp(&a.rss_bytes).unwrap_or(std::cmp::Ordering::Equal))
+            .then(b.rss_kb.partial_cmp(&a.rss_kb).unwrap_or(std::cmp::Ordering::Equal))
     });
     rows.truncate(n);
     // After the truncate, never before — and not on every tick.
