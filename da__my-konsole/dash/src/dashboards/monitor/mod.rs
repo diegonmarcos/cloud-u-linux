@@ -6594,8 +6594,12 @@ mod tests {
         assert_eq!(cmd::resolve("f2", proc), cmd::Cmd::Go(proc, Some(1)));
         assert_eq!(cmd::resolve("2", proc), cmd::Cmd::Go(proc, Some(1)));
         assert_eq!(cmd::resolve("f4", fleet), cmd::Cmd::Go(fleet, Some(3)));
+        // proc grew a fourth sub-tab — parentless, beside normal/tree/zombies —
+        // so :f4 resolves there now. This assertion used to be the out-of-range
+        // one, which is exactly what made it worth keeping: it pins the count.
+        assert_eq!(cmd::resolve("f4", proc), cmd::Cmd::Go(proc, Some(3)));
         // Out of range says so rather than clamping to something plausible.
-        assert!(matches!(cmd::resolve("f4", proc), cmd::Cmd::Err(_)));
+        assert!(matches!(cmd::resolve("f5", proc), cmd::Cmd::Err(_)));
 
         // A tab by name keeps the mode it was left on: None, not Some(0).
         assert_eq!(cmd::resolve("fleet", proc), cmd::Cmd::Go(fleet, None));
