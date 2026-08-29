@@ -15,7 +15,12 @@ one change that removes the biggest ceiling, then deployment.
 
 ---
 
-## P0 — Prove input works (blocks trusting anything else) — DONE
+## P0 — Prove input works (blocks trusting anything else) — PARTLY DONE
+
+> Step 1 (pure translation, unit-tested) shipped: 18 tests green in CI, and the
+> drag-to-select bug it was written to expose is fixed. **Step 2 (`--selftest`)
+> was not built** — so the winit-handler -> CEF leg is still unexercised. Do not
+> read "P0 green" as "input works".
 
 Nobody has confirmed mouse/keyboard/scroll reach CEF. The forwarding code was
 written, compiled, and never exercised. Until this is closed every other feature
