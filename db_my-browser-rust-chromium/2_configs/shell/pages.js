@@ -255,6 +255,26 @@
     return readJSON(DOWNLOADS_KEY, []);
   }
 
+  // Rust writes real download data to shell/state/downloads.js (see
+  // state.js for the exact wire format); that beats the localStorage stub
+  // whenever it exists. Kept as a single point of truth so both the initial
+  // draw and the STATE.on callback agree on precedence.
+  function downloadsCurrent() {
+    if (window.STATE && typeof window.STATE.get === 'function') {
+      const fromState = window.STATE.get('downloads');
+      if (fromState !== undefined && fromState !== null) return fromState;
+    }
+    return downloadsLoad();
+  }
+
+  // Only one STATE.on('downloads', ...) subscription is ever registered
+  // (STATE has no unsubscribe); repeated visits to this page just repoint
+  // downloadsRedraw at the latest draw(). draw() itself no-ops once its
+  // table has been detached from the DOM, so a stale subscription from a
+  // page the user has since navigated away from does nothing.
+  let downloadsRedraw = null;
+  let downloadsSubscribed = false;
+
   function renderDownloads(root) {
     ensureStyle();
     clearEl(root);
@@ -264,34 +284,39 @@
     const header = el('div', {}, [
       el('span', { text: 'Filename' }),
       el('span', { text: 'URL' }),
-      el('span', { text: 'Time' }),
-      el('span', { text: 'Status' })
+      el('span', { text: 'Progress' }),
+      el('span', { text: 'Status' }),
+      el('span', { text: 'Time' })
     ]);
 
     function draw() {
+      if (!table.isConnected) return; // page navigated away; nothing to redraw
       clearEl(table);
-      const list = downloadsLoad();
-      if (list.length === 0) {
+      const list = downloadsCurrent();
+      if (!list || list.length === 0) {
         table.appendChild(
           el('div', { class: 'pg-empty' }, [
             el('p', {
               text:
-                'No downloads recorded. This HTML shell has no way to see real browser ' +
-                'downloads — CEF downloads happen at the native layer, outside the DOM. ' +
-                'This page will populate once the Rust shell wires a CefDownloadHandler ' +
-                'that writes entries here.'
+                'No downloads yet. The Rust shell has not written shell/state/downloads.js — ' +
+                'once it wires up a download handler and starts writing entries there, this ' +
+                'page updates automatically.'
             })
           ])
         );
         return;
       }
       list.forEach(function (d) {
+        const state = d.state || d.status || 'unknown';
+        const pct = typeof d.percent === 'number' ? Math.round(d.percent) + '%' : '';
+        const when = d.timestamp !== undefined ? d.timestamp : d.time;
         table.appendChild(
           el('div', {}, [
             el('span', { text: d.filename || '(unknown)' }),
             el('span', { text: d.url || '' }),
-            el('span', { text: fmtTime(d.time) }),
-            el('span', { text: d.status || 'unknown' })
+            el('span', { text: pct }),
+            el('span', { text: state }),
+            el('span', { text: fmtTime(when) })
           ])
         );
       });
@@ -307,6 +332,14 @@
     root.appendChild(header);
     root.appendChild(table);
     draw();
+
+    downloadsRedraw = draw;
+    if (!downloadsSubscribed && window.STATE && typeof window.STATE.on === 'function') {
+      downloadsSubscribed = true;
+      window.STATE.on('downloads', function () {
+        if (typeof downloadsRedraw === 'function') downloadsRedraw();
+      });
+    }
   }
 
   // ---------------------------------------------------------------------

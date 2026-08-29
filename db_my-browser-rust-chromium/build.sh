@@ -115,7 +115,18 @@ if [ -z "${VK_ICD_FILENAMES:-}" ] && [ -z "${VK_DRIVER_FILES:-}" ]; then
     [ -n "$_icd" ] && export VK_ICD_FILENAMES="$_icd" && break
   done
 fi
-exec "$HERE/my-browser-rust-chromium" --url="file://$HERE/shell/index.html" "$@"
+# The shell IS the browser chrome, so it always stays the loaded document. A URL
+# argument (xdg-open, a .desktop %U, `my-browser https://...`) must therefore be
+# handed TO the shell to open in a tab, not swapped in for it -- passing it as
+# --url would replace the whole UI with a bare page.
+# base64 rather than percent-encoding: it sidesteps the entire quoting/escaping
+# class (fragments, &, spaces, non-ASCII) with one command on each side.
+SHELL_URL="file://$HERE/shell/index.html"
+case "${1:-}" in
+  ""|-*) ;;                                   # no URL, or a switch meant for CEF
+  *) SHELL_URL="$SHELL_URL#open=$(printf %s "$1" | base64 -w0)"; shift ;;
+esac
+exec "$HERE/my-browser-rust-chromium" --url="$SHELL_URL" "$@"
 LAUNCH
     chmod +x "$DIST/bundle/my-browser"
     tar -C "$DIST/bundle" -czf "$DIST/$TARBALL" .

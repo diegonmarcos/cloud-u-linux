@@ -33,9 +33,6 @@ let
     # The release lives on the monorepo, not a per-app repo: build.sh ships it to
     # the rolling tag "${name}-latest" on cloud-u-linux itself.
     url = "https://github.com/diegonmarcos/cloud-u-linux/releases/download/${name}-latest/${tarballName}";
-    # ponytail: PLACEHOLDER — fill in with the real hash once the tarball
-    # exists (e.g. `nix-prefetch-url <url>` or let the build fail once and
-    # copy the "got:" hash it prints).
     sha256 = import ./tarball-hash.nix;
   };
 in

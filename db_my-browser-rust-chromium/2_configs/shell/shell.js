@@ -520,6 +520,19 @@
   // opaque origins), and cross-origin http pages are unreadable by design, so the
   // page's real <title> is usually unavailable. Derive something legible from the
   // URL instead of showing the raw path in the tab strip.
+  // Decodes the launcher's #open=<base64> hand-off. Anything malformed is
+  // ignored rather than thrown: a bad fragment must not stop the browser booting.
+  function requestedUrl() {
+    const m = /[#&]open=([^&]+)/.exec(location.hash || '');
+    if (!m) return null;
+    try {
+      const u = decodeURIComponent(escape(atob(m[1])));
+      return /^(https?|file|about):/i.test(u) ? u : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function prettyTitle(url) {
     const u = String(url || '');
     try {
@@ -929,7 +942,14 @@
     // the pins, so the tab strip was empty and the pinned Bookmarks page loaded as
     // the landing view -- not what qute does.
     tabs.push(makeTab(DATA.homepage || HOMEPAGE, { title: 'Home' }));
-    selectedId = (tabs.find((t) => !t.pinned) || tabs[0]).id;
+
+    // The launcher forwards a URL argument as #open=<base64>, because the shell
+    // itself must stay the loaded document (see build.sh). Open it as a real tab
+    // and focus it, so clicking a link in another app lands where you expect.
+    const requested = requestedUrl();
+    if (requested) tabs.push(makeTab(requested, {}));
+
+    selectedId = tabs[tabs.length - 1].id;
     setMode('normal');
     render();
     loadSelected();
