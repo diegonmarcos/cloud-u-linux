@@ -272,6 +272,16 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: var(--fg)
 }
 td .mtr { margin-right: 8px; }
 
+// The mesh box's columns: dot, peer, address, kind. Fixed cells so they line
+// up down the box the way the panel's format!("{:<14}{:>10}") does.
+.r {
+  .dot { flex: 0 0 1.5ch; color: var(--dim); }
+  .v.a { flex: 0 0 15ch; text-align: right; color: var(--label); }
+  .v.t { flex: 0 0 9ch;  text-align: right; color: var(--dim); }
+  &.hd { color: var(--dim); .lb, .v { color: var(--dim); } }
+  &.here { .lb, .dot, .v.t { color: var(--accent); } }
+}
+
 // RAM / SWAP / VRAM — the panel writes these in the accent above their bars.
 .sub {
   color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .1em;

@@ -205,7 +205,7 @@ function boxPsi(): string {
       [num(x,'some10'), num(x,'some60'), num(x,'some300')]
         .map(v => v.toFixed(2).padStart(7)).join(' '));
   });
-  return panel('pressure', null, b, true);
+  return panel('psi', null, b, true);
 }
 
 function boxSlices(): string {
@@ -222,7 +222,7 @@ function boxSlices(): string {
     b += kv('pids', String(num(s,'pids')), 'psi cpu', num(s,'cpu_psi').toFixed(2),
             'io', num(s,'io_psi').toFixed(2), 'mem', num(s,'mem_psi').toFixed(2));
   });
-  return panel('slices', String((S.slices || []).length), b, true);
+  return panel('watchdog · slices', String((S.slices || []).length), b, true);
 }
 
 function boxHealth(): string {
@@ -238,32 +238,46 @@ function boxHealth(): string {
   return panel('health', null, b, true);
 }
 
-// Every machine this user can reach, not only the one measured. The report is
-// read as "what have I got", and the list is the ssh config — the declaration
-// rather than a probe, so a VM that is switched off is still a VM you have.
-function boxMachines(): string {
-  const h = S.host_info || {}, ms = E.machines || [];
-  let b = kv('host', h.host || '-', 'user', h.user || '-');
-  b += kv('os', h.os || '-');
-  b += kv('kernel', h.kernel || '-');
-  if (!ms.length) return panel('machine', null, b, true);
-  b += head('MACHINES');
+// draw of the panel's mesh box: peer, addr, rtt — with the status dot in
+// front. A frozen export has probed nothing, so every dot is the panel's
+// unprobed "·" rather than a green one this page has not earned.
+interface Machine {
+  name: string; alias?: string; ip?: string; public?: string;
+  role?: string; user?: string; kind?: string; local?: boolean;
+}
+function boxMesh(): string {
+  const ms: Machine[] = E.machines || [];
+  let b = `<div class="r hd"><span class="lb">peer</span>`
+        + `<span class="v a">addr</span><span class="v t">kind</span></div>`;
   ms.forEach(m => {
-    b += `<div class="r"><span class="lb">${esc(m.alias)}</span>`
-       + `<span class="v ip">${esc(m.ip || '-')}</span>`
-       + (m.local ? '<span class="pill ok">this one</span>' : '') + '</div>';
+    const here = !!m.local;
+    b += `<div class="r${here ? ' here' : ''}">`
+       + `<span class="dot">${here ? '●' : '·'}</span>`
+       + `<span class="lb">${esc(m.name)}</span>`
+       + `<span class="v a">${esc(m.ip || '-')}</span>`
+       + `<span class="v t">${esc(here ? 'here' : (m.role || m.kind || ''))}</span></div>`;
+    // The public address and the login are what you need to reach it, and a
+    // declared VM is the only kind that has them.
+    if (m.public && m.public !== m.ip)
+      b += kv('', `${m.public}${m.user ? '  ' + m.user : ''}`);
   });
-  return panel('machine', ms.length + ' machines', b, true);
+  return panel('mesh', ms.length + ' machines', b, true);
 }
 
+// The panel's own rows, in the panel's own order: a header line, cpu across
+// the top, then mem | storage | net, then psi | slices | mesh, then the big
+// box — which on this tab is the process table. Not a box more, not a box in
+// a different place. The one thing missing is the braille history graph in
+// cpu's left column: a frozen snapshot carries averages, not the series the
+// panel accumulates while it runs, and drawing a shape from a single sample
+// would be inventing data.
 function overview(): string {
   return '<div class="dash">'
     + `<div class="w3">${boxCpu()}</div>`
     + boxMem() + boxStorage() + boxNet()
-    + `<div class="w2">${boxSlices()}</div>`
-    + boxPsi()
-    + boxHealth()
-    + `<div class="w2">${boxMachines()}</div>`
+    + boxPsi() + boxSlices() + boxMesh()
+    + `<div class="w3">${panel('processes',
+        (S.proc_table || []).length + ' rows', table(S.proc_table || []))}</div>`
     + '</div>';
 }
 

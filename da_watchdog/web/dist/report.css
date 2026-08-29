@@ -458,6 +458,30 @@ td .mtr {
   margin-right: 8px;
 }
 
+.r .dot {
+  flex: 0 0 1.5ch;
+  color: var(--dim);
+}
+.r .v.a {
+  flex: 0 0 15ch;
+  text-align: right;
+  color: var(--label);
+}
+.r .v.t {
+  flex: 0 0 9ch;
+  text-align: right;
+  color: var(--dim);
+}
+.r.hd {
+  color: var(--dim);
+}
+.r.hd .lb, .r.hd .v {
+  color: var(--dim);
+}
+.r.here .lb, .r.here .dot, .r.here .v.t {
+  color: var(--accent);
+}
+
 .sub {
   color: var(--accent);
   font-size: 11px;

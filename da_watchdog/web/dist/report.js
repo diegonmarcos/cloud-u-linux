@@ -181,7 +181,7 @@
         [num(x, "some10"), num(x, "some60"), num(x, "some300")].map((v) => v.toFixed(2).padStart(7)).join(" ")
       );
     });
-    return panel("pressure", null, b, true);
+    return panel("psi", null, b, true);
   }
   function boxSlices() {
     let b = "";
@@ -199,52 +199,25 @@
         num(s, "mem_psi").toFixed(2)
       );
     });
-    return panel("slices", String((S.slices || []).length), b, true);
+    return panel("watchdog \xB7 slices", String((S.slices || []).length), b, true);
   }
-  function boxHealth() {
-    const h = S.health || {}, r = S.reclaim || {}, bat = S.battery || {};
-    let b = kv(
-      "iops",
-      String(num(h, "disk_iops")),
-      "busy",
-      pc(num(h, "disk_busy_pct")),
-      "avio",
-      num(h, "disk_avio_ms").toFixed(2) + "ms"
-    );
-    b += kv(
-      "ctxt/s",
-      String(num(h, "ctxt_per_s")),
-      "intr/s",
-      String(num(h, "intr_per_s")),
-      "oom",
-      String(num(h, "oom_kill"))
-    );
-    b += kv("scan kswapd", String(num(r, "scan_kswapd")), "direct", String(num(r, "scan_direct")));
-    b += kv(
-      "swap in",
-      String(num(r, "swap_in")),
-      "out",
-      String(num(r, "swap_out")),
-      "refault file",
-      String(num(r, "refault_file"))
-    );
-    if (bat.present) b += bar("battery", num(bat, "pct"), pc(num(bat, "pct")) + "  " + (bat.status || ""));
-    return panel("health", null, b, true);
-  }
-  function boxMachines() {
-    const h = S.host_info || {}, ms = E.machines || [];
-    let b = kv("host", h.host || "-", "user", h.user || "-");
-    b += kv("os", h.os || "-");
-    b += kv("kernel", h.kernel || "-");
-    if (!ms.length) return panel("machine", null, b, true);
-    b += head("MACHINES");
+  function boxMesh() {
+    const ms = E.machines || [];
+    let b = `<div class="r hd"><span class="lb">peer</span><span class="v a">addr</span><span class="v t">kind</span></div>`;
     ms.forEach((m) => {
-      b += `<div class="r"><span class="lb">${esc(m.alias)}</span><span class="v ip">${esc(m.ip || "-")}</span>` + (m.local ? '<span class="pill ok">this one</span>' : "") + "</div>";
+      const here = !!m.local;
+      b += `<div class="r${here ? " here" : ""}"><span class="dot">${here ? "\u25CF" : "\xB7"}</span><span class="lb">${esc(m.name)}</span><span class="v a">${esc(m.ip || "-")}</span><span class="v t">${esc(here ? "here" : m.role || m.kind || "")}</span></div>`;
+      if (m.public && m.public !== m.ip)
+        b += kv("", `${m.public}${m.user ? "  " + m.user : ""}`);
     });
-    return panel("machine", ms.length + " machines", b, true);
+    return panel("mesh", ms.length + " machines", b, true);
   }
   function overview() {
-    return `<div class="dash"><div class="w3">${boxCpu()}</div>` + boxMem() + boxStorage() + boxNet() + `<div class="w2">${boxSlices()}</div>` + boxPsi() + boxHealth() + `<div class="w2">${boxMachines()}</div></div>`;
+    return `<div class="dash"><div class="w3">${boxCpu()}</div>` + boxMem() + boxStorage() + boxNet() + boxPsi() + boxSlices() + boxMesh() + `<div class="w3">${panel(
+      "processes",
+      (S.proc_table || []).length + " rows",
+      table(S.proc_table || [])
+    )}</div></div>`;
   }
   const SCOPE = {
     world: "bad",

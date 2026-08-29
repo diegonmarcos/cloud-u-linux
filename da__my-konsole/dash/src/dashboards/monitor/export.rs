@@ -371,6 +371,98 @@ fn report(
     m
 }
 
+/// Every machine this user has, not just the one being measured.
+///
+/// MACHINE used to name the box you were standing on, which answers a question
+/// nobody asked: the report is read as "what have I got".
+///
+/// TWO SOURCES, AND THEY ARE NOT THE SAME LIST. ~/.ssh/config says what is
+/// reachable; the fleet declaration says what EXISTS. A VM with no ssh entry
+/// yet — one still being provisioned, one reached another way — is missing
+/// from the first and present in the second, and it is still a VM you have.
+/// Neither is a probe, so a one-shot export enumerates the fleet as completely
+/// as a running panel and a machine that is switched off still appears.
+///
+/// The ssh side needs deduplicating before it is worth showing. One box owns
+/// several Host entries — a -dropbear alias for the early-boot shell, -pub and
+/// -v6 for the other routes to the same address — and listing them as separate
+/// machines turns six machines into sixteen rows of noise. Keyed by address,
+/// shortest alias wins, and entries that resolve to no address at all (github.com)
+/// are not machines.
+fn machines() -> Vec<Value> {
+    let mut out: Vec<Value> = vec![];
+    let mut seen: Vec<String> = vec![];
+
+    // The declaration first, so a declared VM keeps its real name and its
+    // provider/shape rather than whatever alias ssh happens to call it.
+    for (name, v) in declared_fleet() {
+        let wg = text(&v, "wg_ip");
+        let key = if wg.is_empty() { text(&v, "ip") } else { wg.clone() };
+        if !key.is_empty() {
+            seen.push(key);
+        }
+        let alias = text(&v, "ssh_alias");
+        if !alias.is_empty() {
+            seen.push(alias);
+        }
+        out.push(serde_json::json!({
+            "name": name,
+            "alias": text(&v, "ssh_alias"),
+            "ip": if wg.is_empty() { text(&v, "ip") } else { wg },
+            "public": text(&v, "ip"),
+            "role": text(&v, "wg_role"),
+            "user": text(&v, "user"),
+            "kind": "vm",
+            "local": false,
+        }));
+    }
+
+    for p in crate::dashboards::mesh::peers_from_ssh_config() {
+        if p.ip.is_empty() || p.ip == p.alias {
+            continue; // a Host with no HostName is not a machine
+        }
+        // -dropbear is the early-boot shell, -pub the public route, -v6 the
+        // v6 one: four Host entries, one machine. Keyed by the base name as
+        // well as the address, because the alternate routes have addresses of
+        // their own and would otherwise each land as a machine.
+        let base = ["-dropbear", "-pub", "-v6", "-v4"]
+            .iter()
+            .fold(p.alias.as_str(), |a, sfx| a.strip_suffix(sfx).unwrap_or(a))
+            .to_string();
+        if seen.contains(&p.ip) || seen.contains(&base) {
+            continue;
+        }
+        seen.push(p.ip.clone());
+        seen.push(base.clone());
+        out.push(serde_json::json!({
+            "name": p.alias,
+            "alias": p.alias,
+            "ip": p.ip,
+            "public": "",
+            "role": "",
+            "user": "",
+            "kind": if p.local { "this machine" } else { "peer" },
+            "local": p.local,
+        }));
+    }
+    out
+}
+
+/// The declared fleet, if this machine happens to have the infra repo checked
+/// out. Optional by design: the report must still render on a box that has
+/// never seen it, and there it simply lists what ssh knows.
+fn declared_fleet() -> Vec<(String, Value)> {
+    let path = std::env::var("CLOUD_INFRA_CONFIG").unwrap_or_else(|_| {
+        format!("{}/git/cloud-infra/config.json", std::env::var("HOME").unwrap_or_default())
+    });
+    let Ok(raw) = fs::read_to_string(&path) else { return vec![] };
+    let Ok(v) = serde_json::from_str::<Value>(&raw) else { return vec![] };
+    v.get("vms")
+        .and_then(|m| m.as_object())
+        .map(|m| m.iter().map(|(k, x)| (k.clone(), x.clone())).collect())
+        .unwrap_or_default()
+}
+
 pub(crate) fn export_snapshot(
     s: &Value,
     target: Option<String>,
@@ -426,27 +518,7 @@ pub(crate) fn export_snapshot(
     let mut envelope = serde_json::Map::new();
     envelope.insert("snapshot".into(), trim_units(s));
     envelope.insert("files".into(), serde_json::json!(files));
-    // Every machine this user can reach, listed whether or not it was probed.
-    // The snapshot describes one box; the report is read as "what have I got",
-    // and a MACHINE section that names only the box you are standing on
-    // answers a question nobody asked. Straight from ~/.ssh/config, which is
-    // the declaration — no ssh, no probe, nothing to wait on, so a one-shot
-    // export lists the fleet as completely as a running panel does.
-    envelope.insert(
-        "machines".into(),
-        Value::Array(
-            crate::dashboards::mesh::peers_from_ssh_config()
-                .into_iter()
-                .map(|m| {
-                    serde_json::json!({
-                        "alias": m.alias,
-                        "ip": m.ip,
-                        "local": m.local,
-                    })
-                })
-                .collect(),
-        ),
-    );
+    envelope.insert("machines".into(), Value::Array(machines()));
     envelope.insert("exported".into(), serde_json::json!(stamp));
     envelope.insert(
         "measured".into(),
