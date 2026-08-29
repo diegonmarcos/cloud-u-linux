@@ -149,6 +149,16 @@ case "${1:-fetch}" in
         # check read as "zero instances" and reported a healthy daemon as down.
         n=\$(ps -eo comm= 2>/dev/null | grep -cx $BIN || true)
         [ "\$n" = 1 ] || echo "  WARNING: \$n instances of $BIN running"
+        # The check that would have caught this from the start. A process whose
+        # /proc/<pid>/exe reads "(deleted)" is running a binary that no longer
+        # exists on disk — which IS the failure deploy is for: the file was
+        # replaced and the process was not. Counting instances alone cannot see
+        # it, because one stale daemon is still exactly one daemon.
+        d=0
+        for q in \$(pids); do
+          case "\$(readlink /proc/\$q/exe 2>/dev/null)" in *"(deleted)") d=\$((d+1));; esac
+        done
+        [ "\$d" = 0 ] || echo "  WARNING: \$d instance(s) of $BIN still running the OLD binary (deleted inode)"
 EOF
       # Same policy document to every peer — that is what makes it one source
       # of truth rather than one file per machine that happens to agree today.
