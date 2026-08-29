@@ -546,7 +546,12 @@ fn read_uid_names() -> HashMap<u32, String> {
                 continue;
             }
             if let Ok(uid) = f[2].parse::<u32>() {
-                m.insert(uid, f[0].to_string());
+                // FIRST wins, which is what getpwuid returns. A uid may have
+                // more than one name — oci-mail carries a second uid-0 account
+                // beside root — and last-wins made every kernel thread on that
+                // box report the wrong owner, which is how a process table
+                // stops being evidence.
+                m.entry(uid).or_insert_with(|| f[0].to_string());
             }
         }
     }
