@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- my-browser-rust-chromium. Palette from UI-SPEC.md (qute's Breeze-ish set):
+       #31363b tab-bar track, #3daee9 selected-tab blue. Rust orange marks the
+       Rust/CEF lineage and keeps it distinct from qutebrowser's icon in a dock.
+       ponytail: hand-authored SVG, no icon toolchain. Redraw if it reads badly at 16px. -->
+  <rect x="2" y="2" width="60" height="60" rx="13" fill="#31363b"/>
+  <circle cx="32" cy="32" r="20" fill="none" stroke="#3daee9" stroke-width="4"/>
+  <ellipse cx="32" cy="32" rx="9" ry="20" fill="none" stroke="#3daee9" stroke-width="3"/>
+  <path d="M13 25h38M13 39h38" stroke="#3daee9" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="32" cy="32" r="7.5" fill="#dd6620"/>
+</svg>

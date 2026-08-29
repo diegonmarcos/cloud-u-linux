@@ -78,6 +78,32 @@ LAUNCH
   ghcr-push)   # oras rejects absolute paths → push from inside $DIST with a relative name
     ( cd "$DIST" && oras push "ghcr.io/diegonmarcos/${NAME}:latest" "${TARBALL}:application/gzip" ) ;;
 
+  install)   # user-level install: bundle + icon + .desktop. No sudo, no system paths.
+    PREFIX="${PREFIX:-$HOME/.local/share/$NAME}"
+    APPS="$HOME/.local/share/applications"
+    ICONS="$HOME/.local/share/icons/hicolor/scalable/apps"
+    mkdir -p "$PREFIX" "$APPS" "$ICONS"
+    tb="$DIST/$TARBALL"
+    if [ ! -f "$tb" ]; then   # no local stage (local builds are not how this ships) -> take the rolling release
+      tmp="$(mktemp -d)"; gh release download "$TAG" -D "$tmp" --clobber; tb="$tmp/$TARBALL"
+    fi
+    tar -xzf "$tb" -C "$PREFIX"
+    chmod +x "$PREFIX/my-browser" "$PREFIX/$NAME"
+    cp "$HERE/2_configs/$NAME.svg" "$ICONS/$NAME.svg"
+    # awk, not sed: a substituted path containing & would be eaten by sed's replacement syntax
+    awk -v exec_path="$PREFIX/my-browser" '{ gsub(/@EXEC@/, exec_path); print }' \
+      "$HERE/2_configs/$NAME.desktop" > "$APPS/$NAME.desktop"
+    command -v update-desktop-database >/dev/null && update-desktop-database "$APPS" 2>/dev/null || true
+    command -v gtk-update-icon-cache  >/dev/null && gtk-update-icon-cache -qtf "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+    echo "installed -> $PREFIX"; echo "desktop entry -> $APPS/$NAME.desktop" ;;
+
+  uninstall) # exact inverse of install, so trying this out is reversible
+    PREFIX="${PREFIX:-$HOME/.local/share/$NAME}"
+    rm -rf "$PREFIX"
+    rm -f "$HOME/.local/share/applications/$NAME.desktop"
+    rm -f "$HOME/.local/share/icons/hicolor/scalable/apps/$NAME.svg"
+    echo "removed $PREFIX + desktop entry + icon" ;;
+
   ship)    "$0" release && "$0" gh-release && "$0" ghcr-push ;;
-  help|*)  echo "usage: build.sh {fetch|build|run [URL]|release|gh-release|ghcr-push|ship|clean}" ;;
+  help|*)  echo "usage: build.sh {fetch|build|run [URL]|release|gh-release|ghcr-push|ship|install|uninstall|clean}" ;;
 esac
