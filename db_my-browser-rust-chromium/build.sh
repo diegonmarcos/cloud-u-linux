@@ -54,6 +54,13 @@ case "$cmd" in
   fetch)   _fetch ;;
   build)   [ -d "$SRC" ] || _fetch; _build ;;
   run)     "$0" build; CEF_PATH="$CEF_DIR" LD_LIBRARY_PATH="$CEF_DIR" "$SRC/target/release/$EXAMPLE_PKG" "${2:-}" ;;
+  test)    # unit tests for the pure winit->CEF input translation (src/overlay/input.rs).
+           # CI is the only compiler here, so this is where the input layer actually
+           # gets exercised -- there is no local cargo.
+    [ -d "$SRC" ] || _fetch; _overlay
+    export CEF_PATH="$CEF_DIR" LD_LIBRARY_PATH="$CEF_DIR:${LD_LIBRARY_PATH:-}"
+    ( cd "$SRC" && cargo test -p "$EXAMPLE_PKG" --release ) ;;
+
   nix-hash)  # refresh the hash src/nix/package.nix pins for the published tarball.
              # Streams straight into sha256sum: the artifact is ~366MB and this box
              # runs near-full, so nothing is written to disk or the nix store.

@@ -1,3 +1,4 @@
+mod input;
 mod webrender;
 
 use cef::{args::Args, *};
@@ -5,12 +6,13 @@ use std::{cell::RefCell, process::ExitCode, sync::Arc, thread::sleep, time::Dura
 use wgpu::{Backends, CurrentSurfaceTexture, util::DeviceExt};
 use winit::{
     application::ApplicationHandler,
-    event::{KeyEvent as WinitKeyEvent, MouseButton, MouseScrollDelta, WindowEvent},
+    event::{KeyEvent as WinitKeyEvent, MouseButton, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    keyboard::{KeyCode, PhysicalKey},
     platform::pump_events::{EventLoopExtPumpEvents, PumpStatus},
     window::{Window, WindowAttributes, WindowId},
 };
+
+use crate::input::MouseButtons;
 
 use crate::webrender::{
     ClientBuilder, OsrApp, OsrRenderHandler, OsrRequestContextHandler,
@@ -256,6 +258,7 @@ struct App {
     url: String,
     cursor_pos: winit::dpi::PhysicalPosition<f64>,
     modifiers: u32,
+    buttons: MouseButtons,
 }
 
 struct Browser {
@@ -271,6 +274,7 @@ impl App {
             url,
             cursor_pos: winit::dpi::PhysicalPosition::new(0.0, 0.0),
             modifiers: 0,
+            buttons: MouseButtons::default(),
         }
     }
 }
@@ -368,7 +372,7 @@ impl ApplicationHandler for App {
                     let mouse_event = MouseEvent {
                         x: logical.x as i32,
                         y: logical.y as i32,
-                        modifiers: self.modifiers,
+                        modifiers: input::mouse_button_eventflags(self.buttons) | self.modifiers,
                     };
                     host.send_mouse_move_event(Some(&mouse_event), 0);
                 }
@@ -381,6 +385,14 @@ impl ApplicationHandler for App {
                 let Some(button_type) = cef_mouse_button(button) else {
                     return;
                 };
+                // Bug fix: stamp the button-down bit into `modifiers` so CEF sees a
+                // held button while the cursor moves (drag-to-select). Set the bit
+                // before computing modifiers for both press and release, since a
+                // mouse-up event still reports the button as down at the instant it
+                // happens; only clear it afterwards.
+                if let Some(bit) = input::mouse_button_bit(button) {
+                    self.buttons.set(bit, true);
+                }
                 if let Some(host) = self.browser.as_mut().and_then(|b| b.browser.host()) {
                     let logical = self
                         .cursor_pos
@@ -388,10 +400,15 @@ impl ApplicationHandler for App {
                     let mouse_event = MouseEvent {
                         x: logical.x as i32,
                         y: logical.y as i32,
-                        modifiers: self.modifiers,
+                        modifiers: input::mouse_button_eventflags(self.buttons) | self.modifiers,
                     };
                     let mouse_up = !button_state.is_pressed() as i32;
                     host.send_mouse_click_event(Some(&mouse_event), button_type, mouse_up, 1);
+                }
+                if !button_state.is_pressed() {
+                    if let Some(bit) = input::mouse_button_bit(button) {
+                        self.buttons.set(bit, false);
+                    }
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -401,21 +418,14 @@ impl ApplicationHandler for App {
                     let mouse_event = MouseEvent {
                         x: logical.x as i32,
                         y: logical.y as i32,
-                        modifiers: self.modifiers,
+                        modifiers: input::mouse_button_eventflags(self.buttons) | self.modifiers,
                     };
-                    // CEF wants a pixel delta; approximate one wheel "line" as 40 logical px.
-                    let (delta_x, delta_y) = match delta {
-                        MouseScrollDelta::LineDelta(x, y) => ((x * 40.0) as i32, (y * 40.0) as i32),
-                        MouseScrollDelta::PixelDelta(p) => {
-                            let p = p.to_logical::<f32>(scale_factor);
-                            (p.x as i32, p.y as i32)
-                        }
-                    };
+                    let (delta_x, delta_y) = input::wheel_delta(delta, scale_factor);
                     host.send_mouse_wheel_event(Some(&mouse_event), delta_x, delta_y);
                 }
             }
             WindowEvent::ModifiersChanged(mods) => {
-                self.modifiers = cef_modifiers(mods.state());
+                self.modifiers = input::keyboard_eventflags(mods.state());
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 if let Some(host) = self.browser.as_mut().and_then(|b| b.browser.host()) {
@@ -441,137 +451,38 @@ fn cef_mouse_button(button: MouseButton) -> Option<MouseButtonType> {
     }
 }
 
-fn cef_modifiers(mods: winit::keyboard::ModifiersState) -> u32 {
-    use cef::sys::cef_event_flags_t as Flags;
-    let mut flags = 0u32;
-    if mods.shift_key() {
-        flags |= Flags::EVENTFLAG_SHIFT_DOWN.0;
-    }
-    if mods.control_key() {
-        flags |= Flags::EVENTFLAG_CONTROL_DOWN.0;
-    }
-    if mods.alt_key() {
-        flags |= Flags::EVENTFLAG_ALT_DOWN.0;
-    }
-    if mods.super_key() {
-        flags |= Flags::EVENTFLAG_COMMAND_DOWN.0;
-    }
-    flags
-}
-
-// CEF/Chromium key handling expects Windows VK_* codes for `windows_key_code` on
-// every platform (not the native scan code), so map winit's platform-independent
-// KeyCode onto them. Only the keys needed for basic navigation/text entry are mapped.
-fn vkey_from_physical(key: PhysicalKey) -> i32 {
-    let PhysicalKey::Code(code) = key else {
-        return 0;
-    };
-    match code {
-        KeyCode::KeyA => 0x41,
-        KeyCode::KeyB => 0x42,
-        KeyCode::KeyC => 0x43,
-        KeyCode::KeyD => 0x44,
-        KeyCode::KeyE => 0x45,
-        KeyCode::KeyF => 0x46,
-        KeyCode::KeyG => 0x47,
-        KeyCode::KeyH => 0x48,
-        KeyCode::KeyI => 0x49,
-        KeyCode::KeyJ => 0x4A,
-        KeyCode::KeyK => 0x4B,
-        KeyCode::KeyL => 0x4C,
-        KeyCode::KeyM => 0x4D,
-        KeyCode::KeyN => 0x4E,
-        KeyCode::KeyO => 0x4F,
-        KeyCode::KeyP => 0x50,
-        KeyCode::KeyQ => 0x51,
-        KeyCode::KeyR => 0x52,
-        KeyCode::KeyS => 0x53,
-        KeyCode::KeyT => 0x54,
-        KeyCode::KeyU => 0x55,
-        KeyCode::KeyV => 0x56,
-        KeyCode::KeyW => 0x57,
-        KeyCode::KeyX => 0x58,
-        KeyCode::KeyY => 0x59,
-        KeyCode::KeyZ => 0x5A,
-        KeyCode::Digit0 => 0x30,
-        KeyCode::Digit1 => 0x31,
-        KeyCode::Digit2 => 0x32,
-        KeyCode::Digit3 => 0x33,
-        KeyCode::Digit4 => 0x34,
-        KeyCode::Digit5 => 0x35,
-        KeyCode::Digit6 => 0x36,
-        KeyCode::Digit7 => 0x37,
-        KeyCode::Digit8 => 0x38,
-        KeyCode::Digit9 => 0x39,
-        KeyCode::Backspace => 0x08,
-        KeyCode::Tab => 0x09,
-        KeyCode::Enter | KeyCode::NumpadEnter => 0x0D,
-        KeyCode::ShiftLeft | KeyCode::ShiftRight => 0x10,
-        KeyCode::ControlLeft | KeyCode::ControlRight => 0x11,
-        KeyCode::AltLeft | KeyCode::AltRight => 0x12,
-        KeyCode::CapsLock => 0x14,
-        KeyCode::Escape => 0x1B,
-        KeyCode::Space => 0x20,
-        KeyCode::PageUp => 0x21,
-        KeyCode::PageDown => 0x22,
-        KeyCode::End => 0x23,
-        KeyCode::Home => 0x24,
-        KeyCode::ArrowLeft => 0x25,
-        KeyCode::ArrowUp => 0x26,
-        KeyCode::ArrowRight => 0x27,
-        KeyCode::ArrowDown => 0x28,
-        KeyCode::Insert => 0x2D,
-        KeyCode::Delete => 0x2E,
-        KeyCode::F1 => 0x70,
-        KeyCode::F2 => 0x71,
-        KeyCode::F3 => 0x72,
-        KeyCode::F4 => 0x73,
-        KeyCode::F5 => 0x74,
-        KeyCode::F6 => 0x75,
-        KeyCode::F7 => 0x76,
-        KeyCode::F8 => 0x77,
-        KeyCode::F9 => 0x78,
-        KeyCode::F10 => 0x79,
-        KeyCode::F11 => 0x7A,
-        KeyCode::F12 => 0x7B,
-        _ => 0,
-    }
-}
-
 fn forward_key_event(host: BrowserHost, event: &WinitKeyEvent, modifiers: u32) {
-    let windows_key_code = vkey_from_physical(event.physical_key);
-    let type_ = if event.state.is_pressed() {
-        KeyEventType::RAWKEYDOWN
-    } else {
-        KeyEventType::KEYUP
+    let translated = input::translate_key_event(
+        event.physical_key,
+        event.state.is_pressed(),
+        event.text.as_deref(),
+    );
+    let type_ = match translated.action {
+        input::KeyAction::Down => KeyEventType::RAWKEYDOWN,
+        input::KeyAction::Up => KeyEventType::KEYUP,
     };
     let key_event = KeyEvent {
         type_,
         modifiers,
-        windows_key_code,
+        windows_key_code: translated.windows_key_code,
         ..Default::default()
     };
     host.send_key_event(Some(&key_event));
 
     // A RAWKEYDOWN alone does not produce text; CEF also wants a CHAR event with the
-    // actual character. Skip it on key-up and for control keys (e.g. Enter's text is
-    // "\r", which is not something we want typed into a text field).
-    if event.state.is_pressed() {
-        if let Some(text) = &event.text {
-            if let Some(ch) = text.chars().next().filter(|c| !c.is_control()) {
-                let mut units = [0u16; 2];
-                let char_code = ch.encode_utf16(&mut units)[0];
-                let char_event = KeyEvent {
-                    type_: KeyEventType::CHAR,
-                    modifiers,
-                    windows_key_code,
-                    character: char_code,
-                    unmodified_character: char_code,
-                    ..Default::default()
-                };
-                host.send_key_event(Some(&char_event));
-            }
-        }
+    // actual character. `translate_key_event` already skips this on key-up and for
+    // control keys (e.g. Enter's text is "\r", which is not something we want typed
+    // into a text field).
+    if let Some(char_code) = translated.char_code {
+        let char_event = KeyEvent {
+            type_: KeyEventType::CHAR,
+            modifiers,
+            windows_key_code: translated.windows_key_code,
+            character: char_code,
+            unmodified_character: char_code,
+            ..Default::default()
+        };
+        host.send_key_event(Some(&char_event));
     }
 }
 

@@ -46,6 +46,12 @@ jobs:
       - name: Build (clone cef-rs, export CEF, cargo build cefsimple)
         run: ./db_my-browser-rust-chromium/build.sh release
 
+      # The input translation is unit-tested but there is no local compiler in this
+      # project, so this job is the only place those tests ever run. Kept after the
+      # build so a red test does not cost a fresh CEF export to re-run.
+      - name: Test (winit -> CEF input translation)
+        run: ./db_my-browser-rust-chromium/build.sh test
+
       - name: Publish to rolling GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
