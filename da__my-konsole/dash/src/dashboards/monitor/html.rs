@@ -96,7 +96,17 @@ fn sections(snap: &Value) -> Vec<String> {
 /// readable from the tab bar alone. `switcher` is the other machines in the
 /// same export, already rendered — this module knows how a machine list looks,
 /// the exporter knows which machines there are.
-pub(crate) fn page(title: &str, envelope: &Value, markdown: &str, switcher: &str) -> String {
+/// `view` is "" for the desktop page and `data-view="mobile"` for the phone
+/// one. The same template, the same envelope and the same compiled renderer —
+/// one attribute decides how they dress, because two page generators would be
+/// two places for the palette and the box order to drift apart.
+pub(crate) fn page(
+    title: &str,
+    envelope: &Value,
+    markdown: &str,
+    switcher: &str,
+    view: &str,
+) -> String {
     let snap = envelope.get("snapshot").unwrap_or(envelope);
     let tabs = sections(snap);
     let files =
@@ -222,6 +232,7 @@ pub(crate) fn page(title: &str, envelope: &Value, markdown: &str, switcher: &str
         // The two compiled artifacts first: they carry no sentinels of their
         // own, and doing them here keeps the page's own substitutions from
         // having to walk 20KB of stylesheet looking for them.
+        .replace("__VIEW__", view)
         .replace("__CSS__", CSS)
         .replace("__JS__", JS)
         .replace("__TITLE__", &esc(title))
@@ -235,7 +246,7 @@ pub(crate) fn page(title: &str, envelope: &Value, markdown: &str, switcher: &str
 const TEMPLATE: &str = r##"<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>__TITLE__</title>
-<style>__CSS__</style></head><body>
+<style>__CSS__</style></head><body __VIEW__>
 <button class="ham" id="ham">&#9776;</button>
 <div class="scrim" id="scrim"></div>
 <nav class="sidebar" id="sb">

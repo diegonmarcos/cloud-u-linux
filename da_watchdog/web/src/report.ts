@@ -31,6 +31,14 @@ const E: Envelope = JSON.parse(
   (document.getElementById('env') as HTMLElement).textContent || '{}');
 const S: Snap = E.snapshot || {};
 const out = document.getElementById('out') as HTMLElement;
+// Set by index-mobile.html. Not a viewport query: the page is chosen when it
+// is written, so a phone in landscape gets the phone page and a narrow window
+// on a desktop does not.
+const MOBILE = document.body.dataset.view === 'mobile';
+// A 20-cell meter needs ~20ch beside a label and two figures. That fits a
+// terminal and does not fit 390px, so the bar gives up cells rather than
+// letting the numbers wrap — the numbers are the part being read.
+const BAR = MOBILE ? 10 : 20;
 
 const esc = (s: unknown): string =>
   String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -85,7 +93,7 @@ function meter(frac: number, w = 14): string {
 
 // ── row primitives ─────────────────────────────────────────────────────────
 const bar = (label: string, p: number, txt: string): string =>
-  `<div class="r"><span class="lb">${esc(label)}</span>${meter((p || 0) / 100, 20)}`
+  `<div class="r"><span class="lb">${esc(label)}</span>${meter((p || 0) / 100, BAR)}`
   + `<span class="v">${esc(txt)}</span></div>`;
 
 const kv = (...parts: string[]): string => {
@@ -295,19 +303,31 @@ function cell(v: unknown, col?: string): string {
   if (typeof v === 'boolean')
     return `<td><span class="pill ${v ? 'ok' : 'bad'}">${v}</span></td>`;
   if (typeof v === 'number' && col && PCT.test(col))
-    return `<td class="num">${meter(v / 100, 12)}${v.toFixed(1)}%</td>`;
+    return `<td class="num">${meter(v / 100, MOBILE ? 6 : 12)}${v.toFixed(1)}%</td>`;
   if (typeof v === 'number') return `<td class="num">${v}</td>`;
   if (typeof v === 'object') return `<td>${esc(JSON.stringify(v))}</td>`;
   const c = SCOPE[String(v).toLowerCase()];
   return c ? `<td><span class="pill ${c}">${esc(v)}</span></td>` : `<td>${esc(v)}</td>`;
 }
 
+// The columns a phone shows, in order, when a row has them. The process table
+// is 18 wide, and scrolling sideways through 18 columns to find a number is
+// not reading it. Desktop is untouched — this narrows the phone page only.
+const PHONE_COLS = ['name', 'user', 'origin', 'cpu_pct', 'mem_pct', 'mem_rss_bytes',
+                    'pid', 'slice', 'state', 'mount', 'pct', 'alias', 'ip'];
+
 function table(rows: Dict[]): string {
   if (!rows.length) return '<div class="panel-body"><pre>no rows</pre></div>';
   // Union of keys, not the first row's: a row carrying one extra field must
   // not make that field invisible for the whole table.
-  const cols: string[] = [];
+  let cols: string[] = [];
   rows.forEach(r => Object.keys(r).forEach(k => { if (!cols.includes(k)) cols.push(k); }));
+  if (MOBILE) {
+    const keep = PHONE_COLS.filter(c => cols.includes(c));
+    // Only narrow when there is something recognisable to narrow TO: a table
+    // this list has never heard of stays whole rather than losing every column.
+    if (keep.length >= 3) cols = keep;
+  }
   return '<div class="scroll"><table><thead><tr>'
     + cols.map(c => `<th>${esc(c)}</th>`).join('')
     + '</tr></thead><tbody>'

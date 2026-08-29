@@ -584,3 +584,117 @@ tr:last-child td {
 *::-webkit-scrollbar-thumb:hover {
   background: var(--label);
 }
+
+[data-view=mobile] {
+  font-size: 14px;
+  -webkit-text-size-adjust: 100%;
+}
+[data-view=mobile]::after {
+  display: none;
+}
+[data-view=mobile]::before {
+  background: radial-gradient(140% 100% at 50% 40%, transparent 60%, rgba(0, 0, 0, 0.45) 100%);
+}
+[data-view=mobile] .content {
+  margin-left: 0;
+  padding: 8px 10px 96px;
+}
+[data-view=mobile] .dash {
+  grid-template-columns: 1fr !important;
+  gap: 0;
+}
+[data-view=mobile] .w2, [data-view=mobile] .w3 {
+  grid-column: 1/-1 !important;
+}
+[data-view=mobile] .bar {
+  margin: 0 0 10px;
+  padding: 4px 2px 8px;
+}
+[data-view=mobile] .bar h1 {
+  font-size: 14px;
+}
+[data-view=mobile] .bar h1::before, [data-view=mobile] .bar h1::after {
+  content: "";
+}
+[data-view=mobile] .bar .keys {
+  display: none;
+}
+[data-view=mobile] .ham {
+  top: auto;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 22px;
+  font-size: 17px;
+  border-radius: 24px;
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+}
+[data-view=mobile] .sidebar {
+  width: 100%;
+  border-right: 0;
+}
+[data-view=mobile] .sb-head {
+  padding: 16px 14px 12px;
+}
+[data-view=mobile] .sb-head h2 {
+  font-size: 14px;
+}
+[data-view=mobile] .x {
+  font-size: 26px;
+  padding: 0 8px;
+}
+[data-view=mobile] .grp a {
+  padding: 11px 14px 11px 0;
+  min-height: 44px;
+}
+[data-view=mobile] .grp .tab {
+  padding: 8px 12px 5px;
+  font-size: 12px;
+}
+[data-view=mobile] .panel {
+  margin: 0 0 12px;
+}
+[data-view=mobile] .panel-body {
+  padding: 14px 9px 10px;
+}
+[data-view=mobile] .r {
+  flex-wrap: wrap;
+}
+[data-view=mobile] .r .lb {
+  flex: 0 0 7ch;
+}
+[data-view=mobile] .r .v {
+  font-size: 12px;
+}
+[data-view=mobile] .r.dt .dk {
+  padding-left: 0;
+  margin-right: 4px;
+}
+[data-view=mobile] .r.dt .dv {
+  margin-right: 10px;
+}
+[data-view=mobile] .mtr {
+  letter-spacing: -1px;
+}
+[data-view=mobile] .scroll {
+  max-height: none;
+  margin: 10px 0 4px;
+}
+[data-view=mobile] table {
+  font-size: 11px;
+}
+[data-view=mobile] th, [data-view=mobile] td {
+  padding: 6px 7px;
+}
+[data-view=mobile] th:first-child, [data-view=mobile] td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--bg);
+  z-index: 2;
+}
+[data-view=mobile] th:first-child {
+  z-index: 3;
+}

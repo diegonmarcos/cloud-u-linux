@@ -6,6 +6,8 @@
   );
   const S = E.snapshot || {};
   const out = document.getElementById("out");
+  const MOBILE = document.body.dataset.view === "mobile";
+  const BAR = MOBILE ? 10 : 20;
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const num = (o, k) => {
     const v = o && o[k];
@@ -35,7 +37,7 @@
     const f = Math.max(0, Math.min(w, Math.round((frac || 0) * w)));
     return `<span class="mtr"><i style="color:${grad(frac)}">${"\u2588".repeat(f)}</i><i class="e">${"\u2591".repeat(w - f)}</i></span>`;
   }
-  const bar = (label, p, txt) => `<div class="r"><span class="lb">${esc(label)}</span>${meter((p || 0) / 100, 20)}<span class="v">${esc(txt)}</span></div>`;
+  const bar = (label, p, txt) => `<div class="r"><span class="lb">${esc(label)}</span>${meter((p || 0) / 100, BAR)}<span class="v">${esc(txt)}</span></div>`;
   const kv = (...parts) => {
     let h = '<div class="r dt">';
     for (let i = 0; i < parts.length; i += 2)
@@ -233,18 +235,37 @@
     if (typeof v === "boolean")
       return `<td><span class="pill ${v ? "ok" : "bad"}">${v}</span></td>`;
     if (typeof v === "number" && col && PCT.test(col))
-      return `<td class="num">${meter(v / 100, 12)}${v.toFixed(1)}%</td>`;
+      return `<td class="num">${meter(v / 100, MOBILE ? 6 : 12)}${v.toFixed(1)}%</td>`;
     if (typeof v === "number") return `<td class="num">${v}</td>`;
     if (typeof v === "object") return `<td>${esc(JSON.stringify(v))}</td>`;
     const c = SCOPE[String(v).toLowerCase()];
     return c ? `<td><span class="pill ${c}">${esc(v)}</span></td>` : `<td>${esc(v)}</td>`;
   }
+  const PHONE_COLS = [
+    "name",
+    "user",
+    "origin",
+    "cpu_pct",
+    "mem_pct",
+    "mem_rss_bytes",
+    "pid",
+    "slice",
+    "state",
+    "mount",
+    "pct",
+    "alias",
+    "ip"
+  ];
   function table(rows) {
     if (!rows.length) return '<div class="panel-body"><pre>no rows</pre></div>';
-    const cols = [];
+    let cols = [];
     rows.forEach((r) => Object.keys(r).forEach((k) => {
       if (!cols.includes(k)) cols.push(k);
     }));
+    if (MOBILE) {
+      const keep = PHONE_COLS.filter((c) => cols.includes(c));
+      if (keep.length >= 3) cols = keep;
+    }
     return '<div class="scroll"><table><thead><tr>' + cols.map((c) => `<th>${esc(c)}</th>`).join("") + "</tr></thead><tbody>" + rows.map((r) => "<tr>" + cols.map((c) => cell(r[c], c)).join("") + "</tr>").join("") + "</tbody></table></div>";
   }
   function show(k) {

@@ -329,3 +329,79 @@ tr {
     &:hover { background: var(--label); }
   }
 }
+
+
+// ── the mobile page ────────────────────────────────────────────────────────
+// index-mobile.html is the same document with data-view="mobile" on <body>,
+// not a second codebase: same envelope, same renderer, same palette. Only the
+// things a phone genuinely needs differently are restated here, because a
+// second stylesheet would be a second place for the palette to drift.
+//
+// What a phone needs that a terminal does not: one column always, targets a
+// thumb can hit, a tree that does not eat the screen, and tables that scroll
+// sideways instead of forcing the page to.
+[data-view="mobile"] {
+  // A phone is held closer. 13px on a desktop monitor and 13px at arm's
+  // length are not the same size, and the meters are made of glyphs that stop
+  // resolving below about 14.
+  font-size: 14px;
+  -webkit-text-size-adjust: 100%;
+
+  // The CRT surface is a desktop conceit. On a small bright screen held
+  // outdoors the scanlines cost contrast and give nothing back.
+  &::after { display: none; }
+  &::before { background: radial-gradient(140% 100% at 50% 40%, transparent 60%, rgba(0,0,0,.45) 100%); }
+
+  .content { margin-left: 0; padding: 8px 10px 96px; }
+  // Never three across, whatever the viewport reports — a landscape phone is
+  // wide enough to trigger the desktop grid and far too short to use it.
+  .dash { grid-template-columns: 1fr !important; gap: 0; }
+  .w2, .w3 { grid-column: 1 / -1 !important; }
+
+  .bar {
+    margin: 0 0 10px; padding: 4px 2px 8px;
+    h1 { font-size: 14px; &::before, &::after { content: ""; } }
+    .keys { display: none; }   // no keyboard to bind
+  }
+
+  // The tree is a full-screen sheet reached from the bottom, where a thumb
+  // is, rather than a drawer pinned to a corner it cannot reach.
+  .ham {
+    top: auto; bottom: 16px; left: 50%; transform: translateX(-50%);
+    padding: 12px 22px; font-size: 17px; border-radius: 24px;
+    background: var(--accent); color: var(--bg); border-color: var(--accent);
+    box-shadow: 0 4px 18px rgba(0,0,0,.5);
+  }
+  .sidebar { width: 100%; border-right: 0; }
+  .sb-head { padding: 16px 14px 12px; h2 { font-size: 14px; } }
+  .x { font-size: 26px; padding: 0 8px; }
+  // 44px is the smallest target a thumb hits reliably; the desktop rows are 20.
+  .grp a { padding: 11px 14px 11px 0; min-height: 44px; }
+  .grp .tab { padding: 8px 12px 5px; font-size: 12px; }
+
+  .panel { margin: 0 0 12px; }
+  .panel-body { padding: 14px 9px 10px; }
+
+  // Label over value: at 390px a 9ch label plus a meter plus two figures does
+  // not fit on one line, and wrapping it mid-number is worse than stacking.
+  .r {
+    flex-wrap: wrap;
+    .lb { flex: 0 0 7ch; }
+    .v { font-size: 12px; }
+    &.dt {
+      .dk { padding-left: 0; margin-right: 4px; }
+      .dv { margin-right: 10px; }
+    }
+  }
+  .mtr { letter-spacing: -1px; }
+
+  // The table scrolls sideways inside its box; the page never does.
+  .scroll { max-height: none; margin: 10px 0 4px; }
+  table { font-size: 11px; }
+  th, td { padding: 6px 7px; }
+  // The name is the row's identity — it stays put while the numbers scroll.
+  th:first-child, td:first-child {
+    position: sticky; left: 0; background: var(--bg); z-index: 2;
+  }
+  th:first-child { z-index: 3; }
+}
