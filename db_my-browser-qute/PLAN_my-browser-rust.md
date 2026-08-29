@@ -124,3 +124,51 @@ reason to keep `my-browser-qute` installed until it lands.
 - Does dropping to one process for the shell change the RSS story enough to
   matter, or is 125 MB mostly Qt + the WebEngine browser process either way?
   (Measure; do not assume the 125 MB is Python.)
+
+---
+
+## 6. Write less code — what to clone instead of write
+
+Ordered by LOC saved, not by how interesting it is.
+
+### 6.1 The chrome is HTML, not widgets  (biggest single saving)
+
+The three-row layout, pinbar, tabbar and statusbar do **not** need to be Qt or
+GTK widgets. Render them in a second CEF view and they are HTML + CSS — the
+same thing `dashboard/*.template.html` and `gen-dashboard.sh` already produce.
+
+This deletes the entire "which toolkit" question from §2, removes the `cxx-qt`
+C++ shim, and makes "EXACT SAME UI as qute" a CSS problem — which is
+*measurable* (screenshot-diff the two) rather than a matter of taste. Rust is
+then left owning only the window, the view embedding, the keymap, and IPC.
+
+Cost: chrome repaints go through a compositor pass. Irrelevant for a static bar.
+
+### 6.2 Depend on, don't write
+
+| Project | What it saves | Status (checked 2026-08-29) |
+|---|---|---|
+| **`tauri-apps/cef-rs`** | the whole CEF FFI layer | 1,105 commits, Linux x86_64 + ARM64, release-plz automation, under the Tauri org |
+| **`tauri-apps/tao`** | window + event loop, GTK on Linux | mature (Tauri's winit fork) |
+| **qutebrowser's `javascript/`** | hint labelling, element detection — plain JS injected into the page, **portable verbatim** | GPL, same licence as this fork |
+
+Do **not** wait for Tauri's own CEF backend for `wry`: that work is stop-start,
+has no ETA, and the maintainers have said it may land as a closed-source or
+commercial offering rather than in the Tauri org. Depend on `cef-rs` directly.
+
+### 6.3 Read, don't clone
+
+- **`antoyo/titanium`** — Rust + WebKit2GTK vim browser, ~363 stars, stale but
+  not archived. The reference for how command-mode/hints/marks are structured
+  in Rust. Read it; don't fork it (wrong engine).
+- **Tridactyl / Vimium** hint algorithms, if qute's JS turns out too coupled.
+
+### 6.4 Rejected, with the reason
+
+- **Verso** (Servo) — not daily-usable, and Servo in this nixpkgs is ~2 years stale.
+- **Tauri / `wry`** as the framework — Linux means WebKitGTK, which is the
+  compat regression §1 rejects. Its own maintainers call WebKitGTK-on-Linux
+  unusable. Take `cef-rs` and `tao` out of that org; leave the framework.
+- **Firefox/Chromium + Tridactyl** — the true zero-code answer, and it fails
+  the brief: no three-row pinbar, no `mybar.json` as source of truth. Named
+  here so it stays rejected on purpose rather than by omission.
