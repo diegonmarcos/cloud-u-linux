@@ -12,6 +12,42 @@ BIN=my-watchdog
 DEST="${XDG_DATA_HOME:-$HOME/.local/share}/my-konsole"
 LINK="$HOME/.local/bin/$BIN"
 
+# The observation capabilities, and only those.
+#
+# Unprivileged, this daemon cannot read /proc/<pid>/io or smaps_rollup for a
+# process it does not own, cannot map a socket to a pid that is not its own,
+# and cannot read the firewall ruleset. On a box whose real workload runs as
+# root in containers that is most of the machine: the panel showed 17% io.full
+# and a column of dashes where the process causing it should have been.
+#
+# A file capability rather than running as root, and rather than a system unit.
+# It is the same read powers with none of the rest of root, and — the part that
+# matters operationally — the daemon keeps its uid, so the snapshot and the
+# mailbox stay owned by the user who owns the session. The mailbox is appended
+# to by the panel; a root-owned one would be a mailbox the panel cannot post to.
+#
+# cap_sys_ptrace       /proc/<pid>/io, smaps_rollup, /proc/<pid>/fd for any pid
+# cap_dac_read_search  the paths guarding them
+# cap_net_admin        the nft ruleset the firewall page reports as unreadable
+CAPS="cap_sys_ptrace,cap_dac_read_search,cap_net_admin+ep"
+
+grant_caps() { # host -> apply on a remote box, empty -> apply here
+  local h="$1" cmd="setcap $CAPS \"\$1\" 2>/dev/null || sudo -n setcap $CAPS \"\$1\" 2>/dev/null"
+  if [ -z "$h" ]; then
+    setcap "$CAPS" "$LINK" 2>/dev/null || sudo -n setcap "$CAPS" "$LINK" 2>/dev/null || {
+      say "could not grant capabilities — run: sudo setcap $CAPS $LINK"
+      say "  without them per-process io, PSS and the firewall page stay blank"
+      return 0
+    }
+    say "granted $CAPS"
+  else
+    ssh -o BatchMode=yes "$h" "sudo -n setcap '$CAPS' ~/.local/bin/$BIN 2>/dev/null \
+      && echo '  capabilities granted' \
+      || echo '  NO capabilities — run: sudo setcap $CAPS ~/.local/bin/$BIN'" </dev/null
+  fi
+}
+
+
 case "${1:-fetch}" in
   fetch)
     mkdir -p "$DEST" "$(dirname "$LINK")"
@@ -43,6 +79,7 @@ case "${1:-fetch}" in
     [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || unit=my-watchdog-headless.service
     install -m644 "$(dirname "$0")/$unit" "$HOME/.config/systemd/user/my-watchdog.service"
     systemctl --user daemon-reload
+    grant_caps ""
     systemctl --user enable --now my-watchdog.service
     say "Installed and started ($unit)."
     ;;
@@ -71,11 +108,36 @@ case "${1:-fetch}" in
       ssh -o BatchMode=yes "$h" 'mkdir -p ~/.local/bin' </dev/null
       scp -q "$tmp" "$h:.local/bin/.$BIN.new"
       ssh -o BatchMode=yes "$h" "chmod +x ~/.local/bin/.$BIN.new && mv -f ~/.local/bin/.$BIN.new ~/.local/bin/$BIN" </dev/null
+      # Replace the PROCESS, not just the file on disk.
+      #
+      # Deploy used to overwrite the binary and walk away, which upgrades
+      # nothing: the old process keeps running from the unlinked inode until
+      # something restarts it, and nothing does. oci-mail carried an instance
+      # from a build two days old, re-parented to init and outside the unit, so
+      # `systemctl --user restart` started a SECOND daemon beside it rather
+      # than replacing it. Both then sampled all 154 processes every two
+      # seconds and wrote the same snapshot path, racing each other — 8GB read
+      # off a throttled volume, and a file whose contents depended on which
+      # daemon flushed last.
+      #
+      # The flock singleton guard cannot catch this on its own. It only
+      # excludes daemons that take the lock, and an instance older than the
+      # guard never did. Killing what is there before starting what we shipped
+      # is the part that does not depend on what the old binary knew.
+      ssh -o BatchMode=yes "$h" "
+        systemctl --user stop my-watchdog 2>/dev/null || true
+        pkill -x $BIN 2>/dev/null || true
+        sleep 1
+        pkill -9 -x $BIN 2>/dev/null || true
+        systemctl --user start my-watchdog 2>/dev/null || true
+        n=\$(pgrep -cx $BIN || echo 0)
+        [ \"\$n\" = 1 ] || echo \"  WARNING: \$n instances of $BIN running\"" </dev/null
       # Same policy document to every peer — that is what makes it one source
       # of truth rather than one file per machine that happens to agree today.
       ssh -o BatchMode=yes "$h" 'mkdir -p ~/.config/my-watchdog' </dev/null
       scp -q "$(dirname "$0")/configs/watchdog-policy.json" "$h:.config/my-watchdog/watchdog-policy.json"
       rm -f "$tmp"
+      grant_caps "$h"
       say "$h ($arch): installed"
     done
     ;;
