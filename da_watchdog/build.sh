@@ -41,9 +41,13 @@ grant_caps() { # host -> apply on a remote box, empty -> apply here
     }
     say "granted $CAPS"
   else
-    ssh -o BatchMode=yes "$h" "sudo -n setcap '$CAPS' ~/.local/bin/$BIN 2>/dev/null \
-      && echo '  capabilities granted' \
-      || echo '  NO capabilities — run: sudo setcap $CAPS ~/.local/bin/$BIN'" </dev/null
+    ssh -o BatchMode=yes "$h" bash -s <<EOF
+      if sudo -n setcap '$CAPS' ~/.local/bin/$BIN 2>/dev/null; then
+        echo "  capabilities granted"
+      else
+        echo "  NO capabilities — run: sudo setcap $CAPS ~/.local/bin/$BIN"
+      fi
+EOF
   fi
 }
 
@@ -124,20 +128,25 @@ case "${1:-fetch}" in
       # excludes daemons that take the lock, and an instance older than the
       # guard never did. Killing what is there before starting what we shipped
       # is the part that does not depend on what the old binary knew.
-      ssh -o BatchMode=yes "$h" "
+      # Piped to `bash -s` rather than passed as a command string: ssh runs a
+      # command string through the LOGIN shell, and not every box in this fleet
+      # logs in to bash — one runs fish, which rejects `n=$(...)` outright and
+      # took the whole deploy down after the first host.
+      ssh -o BatchMode=yes "$h" bash -s <<EOF
         systemctl --user stop my-watchdog 2>/dev/null || true
         pkill -x $BIN 2>/dev/null || true
         sleep 1
         pkill -9 -x $BIN 2>/dev/null || true
         systemctl --user start my-watchdog 2>/dev/null || true
-        n=\$(pgrep -cx $BIN || echo 0)
-        [ \"\$n\" = 1 ] || echo \"  WARNING: \$n instances of $BIN running\"" </dev/null
+        n=\$(pgrep -cx $BIN 2>/dev/null || echo 0)
+        [ "\$n" = 1 ] || echo "  WARNING: \$n instances of $BIN running"
+EOF
       # Same policy document to every peer — that is what makes it one source
       # of truth rather than one file per machine that happens to agree today.
       ssh -o BatchMode=yes "$h" 'mkdir -p ~/.config/my-watchdog' </dev/null
       scp -q "$(dirname "$0")/configs/watchdog-policy.json" "$h:.config/my-watchdog/watchdog-policy.json"
       rm -f "$tmp"
-      grant_caps "$h"
+      grant_caps "$h" || say "$h: capability grant failed, continuing"
       say "$h ($arch): installed"
     done
     ;;
