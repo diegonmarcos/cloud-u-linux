@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<!--
+  my-browser-rust-chromium shell — TEMPLATE.
+  Visually replicates qutebrowser as configured in db_my-browser-qute (see UI-SPEC.md).
+  Static markup + CSS only. Behavior is wired up by data.js, shell.js, pages.js
+  (written by other agents) which bind to the ids/classes exposed below.
+
+  Row order (top to bottom), per UI-SPEC.md:
+    1. #mybar      - bookmarks + plugin buttons toolbar
+    2. #pinbar     - pinned shortcuts row
+    3. #tabbar     - regular tab strip
+    4. #content    - fills remaining height, holds the <iframe id=view>
+    5. #statusbar  - left: url + mode, right: scroll/tabs/progress
+  Overlays (absolutely positioned, hidden by default):
+    - #cmdline     - ':' command line, sits directly above the statusbar
+    - #pages       - full-area panel for history/downloads/config pages
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>my-browser</title>
+<link rel="stylesheet" href="shell.css">
+</head>
+<body>
+
+  <!-- Row 1: bookmarks buttons + plugin buttons toolbar -->
+  <div id="mybar">
+    <div id="mybar-bookmarks" class="mybar-group">
+      <!-- data.js populates one .bookmark-btn per bookmarks[] entry -->
+    </div>
+    <div id="mybar-plugins" class="mybar-group">
+      <!-- data.js/shell.js populates one .plugin-btn per qute-plugins.json entry
+           (e.g. ,pj javascript toggle · ,pd dark-mode toggle · ,pm files) -->
+    </div>
+  </div>
+
+  <!-- Row 2: pinned shortcuts row (qute PinBar has NO native styling — see shell.css) -->
+  <div id="pinbar">
+    <!-- data.js populates one .pin per pinned[] entry -->
+  </div>
+
+  <!-- Row 3: regular tab strip -->
+  <div id="tabbar">
+    <!-- shell.js populates one .tab per open tab, alternating .odd/.even, with .selected on the active tab -->
+  </div>
+
+  <!-- Row 4: main content area -->
+  <div id="content">
+    <iframe id="view" name="view" src="about:blank"></iframe>
+  </div>
+
+  <!-- ':' command line — overlays directly above the statusbar, full width, hidden by default -->
+  <input id="cmdline" class="hidden" type="text" autocomplete="off" spellcheck="false" placeholder=":">
+
+  <!-- Row 5: status bar -->
+  <div id="statusbar">
+    <div id="statusbar-left">
+      <span id="status-url"></span>
+      <span id="status-mode"></span>
+    </div>
+    <div id="statusbar-right">
+      <span id="status-scroll"></span>
+      <span id="status-tabs"></span>
+      <span id="status-progress"></span>
+    </div>
+  </div>
+
+  <!-- Full-area overlay panel for history/downloads/config pages, hidden by default -->
+  <div id="pages" class="hidden">
+    <div id="pages-body">
+      <!-- pages.js renders history/downloads/config content here -->
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="shell.js"></script>
+  <script src="pages.js"></script>
+</body>
+</html>

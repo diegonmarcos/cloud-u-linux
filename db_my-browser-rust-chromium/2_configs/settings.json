@@ -1,0 +1,100 @@
+{
+  "_description": "qutebrowser declarative settings, projected into home-manager's programs.qutebrowser.settings attrset.",
+  "url": {
+    "_note": "Homepage + every new tab open the generated bookmark dashboard (da_my-browser/src/dashboard). Installed at ~/.config/my-browser-qute/qute-bookmarks.html by the home-module.",
+    "default_page": "file:///home/diego/.config/my-browser-qute/qute-bookmarks.html",
+    "start_pages": ["file:///home/diego/.config/my-browser-qute/qute-bookmarks.html"]
+  },
+  "window": {
+    "_note": "Brand the window/taskbar title 'my-browser' (display brand; project dir is da_my-browser, GHCR image keeps the qutebrowser-standalone identity).",
+    "title_format": "{perc}{current_title}{title_sep}my-browser"
+  },
+  "_plugins_note": "content.blocking.enabled, content.javascript.enabled and content.autoplay are OWNED by the plugin registry (qute-plugins.json — ids adblock/javascript/no-autoplay) so they are runtime-toggleable via :plugins; they are intentionally NOT set here to avoid a double source of truth. Non-toggle sub-keys (blocking.method/lists, javascript.clipboard) stay here.",
+  "content": {
+    "blocking": {
+      "method": "both",
+      "_method_options": "auto | adblock | hosts | both",
+      "adblock": {
+        "lists": [
+          "https://easylist.to/easylist/easylist.txt",
+          "https://easylist.to/easylist/easyprivacy.txt",
+          "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"
+        ]
+      },
+      "hosts": {
+        "lists": [
+          "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+        ]
+      }
+    },
+    "javascript": {
+      "clipboard": "access-paste"
+    },
+    "cookies": {
+      "accept": "no-3rdparty",
+      "store": true
+    },
+    "geolocation": false,
+    "notifications": {
+      "enabled": "ask"
+    },
+    "default_encoding": "utf-8"
+  },
+  "auto_save": {
+    "_note": "Restore the last session (open tabs) on startup instead of a fresh dashboard window. Saves the _autosave session on quit; restored on next launch when no URL is given on the CLI (start_pages still used for brand-new/-empty sessions).",
+    "session": true
+  },
+  "downloads": {
+    "location": {
+      "directory": "~/others/Downloads",
+      "prompt": false
+    },
+    "remove_finished": 5000
+  },
+  "tabs": {
+    "position": "top",
+    "show": "always",
+    "tabs_are_windows": false,
+    "background": true,
+    "select_on_remove": "next"
+  },
+  "fonts": {
+    "default_family": "Iosevka",
+    "default_size": "10pt"
+  },
+  "colors": {
+    "_description": "Dark theme tuned to the rest of the stack (KDE Plasma Breeze Dark). Keys map 1:1 to qutebrowser's colors.* settings; the projection flattens them to c.colors.<path>.",
+    "webpage": {
+      "preferred_color_scheme": "dark"
+    },
+    "statusbar": {
+      "normal": { "bg": "#1b1e20", "fg": "#eff0f1" },
+      "command": { "bg": "#1b1e20", "fg": "#eff0f1" },
+      "insert": { "bg": "#27ae60", "fg": "#ffffff" },
+      "url": { "fg": "#eff0f1", "success": { "https": { "fg": "#27ae60" } } }
+    },
+    "tabs": {
+      "bar": { "bg": "#31363b" },
+      "odd": { "bg": "#31363b", "fg": "#eff0f1" },
+      "even": { "bg": "#2a2e32", "fg": "#eff0f1" },
+      "selected": {
+        "odd": { "bg": "#3daee9", "fg": "#ffffff" },
+        "even": { "bg": "#3daee9", "fg": "#ffffff" }
+      }
+    }
+  },
+  "statusbar": {
+    "show": "always",
+    "position": "bottom"
+  },
+  "input": {
+    "insert_mode": {
+      "auto_load": false,
+      "auto_leave": true
+    }
+  },
+  "completion": {
+    "shrink": true,
+    "use_best_match": true
+  }
+}

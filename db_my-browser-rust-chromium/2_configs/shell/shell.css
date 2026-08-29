@@ -1,0 +1,404 @@
+/*
+ * my-browser-rust-chromium shell.css
+ * Visual replica of qutebrowser as configured in db_my-browser-qute/src/2_configs.
+ * Values below are taken literally from UI-SPEC.md (colors, font, row order) and,
+ * where noted, from db_my-browser-qute/src/dashboard/dashboard.template.html
+ * (card/toolbar visual language: pill buttons, subtle borders, monospace UI).
+ *
+ * No external resources: no @font-face, no CDN, no images. Runs from file:// in CEF.
+ */
+
+:root {
+  /* font, per UI-SPEC.md: qute-settings.json fonts.default_family, 10pt */
+  --font-family: "Iosevka", "Iosevka Term", ui-monospace, "JetBrains Mono",
+    "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-size: 10pt;
+
+  /* statusbar */
+  --statusbar-bg: #1b1e20;
+  --statusbar-fg: #eff0f1;
+  --statusbar-insert-bg: #27ae60;
+  --statusbar-insert-fg: #ffffff;
+  --url-https-success: #27ae60;
+
+  /* tab strip / pin bar */
+  --tab-track-bg: #31363b;
+  --tab-odd-bg: #31363b;
+  --tab-odd-fg: #eff0f1;
+  --tab-even-bg: #2a2e32;
+  --tab-even-fg: #eff0f1;
+  --tab-selected-bg: #3daee9;
+  --tab-selected-fg: #ffffff;
+
+  /* mybar — not covered by UI-SPEC.md's exact color table; kept in the same
+     dark palette family as the tab track so the whole chrome reads as one
+     surface, per dashboard.template.html's toolbar language. */
+  --mybar-bg: #23272b;
+  --mybar-fg: #eff0f1;
+  --mybar-btn-bg: #31363b;
+  --mybar-btn-fg: #eff0f1;
+  --mybar-btn-border: #3f4448;
+
+  --border-subtle: #3f4448;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden; /* the window must never scroll; only #content / #pages-body scroll */
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  color: var(--statusbar-fg);
+  background: #000000;
+}
+
+/* ---------------------------------------------------------------------
+ * Row 1: #mybar — bookmarks buttons + plugin buttons toolbar
+ * --------------------------------------------------------------------- */
+#mybar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 6px;
+  background: var(--mybar-bg);
+  color: var(--mybar-fg);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+
+.mybar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.bookmark-btn,
+.plugin-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--mybar-btn-border);
+  border-radius: 4px;
+  background: var(--mybar-btn-bg);
+  color: var(--mybar-btn-fg);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+}
+
+.bookmark-btn:hover,
+.plugin-btn:hover {
+  background: var(--tab-selected-bg);
+  color: var(--tab-selected-fg);
+}
+
+/* a plugin button in its "active" state (e.g. dark-mode / javascript toggled on) */
+.plugin-btn.active {
+  background: var(--statusbar-insert-bg);
+  color: var(--statusbar-insert-fg);
+  border-color: var(--statusbar-insert-bg);
+}
+
+/* generic dropdown, used inside #mybar or #pages for menus */
+.dropdown {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  min-width: 160px;
+  margin-top: 2px;
+  padding: 4px;
+  background: var(--mybar-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.dropdown-menu .dropdown-item {
+  display: block;
+  padding: 4px 8px;
+  border-radius: 3px;
+  color: var(--mybar-fg);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dropdown-menu .dropdown-item:hover {
+  background: var(--tab-selected-bg);
+  color: var(--tab-selected-fg);
+}
+
+/* ---------------------------------------------------------------------
+ * Row 2: #pinbar — pinned shortcuts row
+ *
+ * NOTE per UI-SPEC.md: qute's PinBar is a bare, unstyled QTabBar — it has
+ * NO stylesheet rules of its own, so there is nothing upstream to copy
+ * pixel-for-pixel. The rules below are AUTHORED here (not copied from any
+ * qute stylesheet) so the pin row reads as a deliberate, consistent part
+ * of the chrome rather than looking unstyled/broken; they reuse the same
+ * tab-strip palette (--tab-odd-bg/--tab-selected-bg/etc.) so it matches
+ * #tabbar visually.
+ * --------------------------------------------------------------------- */
+#pinbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  padding: 0;
+  background: var(--tab-track-bg);
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+
+.pin {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  background: var(--tab-odd-bg);
+  color: var(--tab-odd-fg);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+  border-right: 1px solid var(--tab-track-bg);
+}
+
+.pin:nth-child(even) {
+  background: var(--tab-even-bg);
+  color: var(--tab-even-fg);
+}
+
+.pin.selected {
+  background: var(--tab-selected-bg);
+  color: var(--tab-selected-fg);
+}
+
+/* ---------------------------------------------------------------------
+ * Row 3: #tabbar — regular tab strip
+ * --------------------------------------------------------------------- */
+#tabbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  padding: 0;
+  background: var(--tab-track-bg);
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+
+.tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  padding: 3px 10px;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-right: 1px solid var(--tab-track-bg);
+}
+
+.tab.odd {
+  background: var(--tab-odd-bg);
+  color: var(--tab-odd-fg);
+}
+
+.tab.even {
+  background: var(--tab-even-bg);
+  color: var(--tab-even-fg);
+}
+
+.tab.selected {
+  background: var(--tab-selected-bg);
+  color: var(--tab-selected-fg);
+}
+
+.tab .tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab .tab-close {
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
+.tab .tab-close:hover {
+  opacity: 1;
+}
+
+/* ---------------------------------------------------------------------
+ * Row 4: #content — fills remaining height, holds the page view
+ * --------------------------------------------------------------------- */
+#content {
+  flex: 1 1 auto;
+  min-height: 0; /* required so the flex child can shrink and scroll, not the page */
+  position: relative;
+  overflow: auto;
+  background: #ffffff;
+}
+
+#view {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------------
+ * ':' command line — overlay, sits directly above the statusbar, full width
+ * --------------------------------------------------------------------- */
+#cmdline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--font-size) + 2px); /* directly above the statusbar */
+  z-index: 30;
+  width: 100%;
+  padding: 1px 6px;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  outline: none;
+  background: var(--statusbar-bg);
+  color: var(--statusbar-fg);
+  font-family: inherit;
+  font-size: inherit;
+}
+
+#cmdline.mode-command {
+  background: var(--statusbar-bg);
+  color: var(--statusbar-fg);
+}
+
+/* ---------------------------------------------------------------------
+ * Row 5: #statusbar
+ * height: font height + 2px — kept as tight padding, not a chunky bar.
+ * --------------------------------------------------------------------- */
+#statusbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 1px 6px;
+  background: var(--statusbar-bg);
+  color: var(--statusbar-fg);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: calc(var(--font-size) + 2px);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* insert mode: whole statusbar flips to the insert-mode palette */
+#statusbar.mode-insert {
+  background: var(--statusbar-insert-bg);
+  color: var(--statusbar-insert-fg);
+}
+
+#statusbar-left,
+#statusbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+#statusbar-left {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#status-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* https-success URL coloring, per UI-SPEC.md */
+#status-url.url-https-success {
+  color: var(--url-https-success);
+}
+
+#status-mode {
+  flex: 0 0 auto;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+#status-scroll,
+#status-tabs,
+#status-progress {
+  flex: 0 0 auto;
+}
+
+/* ---------------------------------------------------------------------
+ * #pages — full-area overlay for history/downloads/config pages
+ * --------------------------------------------------------------------- */
+#pages {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: #1b1e20;
+  color: var(--statusbar-fg);
+}
+
+#pages-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+/* ---------------------------------------------------------------------
+ * Utility
+ * --------------------------------------------------------------------- */
+.hidden {
+  display: none !important;
+}

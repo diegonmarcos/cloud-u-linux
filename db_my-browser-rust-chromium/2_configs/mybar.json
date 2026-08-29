@@ -1,0 +1,144 @@
+{
+  "bookmarks": [
+    {
+      "name": "bookmarks",
+      "url": "file:///home/diego/.config/my-browser-qute/qute-bookmarks.html"
+    },
+    {
+      "name": "git",
+      "url": "http://localhost:8000/git"
+    },
+    {
+      "name": "linktree",
+      "url": "https://linktree.diegonmarcos.com"
+    },
+    {
+      "name": "cloud",
+      "url": "https://cloud.diegonmarcos.com"
+    },
+    {
+      "name": "proxy",
+      "url": "https://proxy.diegonmarcos.com"
+    },
+    {
+      "name": "Dev",
+      "links": {
+        "github": "https://github.com/diegonmarcos",
+        "mdn": "https://developer.mozilla.org",
+        "stackoverflow": "https://stackoverflow.com",
+        "nixpkgs": "https://search.nixos.org/packages"
+      }
+    },
+    {
+      "name": "AI",
+      "links": {
+        "claude": "https://claude.ai/new",
+        "claude-usage": "https://claude.ai/new#settings/usage",
+        "gemini": "https://gemini.google.com",
+        "chatgpt": "https://chatgpt.com"
+      }
+    },
+    {
+      "name": "News",
+      "links": {
+        "hn": "https://news.ycombinator.com",
+        "lobsters": "https://lobste.rs",
+        "reuters": "https://www.reuters.com",
+        "arstechnica": "https://arstechnica.com"
+      }
+    },
+    {
+      "name": "Mail",
+      "links": {
+        "webmail": "https://webmail.diegonmarcos.com",
+        "gmail": "https://mail.google.com",
+        "proton": "https://mail.proton.me"
+      }
+    },
+    {
+      "name": "Media",
+      "links": {
+        "youtube": "https://youtube.com",
+        "spotify": "https://open.spotify.com",
+        "photos": "https://photos.diegonmarcos.com"
+      }
+    },
+    {
+      "name": "Social",
+      "links": {
+        "matrix": "https://messenger.diegonmarcos.com",
+        "mattermost": "https://chat.diegonmarcos.com",
+        "linkedin": "https://www.linkedin.com",
+        "reddit": "https://www.reddit.com"
+      }
+    },
+    {
+      "name": "Docs",
+      "links": {
+        "hedgedoc": "https://app.diegonmarcos.com/hedgedoc",
+        "etherpad": "https://app.diegonmarcos.com/etherpad",
+        "grist": "https://sheets.diegonmarcos.com"
+      }
+    },
+    {
+      "name": "Finance",
+      "links": {
+        "fin-api": "https://api.diegonmarcos.com/fin-api"
+      }
+    },
+    {
+      "name": "Shopping",
+      "links": {
+        "amazon": "https://www.amazon.com"
+      }
+    },
+    {
+      "name": "Search",
+      "links": {
+        "google": "https://www.google.com",
+        "ddg": "https://duckduckgo.com",
+        "wikipedia": "https://www.wikipedia.org"
+      }
+    }
+  ],
+  "pinned": [
+    {
+      "name": "Bookmarks",
+      "url": "file:///home/diego/.config/my-browser-qute/qute-bookmarks.html"
+    },
+    {
+      "name": "Home Files",
+      "url": "http://localhost:8000"
+    },
+    {
+      "name": "Web Search",
+      "url": "file:///home/diego/.config/my-browser-qute/qute-websearch.html"
+    },
+    {
+      "name": "watchdog",
+      "url": "file:///home/diego/.watchdog/html/index.html"
+    }
+  ],
+  "plugins": [
+    {
+      "name": "Ad & Tracker Blocking",
+      "command": "plugin-toggle-adblock"
+    },
+    {
+      "name": "JavaScript",
+      "command": "plugin-toggle-javascript"
+    },
+    {
+      "name": "Anti-Fingerprint (canvas)",
+      "command": "plugin-toggle-anti-fingerprint"
+    },
+    {
+      "name": "Block Autoplay",
+      "command": "plugin-toggle-no-autoplay"
+    },
+    {
+      "name": "Vaultwarden Autofill",
+      "command": "spawn --userscript qute-bitwarden --totp"
+    }
+  ]
+}
