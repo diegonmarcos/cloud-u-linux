@@ -21,7 +21,7 @@ below is OURS, composited on top.
 
 | # | Feature | Layer | Notes |
 |---|---------|-------|-------|
-| 1c | **Baked homepage** (qute dashboard → `my-browser-chromium-homepage.html`) | launcher | ✅ DONE — bundled + `--url=` launcher |
+| 1c | **Baked homepage** (qute dashboard → `my-browser-chromium-homepage.html`) | launcher + A | ❌ **NOT done** (was wrongly marked ✅) — the HTML is bundled, but the osr example hardcodes its start URL and parses no `url` switch, so `--url=` is silently ignored. Verified: the shipped binary contains the literal `https:://github.com` (upstream typo, double colon) and no `url` string. |
 | 1a | Own desktop icon + `.desktop` entry | packaging | icon asset + xdg desktop entry in the bundle |
 | 1b | Cookie policy: auto-refuse non-essential (only necessary) | A (CEF handler) | `CefCookieManager` / request handler blocks 3rd-party + consent auto-decline |
 | 2  | **Two-line tab strip**: line 1 = pinned, line 2 = normal | A | cefsimple has NO tabs → build multi-browser-view + our tab bar |
@@ -32,6 +32,18 @@ below is OURS, composited on top.
 | 4  | **cloud-chromium plugin**: sync history+bookmarks to our cloud + **Bitwarden wrapper** (embed the open-source Bitwarden extension) | B | ⚠️ CEF has *partial* MV3/extension support — Bitwarden-in-CEF must be proven early (risk) |
 
 ## Known risks (surface early, don't promise blind)
+- **The osr example has NO input handling at all (FOUND 2026-08-29).** Upstream
+  `window_event()` matches only `CloseRequested`, `RedrawRequested`, `Resized`.
+  There is no `MouseInput`, `CursorMoved`, `MouseWheel`, `KeyboardInput` — and
+  `send_mouse_click_event` / `send_key_event` are never called anywhere in the
+  repo outside the generated FFI bindings. It is a display-only demo: you cannot
+  click, type or scroll. **The entire input layer is ours to write**, and it is a
+  prerequisite for *any* usable browser, before tabs or chrome are even discussed.
+- **One browser, one texture.** `App.browser` is `Option<Browser>` and the frame
+  lands in a single module-level `thread_local! TEXTURE: RefCell<Option<BindGroup>>`
+  that every paint callback overwrites with no browser-id key. Tabs (phase 2) need
+  this keyed by `browser.identifier()`, one `OsrRenderHandler`/`Client` pair per
+  browser, and N quads in the render pass. Upstream demonstrates none of it.
 - **wgpu backend is hardcoded (FOUND 2026-08-29, launcher-patched):** the `osr`
   example requests `Backends::VULKAN` only, and the bundle ships no Vulkan ICD →
   `NoAdapter` panic before any window appears. `WGPU_BACKEND=gl` is ignored.
