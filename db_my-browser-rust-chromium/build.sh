@@ -45,18 +45,18 @@ case "$cmd" in
     cp -r "$CEF_DIR"/. "$DIST/bundle/" 2>/dev/null || true   # libcef.so + resources for a portable run
     # baked homepage (copied from qute's dashboard → 2_configs/, committed)
     cp "$HERE/2_configs/my-browser-chromium-homepage.html" "$DIST/bundle/" 2>/dev/null || true
-    # launcher: sets CEF paths + opens the baked homepage (the osr example honours --url=)
+    # launcher: sets CEF paths + opens the baked homepage (src/overlay parses --url=)
     cat > "$DIST/bundle/my-browser" <<'LAUNCH'
 #!/usr/bin/env bash
 HERE="$(cd "$(dirname "$0")" && pwd)"
 export CEF_PATH="$HERE" LD_LIBRARY_PATH="$HERE"
-# The osr example hardcodes wgpu Backends::VULKAN (upstream main.rs), and this
-# bundle carries no Vulkan ICD, so the loader finds no adapter and the Rust side
-# panics with NoAdapter before a window ever appears -- CEF itself is fine.
-# WGPU_BACKEND=gl does NOT help: the backend is hardcoded, not read from env.
-# Point the loader at whatever ICDs the host has if nothing else already did.
-# ponytail: env fix in the launcher; the real fix is Backends::all() in
-# src/overlay/main.rs so it falls back to GL -- do that when the overlay exists.
+# Upstream's osr example hardcoded wgpu Backends::VULKAN and this bundle ships
+# no Vulkan ICD, so the loader found no adapter and the Rust side panicked with
+# NoAdapter before a window appeared -- CEF itself was fine.
+# src/overlay now asks for VULKAN|GL and honours WGPU_BACKEND, so GL is a real
+# fallback and this is no longer load-bearing. Kept as belt-and-braces: point
+# the loader at the host's ICDs so Vulkan still wins where a driver exists.
+# ponytail: delete this block if it ever gets in the way -- GL covers it.
 if [ -z "${VK_ICD_FILENAMES:-}" ] && [ -z "${VK_DRIVER_FILES:-}" ]; then
   for _d in /run/opengl-driver/share/vulkan/icd.d /usr/share/vulkan/icd.d; do
     [ -d "$_d" ] || continue
