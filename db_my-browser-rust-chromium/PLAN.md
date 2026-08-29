@@ -32,6 +32,12 @@ below is OURS, composited on top.
 | 4  | **cloud-chromium plugin**: sync history+bookmarks to our cloud + **Bitwarden wrapper** (embed the open-source Bitwarden extension) | B | ⚠️ CEF has *partial* MV3/extension support — Bitwarden-in-CEF must be proven early (risk) |
 
 ## Known risks (surface early, don't promise blind)
+- **wgpu backend is hardcoded (FOUND 2026-08-29, launcher-patched):** the `osr`
+  example requests `Backends::VULKAN` only, and the bundle ships no Vulkan ICD →
+  `NoAdapter` panic before any window appears. `WGPU_BACKEND=gl` is ignored.
+  `build.sh`'s launcher now points the loader at the host's ICDs; the real fix is
+  `Backends::all()` in `src/overlay/main.rs` once the overlay exists, so it can
+  fall back to GL on a machine with no Vulkan at all.
 - **Bitwarden in CEF (item 4):** CEF's `LoadExtension` supports limited Chrome
   extensions; a full MV3 password manager may not run unmodified. Prove with a
   minimal extension load test BEFORE committing to the full wrapper.
