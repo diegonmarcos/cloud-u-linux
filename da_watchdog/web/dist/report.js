@@ -16,7 +16,7 @@
   const mib = (bytes2) => Math.floor(Math.max(0, bytes2 || 0) / MIB).toFixed(2) + " MiB";
   const mibG = (g) => mib((g || 0) * GIB);
   const bare = (g) => mibG(g).replace(" MiB", "");
-  const gb = (g) => (g || 0).toFixed(1) + "G";
+  const gb = (g) => (g || 0) < 1 ? Math.round((g || 0) * 1024) + "M" : (g || 0).toFixed(2) + "G";
   const pc = (x) => (x == null ? 0 : x).toFixed(1) + "%";
   const bytes = (n) => {
     n = n || 0;
@@ -50,26 +50,42 @@
   }
   function boxCpu() {
     const d = S.cpu_detail || {}, i = S.cpu_info || {}, h = S.health || {};
-    let b = bar("total", S.cpu || 0, pc(S.cpu));
-    (S.cores || []).forEach((c, n) => {
-      b += bar("c" + n, c, pc(c));
+    const cores = S.cores || [];
+    let b = bar("CPU", S.cpu || 0, pc(S.cpu));
+    cores.forEach((c, n) => {
+      b += `<div class="r core"><span class="lb">C${n}</span>` + meter((c || 0) / 100, MOBILE ? 6 : 8) + `<span class="v">${pc(c)}</span></div>`;
     });
-    b += kv("user", pc(num(d, "user")), "sys", pc(num(d, "system")), "iowait", pc(num(d, "iowait")));
-    b += kv("irq", pc(num(d, "irq")), "steal", pc(num(d, "steal")), "nice", pc(num(d, "nice")));
+    b += kv(
+      "usr",
+      pc(num(d, "user")),
+      "sys",
+      pc(num(d, "system")),
+      "io",
+      pc(num(d, "iowait")),
+      "irq",
+      pc(num(d, "irq")),
+      "nice",
+      pc(num(d, "nice")),
+      "steal",
+      pc(num(d, "steal"))
+    );
     b += kv(
       "load",
-      [S.load1, S.load5, S.load15].map((x) => (x || 0).toFixed(2)).join("  "),
-      "run/blk",
-      `${num(h, "procs_running")} / ${num(h, "procs_blocked")}`
+      [S.load1, S.load5, S.load15].map((x) => (x || 0).toFixed(2)).join(" "),
+      "",
+      `${cores.length} cores`
     );
-    b += kv(
-      "clock",
-      num(i, "mhz") ? `${Math.round(num(i, "mhz"))} / ${Math.round(num(h, "max_mhz"))} MHz` : "-",
-      "temp",
-      num(i, "temp_c") ? num(i, "temp_c").toFixed(0) + "\xB0C" : "-"
-    );
-    if (i.model) b += kv("model", i.model);
-    return panel("cpu", null, b, true);
+    if (num(h, "procs_running") || num(h, "procs_blocked"))
+      b += kv(
+        "run/blk",
+        `${num(h, "procs_running")} / ${num(h, "procs_blocked")}`,
+        "clock",
+        num(i, "mhz") ? `${Math.round(num(i, "mhz"))} / ${Math.round(num(h, "max_mhz"))} MHz` : "-",
+        "temp",
+        num(i, "temp_c") ? num(i, "temp_c").toFixed(0) + "\xB0C" : "-"
+      );
+    const ghz = num(i, "mhz") ? `  ${(num(h, "max_mhz") / 1e3 || num(i, "mhz") / 1e3).toFixed(2)}GHz` : "";
+    return panel(`cpu  ${i.model || ""}${ghz}`.trim(), null, b, true);
   }
   function boxMem() {
     const m = S.mem_detail || {}, w = S.swap_detail || {}, v = S.vram_detail || {};
@@ -116,7 +132,6 @@
       `${bare(num(w, "zswapped"))}\u2192${mibG(num(w, "zswap"))}`
     );
     if (num(S, "slice_max_gib") > 0) {
-      b += head("SESSION SLICE");
       b += bar(
         "slice",
         S.slice_pct || 0,
@@ -138,7 +153,7 @@
   function boxStorage() {
     let b = "";
     (S.disks || []).forEach((d) => {
-      b += bar(d.mount, num(d, "pct"), `${gb(num(d, "used_gib"))} / ${gb(num(d, "total_gib"))}`);
+      b += bar(d.mount, num(d, "pct"), `${gb(num(d, "used_gib"))}/${gb(num(d, "total_gib"))}`);
     });
     (S.storage || []).forEach((s) => {
       b += head(s.label || "pool");
@@ -146,12 +161,12 @@
       if (dt) b += bar(
         "data",
         num(s, "data_used") / dt * 100,
-        `${gb(num(s, "data_used") / GIB)} / ${gb(dt / GIB)}`
+        `${gb(num(s, "data_used") / GIB)}/${gb(dt / GIB)}`
       );
       if (mt) b += bar(
         "meta",
         num(s, "meta_used") / mt * 100,
-        `${gb(num(s, "meta_used") / GIB)} / ${gb(mt / GIB)}`
+        `${gb(num(s, "meta_used") / GIB)}/${gb(mt / GIB)}`
       );
       if (num(s, "dev_size")) b += kv("device", gb(num(s, "dev_size") / GIB));
     });
@@ -166,23 +181,45 @@
     });
     b += kv("gateway", h.gateway || "-");
     if (h.public) b += kv("public", String(h.public));
-    b += head("RATE");
-    b += kv("rx", bytes(num(S, "net_rx")) + "/s", "tx", bytes(num(S, "net_tx")) + "/s");
+    b = `<div class="r"><span class="lb">\u25BC rx</span><span class="v">${bytes(num(S, "net_rx"))}/s</span></div><div class="r"><span class="lb">\u25B2 tx</span><span class="v">${bytes(num(S, "net_tx"))}/s</span></div>` + b;
     const t = S.totals || {};
     b += kv("total rx", bytes(num(t, "net_rx_bytes")), "tx", bytes(num(t, "net_tx_bytes")));
     return panel("net", null, b, true);
   }
   function boxPsi() {
-    const p = S.psi || {};
-    let b = kv("", "some10   some60  some300");
+    const p = S.psi || {}, h = S.health || {}, r = S.reclaim || {}, m = S.mem_detail || {};
+    let b = '<div class="r hd"><span class="lb"></span><span class="w">10s</span><span class="w">60s</span><span class="w">300s</span><span class="nw">now</span></div>';
     ["cpu", "io", "memory"].forEach((k) => {
       const x = p[k] || {};
-      b += bar(
-        k,
-        num(x, "some10"),
-        [num(x, "some10"), num(x, "some60"), num(x, "some300")].map((v) => v.toFixed(2).padStart(7)).join(" ")
-      );
+      ["some", "full"].forEach((kind) => {
+        const v10 = num(x, kind + "10"), v60 = num(x, kind + "60"), v300 = num(x, kind + "300");
+        b += `<div class="r"><span class="lb">${kind === "some" ? esc(k === "memory" ? "mem" : k) : ""} ${kind}</span><span class="w">${v10.toFixed(2)}</span><span class="w">${v60.toFixed(2)}</span><span class="w">${v300.toFixed(2)}</span><span class="nw">${meter(v10 / 100, MOBILE ? 8 : 14)}</span></div>`;
+      });
     });
+    const dash = (v) => v ? String(Math.round(v)) : "\u2014";
+    b += kv("reclaim/s", "", "direct", dash(num(r, "scan_direct")), "kswapd", dash(num(r, "scan_kswapd")));
+    b += kv("refault/s", "", "file", dash(num(r, "refault_file")), "anon", dash(num(r, "refault_anon")));
+    b += kv("swap/s", "", "in", dash(num(r, "swap_in")), "out", dash(num(r, "swap_out")));
+    const cl = num(m, "commit_limit");
+    b += kv("cpu", "", "steal", pc(num(S.cpu_detail || {}, "steal")), "wait", pc(num(S.cpu_detail || {}, "iowait")));
+    b += kv(
+      "mem",
+      "",
+      "commit",
+      cl > 0 ? Math.round(num(m, "committed") / cl * 100) + "%" : "-",
+      "dirty",
+      mibG(num(m, "dirty"))
+    );
+    b += kv(
+      "io/net",
+      "",
+      "busy",
+      pc(num(h, "disk_busy_pct")),
+      "avio",
+      num(h, "disk_avio_ms").toFixed(2) + "ms",
+      "iops",
+      String(num(h, "disk_iops"))
+    );
     return panel("psi", null, b, true);
   }
   function boxSlices() {
@@ -215,6 +252,10 @@
     return panel("mesh", ms.length + " machines", b, true);
   }
   function overview() {
+    if (E.tui) return E.tui;
+    return legacyOverview();
+  }
+  function legacyOverview() {
     return `<div class="dash"><div class="w3">${boxCpu()}</div>` + boxMem() + boxStorage() + boxNet() + boxPsi() + boxSlices() + boxMesh() + `<div class="w3">${panel(
       "processes",
       (S.proc_table || []).length + " rows",

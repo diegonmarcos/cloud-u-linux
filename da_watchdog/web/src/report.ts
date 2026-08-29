@@ -16,7 +16,7 @@ const MIB = 1048576, GIB = 1073741824;
 
 interface Machine { alias: string; ip?: string; local?: boolean }
 interface Envelope {
-  snapshot?: Snap; report?: string; files?: string[];
+  snapshot?: Snap; report?: string; files?: string[]; tui?: string;
   machines?: Machine[]; exported?: string; measured?: string;
 }
 type Dict = Record<string, any>;
@@ -62,7 +62,12 @@ const mibG = (g: number): string => mib((g || 0) * GIB);
 const bare = (g: number): string => mibG(g).replace(' MiB', '');
 // Storage is the one exception and keeps gigabytes: memory and disk are never
 // read against each other, so they do not need a shared unit.
-const gb = (g: number): string => (g || 0).toFixed(1) + 'G';
+// Storage is the one exception to the mebibyte rule and keeps human units,
+// which means it also has to SLIDE like the panel's: a 102MB boot partition
+// reads "102M", not "0.1G", and a 44GB root reads "44.07G". Forcing one
+// decimal of gigabytes turned every small mount into 0.0G and lost it.
+const gb = (g: number): string =>
+  (g || 0) < 1 ? Math.round((g || 0) * 1024) + 'M' : (g || 0).toFixed(2) + 'G';
 const pc = (x: number | null | undefined): string => (x == null ? 0 : x).toFixed(1) + '%';
 
 const bytes = (n: number): string => {
@@ -114,17 +119,32 @@ function panel(title: string, count: string | null, inner: string, pad = false):
 // ── the boxes, in the panel's order ────────────────────────────────────────
 function boxCpu(): string {
   const d = S.cpu_detail || {}, i = S.cpu_info || {}, h = S.health || {};
-  let b = bar('total', S.cpu || 0, pc(S.cpu));
-  (S.cores || []).forEach((c, n) => { b += bar('c' + n, c, pc(c)); });
-  b += kv('user', pc(num(d,'user')), 'sys', pc(num(d,'system')), 'iowait', pc(num(d,'iowait')));
-  b += kv('irq', pc(num(d,'irq')), 'steal', pc(num(d,'steal')), 'nice', pc(num(d,'nice')));
-  b += kv('load', [S.load1, S.load5, S.load15].map(x => (x || 0).toFixed(2)).join('  '),
-          'run/blk', `${num(h,'procs_running')} / ${num(h,'procs_blocked')}`);
-  b += kv('clock', num(i,'mhz')
-            ? `${Math.round(num(i,'mhz'))} / ${Math.round(num(h,'max_mhz'))} MHz` : '-',
-          'temp', num(i,'temp_c') ? num(i,'temp_c').toFixed(0) + '°C' : '-');
-  if (i.model) b += kv('model', i.model);
-  return panel('cpu', null, b, true);
+  const cores = S.cores || [];
+  // The total bar is labelled CPU and spans the box, exactly as draw() writes
+  // it — "total" is a word the panel never uses here.
+  let b = bar('CPU', S.cpu || 0, pc(S.cpu));
+  // Per core: short meter, because eight of them stacked at full width is a
+  // wall. The panel gives these six cells beside a mini history.
+  cores.forEach((c, n) => {
+    b += `<div class="r core"><span class="lb">C${n}</span>`
+       + meter((c || 0) / 100, MOBILE ? 6 : 8)
+       + `<span class="v">${pc(c)}</span></div>`;
+  });
+  // ONE line, the panel's abbreviations, the panel's order. usr sys io irq
+  // nice steal — steal last because it is the one that means the machine is
+  // not yours, and it reads as the punchline of the row.
+  b += kv('usr', pc(num(d,'user')), 'sys', pc(num(d,'system')), 'io', pc(num(d,'iowait')),
+          'irq', pc(num(d,'irq')), 'nice', pc(num(d,'nice')), 'steal', pc(num(d,'steal')));
+  b += kv('load', [S.load1, S.load5, S.load15].map(x => (x || 0).toFixed(2)).join(' '),
+          '', `${cores.length} cores`);
+  if (num(h,'procs_running') || num(h,'procs_blocked'))
+    b += kv('run/blk', `${num(h,'procs_running')} / ${num(h,'procs_blocked')}`,
+            'clock', num(i,'mhz') ? `${Math.round(num(i,'mhz'))} / ${Math.round(num(h,'max_mhz'))} MHz` : '-',
+            'temp', num(i,'temp_c') ? num(i,'temp_c').toFixed(0) + '°C' : '-');
+  // The model belongs in the frame, the way bbox() puts it there — it names
+  // the box rather than being another row of data inside it.
+  const ghz = num(i,'mhz') ? `  ${(num(h,'max_mhz') / 1000 || num(i,'mhz') / 1000).toFixed(2)}GHz` : '';
+  return panel(`cpu  ${i.model || ''}${ghz}`.trim(), null, b, true);
 }
 
 function boxMem(): string {
@@ -154,7 +174,6 @@ function boxMem(): string {
   // The slice's own cap is what decides who gets OOM-killed here; RAM% can
   // look calm while the slice is at its limit.
   if (num(S, 'slice_max_gib') > 0) {
-    b += head('SESSION SLICE');
     b += bar('slice', S.slice_pct || 0,
              `${mibG(num(S,'slice_gib'))} / ${mibG(num(S,'slice_max_gib'))}`);
   }
@@ -174,15 +193,15 @@ function boxMem(): string {
 function boxStorage(): string {
   let b = '';
   (S.disks || []).forEach((d: Dict) => {
-    b += bar(d.mount, num(d,'pct'), `${gb(num(d,'used_gib'))} / ${gb(num(d,'total_gib'))}`);
+    b += bar(d.mount, num(d,'pct'), `${gb(num(d,'used_gib'))}/${gb(num(d,'total_gib'))}`);
   });
   (S.storage || []).forEach((s: Dict) => {
     b += head(s.label || 'pool');
     const dt = num(s,'data_total'), mt = num(s,'meta_total');
     if (dt) b += bar('data', num(s,'data_used') / dt * 100,
-                     `${gb(num(s,'data_used') / GIB)} / ${gb(dt / GIB)}`);
+                     `${gb(num(s,'data_used') / GIB)}/${gb(dt / GIB)}`);
     if (mt) b += bar('meta', num(s,'meta_used') / mt * 100,
-                     `${gb(num(s,'meta_used') / GIB)} / ${gb(mt / GIB)}`);
+                     `${gb(num(s,'meta_used') / GIB)}/${gb(mt / GIB)}`);
     if (num(s,'dev_size')) b += kv('device', gb(num(s,'dev_size') / GIB));
   });
   b += kv('read', bytes(num(S,'disk_r')) + '/s', 'write', bytes(num(S,'disk_w')) + '/s');
@@ -197,22 +216,44 @@ function boxNet(): string {
   });
   b += kv('gateway', h.gateway || '-');
   if (h.public) b += kv('public', String(h.public));
-  b += head('RATE');
-  b += kv('rx', bytes(num(S,'net_rx')) + '/s', 'tx', bytes(num(S,'net_tx')) + '/s');
+  // ▼ and ▲ with the rate, the way the panel heads its two graphs. The
+  // graphs themselves need a history series a frozen snapshot does not carry.
+  b = `<div class="r"><span class="lb">▼ rx</span><span class="v">${bytes(num(S,'net_rx'))}/s</span></div>`
+    + `<div class="r"><span class="lb">▲ tx</span><span class="v">${bytes(num(S,'net_tx'))}/s</span></div>`
+    + b;
   const t = S.totals || {};
   b += kv('total rx', bytes(num(t,'net_rx_bytes')), 'tx', bytes(num(t,'net_tx_bytes')));
   return panel('net', null, b, true);
 }
 
 function boxPsi(): string {
-  const p = S.psi || {};
-  let b = kv('', 'some10   some60  some300');
+  const p = S.psi || {}, h = S.health || {}, r = S.reclaim || {}, m = S.mem_detail || {};
+  // The panel's own grid: a header of windows, then some/full for each
+  // resource. Three bars threw away the 60s and 300s columns, which are what
+  // separate a spike from a machine that has been stalling for five minutes.
+  let b = '<div class="r hd"><span class="lb"></span>'
+        + '<span class="w">10s</span><span class="w">60s</span><span class="w">300s</span>'
+        + '<span class="nw">now</span></div>';
   (['cpu', 'io', 'memory'] as const).forEach(k => {
     const x = (p as Dict)[k] || {};
-    b += bar(k, num(x,'some10'),
-      [num(x,'some10'), num(x,'some60'), num(x,'some300')]
-        .map(v => v.toFixed(2).padStart(7)).join(' '));
+    (['some', 'full'] as const).forEach(kind => {
+      const v10 = num(x, kind + '10'), v60 = num(x, kind + '60'), v300 = num(x, kind + '300');
+      b += `<div class="r"><span class="lb">${kind === 'some' ? esc(k === 'memory' ? 'mem' : k) : ''} ${kind}</span>`
+         + `<span class="w">${v10.toFixed(2)}</span><span class="w">${v60.toFixed(2)}</span>`
+         + `<span class="w">${v300.toFixed(2)}</span>`
+         + `<span class="nw">${meter(v10 / 100, MOBILE ? 8 : 14)}</span></div>`;
+    });
   });
+  const dash = (v: number) => (v ? String(Math.round(v)) : '—');
+  b += kv('reclaim/s', '', 'direct', dash(num(r,'scan_direct')), 'kswapd', dash(num(r,'scan_kswapd')));
+  b += kv('refault/s', '', 'file', dash(num(r,'refault_file')), 'anon', dash(num(r,'refault_anon')));
+  b += kv('swap/s', '', 'in', dash(num(r,'swap_in')), 'out', dash(num(r,'swap_out')));
+  const cl = num(m,'commit_limit');
+  b += kv('cpu', '', 'steal', pc(num(S.cpu_detail || {},'steal')), 'wait', pc(num(S.cpu_detail || {},'iowait')));
+  b += kv('mem', '', 'commit', cl > 0 ? Math.round(num(m,'committed') / cl * 100) + '%' : '-',
+          'dirty', mibG(num(m,'dirty')));
+  b += kv('io/net', '', 'busy', pc(num(h,'disk_busy_pct')), 'avio', num(h,'disk_avio_ms').toFixed(2) + 'ms',
+          'iops', String(num(h,'disk_iops')));
   return panel('psi', null, b, true);
 }
 
@@ -280,6 +321,16 @@ function boxMesh(): string {
 // panel accumulates while it runs, and drawing a shape from a single sample
 // would be inventing data.
 function overview(): string {
+  // The panel's own screen, drawn headless into a ratatui buffer by the
+  // exporter and transcribed cell by cell. Frames, alignment and colour are
+  // not reproduced here — they arrive already correct, because draw() drew
+  // them. The boxes below are the fallback for an envelope written before the
+  // exporter could do this, or by a build that could not.
+  if (E.tui) return E.tui;
+  return legacyOverview();
+}
+
+function legacyOverview(): string {
   return '<div class="dash">'
     + `<div class="w3">${boxCpu()}</div>`
     + boxMem() + boxStorage() + boxNet()

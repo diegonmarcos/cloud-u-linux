@@ -585,6 +585,26 @@ tr:last-child td {
   background: var(--label);
 }
 
+.tui {
+  margin: 0;
+  padding: 4px 6px;
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.18;
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--fg);
+  background: var(--bg);
+  tab-size: 8;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+[data-view=mobile] .tui {
+  font-size: 8px;
+  padding: 2px;
+}
+
 [data-view=mobile] {
   font-size: 14px;
   -webkit-text-size-adjust: 100%;

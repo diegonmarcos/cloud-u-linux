@@ -43,6 +43,8 @@ use crate::frame::Dashboard;
 mod data;
 mod export;
 mod html;
+// The report's overview: the real dashboard, drawn headless and transcribed.
+mod tui_html;
 mod input;
 mod model;
 mod view;
@@ -273,6 +275,19 @@ pub struct Monitor {
 /// mesh poller — a background thread with ssh behind it. A one-shot has
 /// nothing to wait on and would write an empty peer list, which is worse than
 /// writing no peer list: it looks like the fleet is down.
+/// The overview, as the panel actually draws it.
+///
+/// One update pass before the draw and then a second, because CPU% and the
+/// network rates are deltas between two refreshes: a single pass reads as
+/// zero for every rate on the page, which looks like an idle machine rather
+/// than an unmeasured one.
+pub(crate) fn overview_html() -> Result<String, String> {
+    let mut m = Monitor::new();
+    m.update();
+    m.update();
+    tui_html::render(&mut m)
+}
+
 pub(crate) fn export_headless() -> Result<String, String> {
     let p = snapshot_path();
     let s = read_json(&p);

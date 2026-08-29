@@ -331,6 +331,28 @@ tr {
 }
 
 
+// ── the transcribed terminal ───────────────────────────────────────────────
+// A grid of cells, so it gets grid rules: no wrapping, no reflow, and its own
+// horizontal scroll. Reflowing a terminal transcript breaks every column in
+// it at once, which is the whole failure this replaced.
+.tui {
+  margin: 0;
+  padding: 4px 6px;
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.18;   // the panel's rows are one cell tall; leading is space between boxes that should not be there
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--fg);
+  background: var(--bg);
+  tab-size: 8;
+  // The frames are box-drawing glyphs; sub-pixel hinting makes them fail to
+  // meet at the corners, which reads as a broken border rather than a font.
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+[data-view="mobile"] .tui { font-size: 8px; padding: 2px; }
+
 // ── the mobile page ────────────────────────────────────────────────────────
 // index-mobile.html is the same document with data-view="mobile" on <body>,
 // not a second codebase: same envelope, same renderer, same palette. Only the

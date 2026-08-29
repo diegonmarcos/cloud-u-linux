@@ -615,6 +615,10 @@ pub(crate) fn export_snapshot(
     // Named apart from `machines` above, which is the pages being written and
     // is a different thing entirely — that collision is what hid this bug.
     let fleet = Value::Array(fleet_machines());
+    // Rendered once, not per page. A failure here is not a failed export: the
+    // page falls back to the boxes it builds itself, and says nothing rather
+    // than showing half a screen.
+    let tui = crate::dashboards::monitor::overview_html().ok();
 
     for (label, file, snap, from) in &machines {
         let local = file.as_str() == "index.html";
@@ -633,6 +637,14 @@ pub(crate) fn export_snapshot(
         // what the HTML embeds — putting the fleet only there meant MACHINE
         // rendered empty on every page while the json beside it was correct.
         env.insert("machines".into(), fleet.clone());
+        // Only the local page: this is a transcript of THIS panel drawing
+        // THIS machine, and a peer's page carrying it would be showing the
+        // hub's screen under the peer's name.
+        if local {
+            if let Some(t) = tui.as_deref() {
+                env.insert("tui".into(), serde_json::json!(t));
+            }
+        }
         env.insert("exported".into(), serde_json::json!(stamp));
         env.insert(
             "measured".into(),
