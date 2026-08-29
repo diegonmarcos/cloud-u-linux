@@ -2016,6 +2016,10 @@ impl Monitor {
         let sub = self.sub[self.tab];
         self.tree = name == "proc" && sub == 1;
         self.zombies = name == "proc" && sub == 2;
+        // Derived, not toggled. It used to be a sticky flag the x menu set and
+        // nothing ever cleared, so once it was on, "1 normal" showed the
+        // filtered list and there was no way back to the flat one from here.
+        self.orphans = name == "proc" && sub == 3;
         // Sub indices, not names, because the strip's ORDER is the product
         // decision here — compose first, then what it produced.
         self.compose = name == "containers" && sub == 0;
@@ -2178,31 +2182,16 @@ impl Monitor {
 
     fn optimize_key(&mut self, k: KeyCode) {
         let run = |me: &mut Self, i: usize| {
-            match OPTIMIZE[i].0 {
-                // Not an action at all — a filter on the process list, applied
-                // here rather than queued anywhere.
-                "ORPHANS" => {
-                    me.orphans = !me.orphans;
-                    me.msg = Some((
-                        if me.orphans {
-                            "showing orphans only — reparented to init, under no unit. k to act."
-                                .into()
-                        } else {
-                            "showing every process again".to_string()
-                        },
-                        false,
-                    ));
-                }
-                // pid 0: these are addressed to the machine, not a process, and
-                // the daemon answers them before its per-pid guards. The whole
-                // verb rides the mailbox line — "RECLAIM full", "OPTIMIZE
-                // nix-gc" — so the daemon still decides what each one may do.
-                //
-                // A catch-all rather than a list: an entry added to OPTIMIZE
-                // and forgotten here used to fall through to the orphan filter,
-                // which looks like the key doing nothing.
-                v => me.request_kill(0, v),
-            }
+            // pid 0: every one of these is addressed to the machine rather
+            // than to a process, and the daemon answers them before its
+            // per-pid guards. The whole verb rides the mailbox line —
+            // "RECLAIM full", "OPTIMIZE nix-gc" — so the daemon still decides
+            // what each one is allowed to do.
+            //
+            // No match on the name: this table is actions and only actions
+            // now, so a row added to OPTIMIZE and forgotten here is impossible
+            // rather than silently inert.
+            me.request_kill(0, OPTIMIZE[i].0);
             me.overlay = Overlay::None;
         };
         match k {
@@ -2821,14 +2810,19 @@ impl Monitor {
 
     /// Nothing is looking after this one: it is either already dead and
     /// uncollected, or its parent died and init inherited it.
-    fn is_lost(p: &Value) -> bool {
-        text(p, "state").starts_with('Z') || Self::is_orphan(p)
+    /// A zombie has exited and is waiting to be collected; an orphan is alive
+    /// and has been handed to init. One filter answered both, so "zombies"
+    /// listed orphans too and the two views could never have differed.
+    fn is_zombie(p: &Value) -> bool {
+        text(p, "state").starts_with('Z')
     }
 
     fn rows(&self) -> Vec<&Value> {
         let procs = sort_procs(&self.snap, self.sort, self.desc, self.win);
-        let procs: Vec<&Value> = if self.orphans || self.zombies {
-            procs.into_iter().filter(|p| Self::is_lost(p)).collect()
+        let procs: Vec<&Value> = if self.zombies {
+            procs.into_iter().filter(|p| Self::is_zombie(p)).collect()
+        } else if self.orphans {
+            procs.into_iter().filter(|p| Self::is_orphan(p)).collect()
         } else {
             procs
         };
@@ -5952,8 +5946,10 @@ impl Dashboard for Monitor {
         // Sorted against the local clone `s`, so self stays free to mutate for
         // the scroll bookkeeping just below.
         let sorted = sort_procs(&s, self.sort, self.desc, self.win);
-        let sorted: Vec<&Value> = if self.orphans || self.zombies {
-            sorted.into_iter().filter(|p| Self::is_lost(p)).collect()
+        let sorted: Vec<&Value> = if self.zombies {
+            sorted.into_iter().filter(|p| Self::is_zombie(p)).collect()
+        } else if self.orphans {
+            sorted.into_iter().filter(|p| Self::is_orphan(p)).collect()
         } else {
             sorted
         };
@@ -5978,7 +5974,7 @@ impl Dashboard for Monitor {
             if self.desc { "▼" } else { "▲" },
             self.win.label(),
             if self.tree { "tree · " } else { "" },
-            if self.orphans { "ORPHANS ONLY · " } else { "" },
+            if self.orphans { "PARENTLESS ONLY · " } else { "" },
         );
         let proc_b = self.tabs_box(&hint);
         let proc_in = proc_b.inner(rows[4]);
@@ -6560,7 +6556,18 @@ mod tests {
         m.on_key(KeyCode::Char('3'));
         assert!(m.zombies && !m.tree, "3 is the third");
 
+        m.on_key(KeyCode::Char('4'));
+        assert!(m.orphans && !m.zombies, "4 is parentless, and it is not zombies");
+
+        // The bug this pair of flags was rewritten for: orphans used to be a
+        // toggle the x menu set and nothing cleared, so there was no way back
+        // to the flat list once it was on. Both are derived from the sub-tab
+        // now, which is the only reason 1 can undo 4.
+        m.on_key(KeyCode::Char('1'));
+        assert!(!m.orphans && !m.zombies && !m.tree, "1 is the flat list, from any of them");
+
         // Out of range reports it rather than landing somewhere arbitrary.
+        m.on_key(KeyCode::Char('3'));
         m.on_key(KeyCode::Char('9'));
         assert!(m.zombies, "9 is not a proc sub-tab, so nothing moves");
 

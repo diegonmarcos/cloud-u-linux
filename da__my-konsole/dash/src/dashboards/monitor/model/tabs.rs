@@ -45,7 +45,12 @@ pub(crate) const TABS: &[Tab] = &[
         subs: &[
             Sub { name: "normal", key: Some('p'), desc: "the flat list", net: None },
             Sub { name: "tree", key: Some('t'), desc: "parents and children, indented", net: None },
-            Sub { name: "zombies", key: Some('z'), desc: "only the ones nothing owns", net: None },
+            Sub { name: "zombies", key: Some('z'), desc: "exited, waiting on a parent that never reaped them", net: None },
+            // No key of its own: 'o' already opens a folder in the detail view,
+            // and a letter that switches sub-tab in one place and opens a
+            // directory in another is exactly the ambiguity these tables exist
+            // to prevent. Reachable as 4, by tab, and as :parentless.
+            Sub { name: "parentless", key: None, desc: "reparented to init — whatever started them is gone", net: None },
         ],
     },
     Tab {

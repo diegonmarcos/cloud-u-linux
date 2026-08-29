@@ -39,8 +39,13 @@ pub(crate) const ACTIONS: [(&str, &str); 8] = [
 /// trim. What IS this user's — their session's pages, their cache directory,
 /// their journal, their docker, the nix store's garbage — is all of it.
 ///
-/// Exactly nine, because the picker dispatches on the digits 1-9.
-pub(crate) const OPTIMIZE: [(&str, &str, &str); 9] = [
+/// Every one of these DOES something. Listing lost processes was in here and
+/// is not an action at all — it is a way of looking at the process table, so
+/// it moved to where the other ways of looking at it live: proc's own
+/// sub-tabs, beside normal, tree and zombies.
+///
+/// At most nine, because the picker dispatches on the digits 1-9.
+pub(crate) const OPTIMIZE: [(&str, &str, &str); 8] = [
     (
         "REAP",
         "reap zombies",
@@ -80,11 +85,6 @@ pub(crate) const OPTIMIZE: [(&str, &str, &str); 9] = [
         "OPTIMIZE nix-optimise",
         "dedup the nix store",
         "hardlink identical store files — slow, frees a lot, changes nothing",
-    ),
-    (
-        "ORPHANS",
-        "list lost processes",
-        "filter to processes reparented to init — look first, then k them",
     ),
 ];
 
@@ -146,7 +146,7 @@ pub(crate) const OTHER_KEYS: &[(&str, &str, &str)] = &[
     // skips this section for that reason.
     ("modal", "o", "in the detail view: open the binary's folder"),
     ("modal", ".", "in the files tab: show or hide dotfiles"),
-    ("acting", "x", "system optimization — memory, cache, journal, docker, nix"),
+    ("acting", "x", "system optimization — reclaim, cache, journal, docker, nix"),
     ("acting", "E", "export THIS machine — {host}-{user}-{time}.json, .yaml, .md"),
     ("acting", "A", "export all — the same, with every fleet peer folded in"),
     ("moving", "1-9", "jump to a sub-tab by the number the strip shows"),
@@ -189,7 +189,7 @@ pub(crate) const CMD_HELP: &[(&str, &str)] = &[
 pub(crate) const MENU: [(&str, &str); 5] = [
     ("measure", "this machine, or any mesh peer over ssh"),
     ("options", "sorting, averaging window, which boxes are shown"),
-    ("optimize", "system optimization — memory, cache, journal, docker, nix"),
+    ("optimize", "system optimization — reclaim, cache, journal, docker, nix"),
     ("help", "every key this dashboard binds"),
     ("quit", "leave the dashboard"),
 ];
