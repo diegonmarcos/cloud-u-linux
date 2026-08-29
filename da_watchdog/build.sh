@@ -134,9 +134,15 @@ case "${1:-fetch}" in
       # took the whole deploy down after the first host.
       ssh -o BatchMode=yes "$h" bash -s <<EOF
         systemctl --user stop my-watchdog 2>/dev/null || true
-        pkill -x $BIN 2>/dev/null || true
-        sleep 1
-        pkill -9 -x $BIN 2>/dev/null || true
+        # Kill by pid found with ps, not `pkill -x`. Not every box in this
+        # fleet ships full procps — oci-apps rejects `ps -o uid` and ignores
+        # pkill's -x — so the pattern matched nothing, `|| true` swallowed it,
+        # and the old daemon kept running from its now-unlinked inode beside
+        # the new one. Two samplers, one snapshot path, racing.
+        pids() { ps -eo pid,comm= 2>/dev/null | awk -v b="$BIN" '\''\$2==b{print \$1}'\''; }
+        for q in \$(pids); do kill -TERM "\$q" 2>/dev/null || true; done
+        sleep 2
+        for q in \$(pids); do kill -KILL "\$q" 2>/dev/null || true; done
         systemctl --user start my-watchdog 2>/dev/null || true
         # Counted with ps, not `pgrep -c`: that flag is not everywhere, and on
         # the box that lacks it pgrep prints its usage and exits 1, which this
