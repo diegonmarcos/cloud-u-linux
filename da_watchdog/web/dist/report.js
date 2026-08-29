@@ -253,7 +253,7 @@
   }
   function overview() {
     const t = MOBILE ? E.tui_narrow || E.tui : E.tui;
-    if (t) return t;
+    if (t) return `<div class="tui-wrap">${t}</div>`;
     return legacyOverview();
   }
   function legacyOverview() {

@@ -206,10 +206,18 @@ a { color: var(--fg); text-decoration: none; }
 
 // ── content ────────────────────────────────────────────────────────────────
 .content { padding: 52px 16px 40px; }
-@media (min-width: $drawer) {
-  .ham, .scrim, .x { display: none; }
-  .sidebar { transform: none; }
-  .content { margin-left: var(--w); padding-top: 18px; }
+// Scoped to the DESKTOP page only. index-mobile.html is mobile by
+// declaration, not by measurement, and this block used to govern it too: on
+// any screen over 1000px the phone page hid its own hamburger and pinned the
+// tree open, which is the opposite of a mobile design and is exactly what
+// "the hamburger is missing" was. A page that has already decided what it is
+// must not have that decided again by the width of the window showing it.
+:root:not([data-view="mobile"]) {
+  @media (min-width: $drawer) {
+    .ham, .scrim, .x { display: none; }
+    .sidebar { transform: none; }
+    .content { margin-left: var(--w); padding-top: 18px; }
+  }
 }
 
 // draw::bbox — rounded frame, title bracketed into the top edge, the count
@@ -395,13 +403,23 @@ tr {
 
   // The tree is a full-screen sheet reached from the bottom, where a thumb
   // is, rather than a drawer pinned to a corner it cannot reach.
+  // Top left, where a hamburger goes. I had moved it to the bottom centre for
+  // thumb reach; that was a preference invented on your behalf, and it made
+  // the control unrecognisable as the menu it is.
   .ham {
-    top: auto; bottom: 16px; left: 50%; transform: translateX(-50%);
-    padding: 12px 22px; font-size: 17px; border-radius: 24px;
-    background: var(--accent); color: var(--bg); border-color: var(--accent);
-    box-shadow: 0 4px 18px rgba(0,0,0,.5);
+    display: block !important;
+    top: 10px; bottom: auto; left: 10px; transform: none;
+    padding: 10px 14px; font-size: 20px; line-height: 1;
+    border-radius: 8px; min-width: 44px; min-height: 44px;
   }
-  .sidebar { width: 100%; border-right: 0; }
+  .scrim, .x { display: revert !important; }
+  // Always a drawer, never pinned — whatever width the window happens to be.
+  .content { margin-left: 0 !important; padding-top: 60px; }
+  .sidebar {
+    width: min(86vw, 320px); border-right: 1px solid var(--dim);
+    transform: translateX(-100%);
+    &.open { transform: none; }
+  }
   .sb-head { padding: 16px 14px 12px; h2 { font-size: 14px; } }
   .x { font-size: 26px; padding: 0 8px; }
   // 44px is the smallest target a thumb hits reliably; the desktop rows are 20.
@@ -433,4 +451,70 @@ tr {
     position: sticky; left: 0; background: var(--bg); z-index: 2;
   }
   th:first-child { z-index: 3; }
+}
+
+
+// ── the shell around the transcript ────────────────────────────────────────
+// The dashboard itself is not styled here and must not be: it arrives as a
+// transcript of what ratatui drew, so its frames, columns and colours are
+// already the panel's. Everything below is the CHROME the terminal has no
+// equivalent of — the page around the screen — and its whole job is to look
+// like it belongs to the same machine and then get out of the way.
+
+// The transcript is a fixed grid. It is centred rather than stretched,
+// because a terminal that grows to fill a 4K monitor is not a bigger
+// terminal, it is the same 200 columns with the frames pulled apart.
+.tui-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 0 0 18px;
+}
+.tui {
+  // The panel draws its own frames, so the container must not add one — a
+  // border here would sit outside bbox()'s border and read as a double frame.
+  border: 0;
+  // A terminal's own inner margin. Without it the outermost box-drawing
+  // characters touch the edge of the page and stop reading as a frame.
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--rule), 0 18px 40px rgba(0, 0, 0, .45);
+  // Selectable as text, because a transcript that cannot be copied into a
+  // bug report is a screenshot with extra steps.
+  user-select: text;
+}
+
+// The header is the panel's own top line, so it is one line: what is being
+// measured, when, and by what. Wrapping it into three rows on a narrow page
+// is how it stops looking like a status line and starts looking like a form.
+.bar {
+  align-items: baseline;
+  h1 { white-space: nowrap; }
+}
+
+// The tree is the only part of this page the panel has no equivalent of, so
+// it is the one place a little chrome is honest rather than decorative: the
+// section it belongs to, the branch it hangs off, and where you are.
+.grp a.on {
+  // A left bar as well as the reverse video: at a glance down a long tree the
+  // eye finds an edge faster than it finds a filled row.
+  box-shadow: inset 3px 0 0 var(--bg), 0 0 14px rgba(120, 200, 255, .35);
+}
+
+// Focus is visible and is the accent, not the browser's blue ring, which is
+// the one colour on this page that belongs to no palette.
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+// Printing a machine report is a real thing people do with one. The phosphor
+// surface, the drawer and the scrim are all screen furniture and none of them
+// should reach paper; the transcript is the document.
+@media print {
+  body::before, body::after { display: none; }
+  .sidebar, .ham, .scrim, .bar .keys { display: none !important; }
+  .content { margin: 0; padding: 0; }
+  .tui { box-shadow: none; padding: 0; }
+  .tui-wrap { padding: 0; }
 }

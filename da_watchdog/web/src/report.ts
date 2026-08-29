@@ -330,7 +330,7 @@ function overview(): string {
   // rather than the 200-column one scaled down — 200 across a 390pt screen is
   // about three pixels a character, which is a texture, not text.
   const t = MOBILE ? (E.tui_narrow || E.tui) : E.tui;
-  if (t) return t;
+  if (t) return `<div class="tui-wrap">${t}</div>`;
   return legacyOverview();
 }
 
