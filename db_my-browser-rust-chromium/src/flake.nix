@@ -11,9 +11,10 @@
       let
         pkgs = import nixpkgs { inherit system; };
 
-        # TODO (phase 2): prebuilt libcef as a fixed-output derivation.
-        # cef-rs' download-cef normally fetches this at build time, which Nix's
-        # sandbox forbids — so we must vendor it as a fixed-output derivation:
+        # TODO (phase 2, devShell only): prebuilt libcef as a fixed-output
+        # derivation, for a `cargo run` local dev loop. packages.default below
+        # does NOT need this — it wraps CI's already-built release tarball
+        # (see src/nix/package.nix), never building CEF/Chromium in Nix.
         #
         #   libcef = pkgs.stdenv.mkDerivation {
         #     pname = "cef-binary"; version = "<CEF_VERSION>";
@@ -40,6 +41,16 @@
           '';
         };
 
-        # packages.default = ... ;  # TODO once libcef + cargo build wired
-      });
+        # THE package — wraps CI's prebuilt release tarball (build.sh
+        # release/gh-release, rolling tag my-browser-rust-chromium-latest).
+        # See src/nix/package.nix for why: no from-source CEF/Chromium build
+        # happens in Nix, CI is the only compiler in this project.
+        packages.default = import ./nix/package.nix { inherit pkgs; };
+        packages.my-browser-rust-chromium = self.packages.${system}.default;
+      }) // {
+        # System-independent home-manager module (same pattern as
+        # db_my-browser-qute/src/flake.nix). Reads src/2_configs/*.json at
+        # evaluation time.
+        homeManagerModules.default = import ./nix/home-module.nix;
+      };
 }
