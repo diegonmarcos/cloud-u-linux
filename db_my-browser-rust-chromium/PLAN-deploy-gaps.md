@@ -1,5 +1,11 @@
 # PLAN — close the gaps and get my-browser-rust-chromium deployed
 
+> **Progress (2026-08-29).** P0, P1 and P4 are done, green in CI (18 input unit
+> tests pass) and published to the rolling release. P2 and P3 remain. Fixed along
+> the way: drag-to-select (held-button bits were never sent to CEF), a launcher
+> that silently dropped URL arguments so `%U`/`defaultBrowser` opened the homepage,
+> and a Nix release URL pointing at a repo that does not exist.
+
 Status at time of writing: the chrome shell (bars, tabs, commands, internal pages)
 is committed and renders. What is missing is everything that needs the **Rust
 side**, plus a declarative install path. This plan closes those.
@@ -9,7 +15,7 @@ one change that removes the biggest ceiling, then deployment.
 
 ---
 
-## P0 — Prove input works (blocks trusting anything else)
+## P0 — Prove input works (blocks trusting anything else) — DONE
 
 Nobody has confirmed mouse/keyboard/scroll reach CEF. The forwarding code was
 written, compiled, and never exercised. Until this is closed every other feature
@@ -31,7 +37,7 @@ windows). So split the problem where it is actually separable:
 That covers both legs without a human in the loop. What it does **not** cover is
 the compositor -> winit leg; that one genuinely needs a person to click once.
 
-## P1 — Rust -> JS state channel (no IPC required)
+## P1 — Rust -> JS state channel (no IPC required) — DONE
 
 The shell needs data that only Rust has (downloads, real page titles, load
 progress). Rather than standing up CEF IPC for this, Rust writes a generated
@@ -75,7 +81,7 @@ Blocked today by a single global `TEXTURE` and `browser: Option<Browser>`
 This is the largest change and it rewrites `main.rs`. It lands **after** P0, so
 there are input tests to catch what it breaks.
 
-## P4 — Declarative deploy (the actual "deployed" part)
+## P4 — Declarative deploy (the actual "deployed" part) — DONE
 
 `build.sh install` is an imperative one-off. The repo's idiom is Nix, and qute
 already shows the shape (`db_my-browser-qute/src/nix/`: `package.nix`,
