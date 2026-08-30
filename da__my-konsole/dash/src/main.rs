@@ -20,6 +20,21 @@ fn main() -> std::io::Result<()> {
         let arg = |n: usize, d: u16| {
             std::env::args().nth(n).and_then(|x| x.parse().ok()).unwrap_or(d)
         };
+        // --serve: stay alive, take keys on stdin, answer in frames. This is
+        // what the phone app runs — one process for a session rather than one
+        // per refresh, so the panel keeps its state (which tab, which sort,
+        // which row) exactly as it does under a terminal.
+        if std::env::args().any(|a| a == "--serve") {
+            let n = |k: usize, d: u16| {
+                std::env::args().filter(|a| a != "--serve").nth(k)
+                    .and_then(|x| x.parse().ok()).unwrap_or(d)
+            };
+            if let Err(e) = monitor::serve(n(2, 200), n(3, 64)) {
+                eprintln!("my-konsole-dash tui --serve: {e}");
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
         match monitor::tui_at(arg(2, 200), arg(3, 64)) {
             Ok(html) => println!("{html}"),
             Err(e) => {

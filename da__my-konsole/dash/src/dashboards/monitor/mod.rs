@@ -281,6 +281,123 @@ pub struct Monitor {
 /// network rates are deltas between two refreshes: a single pass reads as
 /// zero for every rate on the page, which looks like an idle machine rather
 /// than an unmeasured one.
+/// The panel, driven from stdin and answering in frames: `tui --serve`.
+///
+/// WHY THIS EXISTS AND NOT A KEY TABLE IN THE APP
+/// The phone app must have every command the CLI has and look exactly like it.
+/// Both are properties of this program, not of anything that could be written
+/// beside it: the keys are Monitor::on_key, which is the real dispatch table
+/// including the ones added last week, and the screen is the ratatui buffer,
+/// which is the real layout including frames and colour. Re-implementing
+/// either produced a page that diverged from the panel for a week.
+///
+/// So the app sends a key and gets a screen. Nothing in between interprets
+/// what the key means or what the screen should look like.
+///
+/// PROTOCOL — one line in, one frame out, both line-oriented so a pty is not
+/// needed and neither side has to know when the other has finished:
+///     key:<name>        a keystroke: a single character, or enter/esc/tab/
+///                       up/down/left/right/pgup/pgdn/home/end/backspace/
+///                       backtab/space/f1..f12
+///     tick              refresh the data, press nothing (the frame's `a` loop)
+///     size:<cols>x<rows>  the device rotated or unfolded
+///     quit              leave
+/// and after every one of them a frame, terminated by a sentinel line so the
+/// reader knows the screen is complete rather than guessing from a pause.
+pub(crate) fn serve(cols: u16, rows: u16) -> Result<(), String> {
+    use std::io::{BufRead, Write};
+
+    let mut m = Monitor::new();
+    let (mut c, mut r) = (cols.clamp(40, 400), rows.clamp(20, 200));
+    m.update();
+
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    let mut emit = |m: &mut Monitor, c: u16, r: u16, out: &mut dyn Write| -> Result<(), String> {
+        let html = tui_html::render(m, c, r)?;
+        writeln!(out, "{html}").map_err(|e| e.to_string())?;
+        writeln!(out, "{FRAME_END}").map_err(|e| e.to_string())?;
+        out.flush().map_err(|e| e.to_string())
+    };
+    // A frame before the first key: the app has a blank screen until then.
+    emit(&mut m, c, r, &mut out)?;
+
+    for line in std::io::stdin().lock().lines() {
+        let line = line.map_err(|e| e.to_string())?;
+        let line = line.trim();
+        match line.split_once(':') {
+            Some(("key", k)) => {
+                let Some(code) = parse_key(k) else { continue };
+                // The frame's own precedence, kept in step deliberately: a
+                // dashboard that claims a key gets it, `r` is a refresh the
+                // frame owns, everything else is the dashboard's.
+                if m.claims(code) {
+                    m.on_key(code);
+                } else if code == KeyCode::Char('r') {
+                    m.update();
+                } else {
+                    m.on_key(code);
+                }
+                if m.wants_quit() {
+                    return Ok(());
+                }
+            }
+            Some(("size", wh)) => {
+                if let Some((w, h)) = wh.split_once('x') {
+                    c = w.trim().parse().unwrap_or(c).clamp(40, 400);
+                    r = h.trim().parse().unwrap_or(r).clamp(20, 200);
+                }
+            }
+            _ => match line {
+                "tick" => m.update(),
+                "quit" => return Ok(()),
+                "" => continue,
+                _ => continue,
+            },
+        }
+        emit(&mut m, c, r, &mut out)?;
+    }
+    Ok(())
+}
+
+/// The sentinel that ends a frame. Chosen to be something no transcript can
+/// contain: the buffer only ever holds the characters the panel drew.
+pub(crate) const FRAME_END: &str = "@@WATCHDOG-FRAME-END@@";
+
+/// A key name from the wire into the code the panel expects.
+///
+/// Named rather than raw bytes, because the app sends what the user pressed
+/// and a WebView reports names ("ArrowUp"), not terminal escape sequences.
+/// Unknown names are dropped rather than guessed at — a key that silently
+/// became a different key would be worse than one that did nothing.
+fn parse_key(name: &str) -> Option<KeyCode> {
+    let n = name.trim();
+    let mut ch = n.chars();
+    if let (Some(c), None) = (ch.next(), ch.next()) {
+        return Some(KeyCode::Char(c));
+    }
+    Some(match n.to_ascii_lowercase().as_str() {
+        "enter" => KeyCode::Enter,
+        "esc" | "escape" => KeyCode::Esc,
+        "tab" => KeyCode::Tab,
+        "backtab" | "shift-tab" => KeyCode::BackTab,
+        "backspace" => KeyCode::Backspace,
+        "space" => KeyCode::Char(' '),
+        "up" | "arrowup" => KeyCode::Up,
+        "down" | "arrowdown" => KeyCode::Down,
+        "left" | "arrowleft" => KeyCode::Left,
+        "right" | "arrowright" => KeyCode::Right,
+        "pgup" | "pageup" => KeyCode::PageUp,
+        "pgdn" | "pagedown" => KeyCode::PageDown,
+        "home" => KeyCode::Home,
+        "end" => KeyCode::End,
+        f if f.starts_with('f') && f.len() <= 3 => {
+            KeyCode::F(f[1..].parse::<u8>().ok().filter(|n| (1..=12).contains(n))?)
+        }
+        _ => return None,
+    })
+}
+
 /// One transcript at a caller-chosen grid: `my-konsole-dash tui 104 90`.
 ///
 /// The phone app asks for a grid sized to the DEVICE it is running on rather
