@@ -88,6 +88,33 @@ type CmpRow = (String, String, String, String, String, bool);
 /// and every modal here closes back to None — so Esc is never a way out of the
 /// program, which is the whole point of ^c/^d being the only exit.
 #[derive(Clone, Copy, PartialEq, Debug)]
+/// The two ways to learn about a machine, and they are not interchangeable.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Source {
+    /// my-watchdog on the box itself: everything, every two seconds, and
+    /// nothing at all once the box stops answering.
+    Daemon,
+    /// The provider's API: almost nothing, but it still answers when the
+    /// machine does not — and it is the only one that can start a machine,
+    /// because starting is what you need precisely when nothing is listening.
+    Console,
+}
+
+impl Source {
+    fn label(self) -> &'static str {
+        match self {
+            Source::Daemon => "watchdog-daemon",
+            Source::Console => "vps-console",
+        }
+    }
+    fn why(self) -> &'static str {
+        match self {
+            Source::Daemon => "the sampler on each box — everything, while the box answers",
+            Source::Console => "the provider API — power state only, but it answers when the box does not",
+        }
+    }
+}
+
 enum Overlay {
     None,
     Menu,
@@ -101,6 +128,9 @@ enum Overlay {
     Unit,
     /// One machine's totals, opened from the fleet view.
     Machine,
+    /// Where the fleet's numbers come from, and whether each way of getting
+    /// them is working. Two halves: the choice, and the state of both options.
+    Source,
     /// Everything that can be done TO a machine: the two transports the
     /// declaration carries, and its manageable daemons.
     FleetAct,
@@ -253,6 +283,17 @@ pub struct Monitor {
     detail_pid: Option<i32>,
     /// (name, scope) of the unit the Unit modal is acting on.
     acting_unit: Option<(String, String)>,
+    /// Where fleet data comes from.
+    ///
+    /// The daemon is the default and the better answer whenever it is
+    /// answering: it is a real sample of a running machine, taken locally,
+    /// every two seconds. The console knows only what the provider knows —
+    /// which is the machine's power state and nothing about what it is doing —
+    /// but it keeps knowing it when the box is off, wedged, or unreachable,
+    /// which is exactly when the daemon has nothing to say.
+    source: Source,
+    /// Cursor inside the source overlay.
+    source_sel: usize,
     /// `x` → "list lost processes": filter the table down to orphans.
     orphans: bool,
     quit: bool,
@@ -518,6 +559,8 @@ impl Monitor {
             machine: None,
             detail_pid: None,
             acting_unit: None,
+            source: Source::Daemon,
+            source_sel: 0,
             orphans: false,
             quit: false,
             detail_scroll: 0,
@@ -1226,6 +1269,7 @@ impl Monitor {
             Overlay::Optimize => self.render_optimize(f, area),
             Overlay::Unit => self.render_unit(f, area),
             Overlay::Machine => self.render_machine(f, area),
+            Overlay::Source => self.render_source(f, area),
             Overlay::FleetAct => self.render_fleet_act(f, area),
             Overlay::Ctr => self.render_ctr(f, area),
             Overlay::Img => self.render_img(f, area),
@@ -1435,6 +1479,118 @@ impl Monitor {
             }
         }
         out
+    }
+
+    /// Where the numbers come from, and whether either way is working.
+    ///
+    /// The status half exists because "is the daemon publishing" is asked far
+    /// more often than any option on the options screen, and until now the
+    /// only way to answer it was to notice that a figure had stopped moving.
+    fn render_source(&self, f: &mut Frame, area: Rect) {
+        let accent = Color::Rgb(120, 200, 255);
+        let ms = storage::machines_declared();
+        // One row per provider, not per machine: the console is reached the
+        // same way for every machine a provider holds, so its state is a
+        // property of the provider.
+        let mut provs: Vec<String> = vec![];
+        for m in &ms {
+            let p = text(m, "provider");
+            if !p.is_empty() && !provs.contains(&p) {
+                provs.push(p);
+            }
+        }
+        let h = provs.len() as u16 + 12;
+        let inner = Self::modal(f, area, 92, h, "source", accent);
+        let mut l: Vec<Line> = vec![];
+
+        l.push(Line::from(Span::styled(
+            "SOURCE",
+            Style::default().fg(accent).add_modifier(Modifier::BOLD),
+        )));
+        for (i, src) in [Source::Daemon, Source::Console].into_iter().enumerate() {
+            let sel = i == self.source_sel;
+            let on = self.source == src;
+            l.push(Line::from(vec![
+                Span::styled(if sel { "▶ " } else { "  " }, Style::default().fg(accent)),
+                Span::styled(
+                    format!("{} {:<18}", if on { "●" } else { "○" }, src.label()),
+                    if on {
+                        Style::default().fg(accent).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(Color::Gray)
+                    },
+                ),
+                Span::styled(src.why().to_string(), Style::default().fg(LABEL)),
+            ]));
+        }
+
+        l.push(Line::from(""));
+        l.push(Line::from(Span::styled(
+            "STATUS",
+            Style::default().fg(accent).add_modifier(Modifier::BOLD),
+        )));
+
+        // The daemon, judged by the only thing that matters about it: how old
+        // the last sample is. A daemon that is running and not publishing is
+        // the failure this row exists to make visible.
+        let age = now_secs() - num(&self.snap, "ts");
+        let (dot, dc, why) = if self.snap.is_null() {
+            ("●", Color::Rgb(240, 72, 72), "no snapshot — is my-watchdog running?".to_string())
+        } else if age > 30.0 {
+            ("●", Color::Rgb(240, 160, 90), format!("{age:.0}s old — running but not publishing"))
+        } else {
+            ("●", Color::Rgb(120, 220, 140), format!("{age:.0}s ago · {} peers", self.mesh.list().len()))
+        };
+        l.push(Line::from(vec![
+            Span::styled(format!("  {dot} "), Style::default().fg(dc)),
+            Span::styled(format!("{:<18}", "watchdog-daemon"), Style::default().fg(Color::Gray)),
+            Span::styled(why, Style::default().fg(LABEL)),
+        ]));
+
+        for p in &provs {
+            let mine: Vec<&Value> = ms.iter().filter(|m| text(m, "provider") == *p).collect();
+            // Declared verbs, not a probe. Asking a provider API whether it is
+            // reachable costs a network round trip per open of this screen,
+            // and the answer people actually need first is whether this fleet
+            // knows how to talk to it at all — vast.ai carries no console
+            // verbs, and no amount of network will change that.
+            let with = mine.iter().filter(|m| !text(m, "actions.console.start").is_empty()).count();
+            let (dot, dc, why) = if with == 0 {
+                ("○", DIM, format!("{} machines · no console verbs declared", mine.len()))
+            } else if with < mine.len() {
+                ("●", Color::Rgb(240, 160, 90), format!("{with}/{} machines have console verbs", mine.len()))
+            } else {
+                ("●", Color::Rgb(120, 220, 140), format!("{} machines · start/stop/restart/reset", mine.len()))
+            };
+            l.push(Line::from(vec![
+                Span::styled(format!("  {dot} "), Style::default().fg(dc)),
+                Span::styled(format!("{p:<18}"), Style::default().fg(Color::Gray)),
+                Span::styled(why, Style::default().fg(LABEL)),
+            ]));
+        }
+
+        l.push(Line::from(""));
+        l.push(Line::from(Span::styled(
+            "  ↑↓ pick · enter selects · the console never replaces a live daemon, it answers when one is gone",
+            Style::default().fg(DIM),
+        )));
+        f.render_widget(Paragraph::new(l), inner);
+    }
+
+    fn source_key(&mut self, k: KeyCode) {
+        match k {
+            KeyCode::Down => self.source_sel = (self.source_sel + 1) % 2,
+            KeyCode::Up => self.source_sel = (self.source_sel + 1) % 2,
+            KeyCode::Enter | KeyCode::Char(' ') => {
+                self.source = if self.source_sel == 0 { Source::Daemon } else { Source::Console };
+                self.msg = Some((
+                    format!("fleet data from {}", self.source.label()),
+                    false,
+                ));
+                self.overlay = Overlay::None;
+            }
+            _ => self.overlay = Overlay::None,
+        }
     }
 
     fn render_fleet_act(&self, f: &mut Frame, area: Rect) {
@@ -3260,6 +3416,7 @@ impl Dashboard for Monitor {
         match self.overlay {
             Overlay::Kill => return self.kill_key(k),
             Overlay::Optimize => return self.optimize_key(k),
+            Overlay::Source => return self.source_key(k),
             Overlay::FleetAct => return self.fleet_act_key(k),
             Overlay::Ctr => return self.ctr_img_key(k, true),
             Overlay::Img => return self.ctr_img_key(k, false),

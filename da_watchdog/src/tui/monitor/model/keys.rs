@@ -186,7 +186,7 @@ pub(crate) const CMD_HELP: &[(&str, &str)] = &[
 ///
 /// "quit" stays last on purpose — it is the way out, and a test walks to the
 /// bottom of this list and asserts it lands there.
-pub(crate) const MENU: [(&str, &str); 6] = [
+pub(crate) const MENU: [(&str, &str); 7] = [
     ("measure", "this machine, or any mesh peer over ssh"),
     ("options", "sorting, averaging window, which boxes are shown"),
     ("optimize", "system optimization — reclaim, cache, journal, docker, nix"),
@@ -194,6 +194,12 @@ pub(crate) const MENU: [(&str, &str); 6] = [
     // the only one that answers a question about the MACHINE rather than about
     // what it is doing this second. `b` reaches it too; the menu exists for
     // the people who have not learned `b`.
+    // Where the fleet's numbers come from, and whether each way of getting
+    // them is actually working. Its own entry rather than a corner of
+    // "options", because a reading is only as good as its source and the
+    // question "is the daemon even publishing" is asked far more often than
+    // any option on that screen.
+    ("source", "where fleet data comes from — daemon or vps console — and its status"),
     ("about", "what this machine is — os, kernel, hardware, addresses"),
     ("help", "every key this dashboard binds"),
     ("quit", "leave the dashboard"),
