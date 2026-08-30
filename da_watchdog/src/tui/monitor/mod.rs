@@ -27,7 +27,7 @@ use std::fs;
 use std::io::Write as _;
 
 use crossterm::event::KeyCode;
-use ratatui::layout::{Alignment, Constraint, Layout, Rect};
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Cell, Clear, Paragraph, Row, Table};
@@ -54,8 +54,8 @@ mod view;
 use data::parse::{age_secs, ctr_mem, ctr_num};
 use data::sort::{avg_or, num_opt, sort_procs, tree_order, Sort, Win, SORT_ORDER};
 use data::storage;
-use data::tree::{file_tree, TreeCache};
-use data::{arr, flag, kill_path, now_secs, num, read_json, snapshot_path, text, HIST};
+use data::tree::TreeCache;
+use data::{arr, flag, kill_path, now_secs, num, read_json, snapshot_path, text};
 use export::{exe_dir, export_snapshot, open_dir, proc_comm};
 use input::cmd;
 use model::columns::{
@@ -66,7 +66,7 @@ use model::keys::{
     ACTIONS, BOX_NAMES, B_MESH, B_NET, B_PSI, B_SLICES, B_STORAGE, CMD_HELP, FRAME_RESERVED, MENU,
     OPTIMIZE, OTHER_KEYS, SORT_KEYS,
 };
-use model::tabs::{Sub, Tab, TABS};
+use model::tabs::TABS;
 use view::draw::{bbox, braille_graph, grad, meter, tabbox, DIM, GRAPH_FLOOR, LABEL};
 use view::fmt::{
     fmt_bps, fmt_bytes_short, fmt_g, fmt_gib, fmt_mem_cell, fmt_mib, fmt_mib_g, fmt_mib_pair_g,

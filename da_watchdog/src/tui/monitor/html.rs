@@ -221,8 +221,8 @@ pub(crate) fn page(
     //
     // include_str! rather than a runtime read: the report has to render from a
     // single binary on a machine that has never seen this repo.
-    const CSS: &str = include_str!("../../../../../da_watchdog/web/dist/report.css");
-    const JS: &str = include_str!("../../../../../da_watchdog/web/dist/report.js");
+    const CSS: &str = include_str!("../../../web/dist/report.css");
+    const JS: &str = include_str!("../../../web/dist/report.js");
 
     // A template with sentinels rather than format!: the page is mostly CSS
     // and JavaScript, both of which are made of braces, and `format!` would
