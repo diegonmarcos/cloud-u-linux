@@ -1486,6 +1486,128 @@ impl Monitor {
     /// The status half exists because "is the daemon publishing" is asked far
     /// more often than any option on the options screen, and until now the
     /// only way to answer it was to notice that a figure had stopped moving.
+    /// The activity strip: what this machine is DOING that costs it, and what
+    /// it has complained about.
+    ///
+    /// Two halves because they answer two different questions and are read at
+    /// different speeds. The left is NOW — is something thrashing this box
+    /// right this second — and is a row of lights, because "is it happening"
+    /// is a yes/no the eye should answer without reading a number. The right
+    /// is the last 24 hours in numbers, because "how bad" needs a magnitude.
+    ///
+    /// Nothing here costs a syscall. The lights are read out of proc_table and
+    /// the reclaim counters the sampler already publishes, and the counts come
+    /// from the logs cache, which fetches all seven sections in ONE round trip
+    /// for the logs page anyway.
+    fn logs_card(&self, s: &Value, width: u16) -> Vec<Line<'static>> {
+        let procs = arr(s, "proc_table");
+        // A process is "running" if it is in the table at all: the table is
+        // top-N by CPU, so anything doing real work is in it, and something
+        // idle enough to be missing is not thrashing anything.
+        let any = |names: &[&str]| -> bool {
+            procs.iter().any(|p| {
+                let n = text(p, "name");
+                names.iter().any(|w| n == *w || n.starts_with(w))
+            })
+        };
+        let count = |names: &[&str]| -> usize {
+            procs
+                .iter()
+                .filter(|p| {
+                    let n = text(p, "name");
+                    names.iter().any(|w| n == *w || n.starts_with(w))
+                })
+                .count()
+        };
+
+        // Swapping is a RATE, not a state: a machine with used swap is not
+        // swapping, it swapped once and moved on. Pages moving right now is
+        // the thing that makes a box feel broken.
+        let swapping = num(s, "reclaim.swap_in") + num(s, "reclaim.swap_out") > 0.0;
+        let nix = any(&["nixos-rebuild", "nix-build", "nix-daemon", "nix-env", "switch-to-conf"]);
+        let compose = any(&["docker-compose", "compose", "containerd-shim"]);
+        // Every toolchain that shows up on these machines. A build is the one
+        // kind of load that is EXPECTED to hurt, so seeing it is the
+        // difference between "something is wrong" and "you are compiling".
+        let building = any(&[
+            "cargo", "rustc", "cc1", "cc1plus", "gcc", "g++", "clang", "ld", "make",
+            "node", "npm", "tsc", "esbuild", "javac", "gradle", "java",
+        ]);
+        let ssh_in = count(&["sshd"]);
+
+        let light = |on: bool, label: &str| -> Vec<Span<'static>> {
+            vec![
+                Span::styled(
+                    if on { " ● " } else { " ● " },
+                    Style::default()
+                        .fg(if on { Color::Rgb(240, 72, 72) } else { Color::Rgb(64, 200, 120) }),
+                ),
+                Span::styled(
+                    label.to_string(),
+                    Style::default().fg(if on { Color::White } else { LABEL }),
+                ),
+            ]
+        };
+
+        let mut top = vec![Span::styled("  ", Style::default())];
+        for (on, l) in [
+            (swapping, "swapping"),
+            (nix, "nix switch"),
+            (compose, "compose"),
+            (building, "building"),
+        ] {
+            top.extend(light(on, l));
+            top.push(Span::styled("  ", Style::default()));
+        }
+        top.push(Span::styled(
+            format!("ssh in {ssh_in}"),
+            Style::default().fg(if ssh_in > 0 { Color::Rgb(120, 200, 255) } else { LABEL }),
+        ));
+
+        let mut out = vec![Line::from(top)];
+
+        // The counts, in the order the logs tab lists its sections, so the two
+        // screens can be read against each other without translating.
+        let key = format!("{}|counts", self.machine.clone().unwrap_or_default());
+        let counts = self.logs_cache.counts(&key);
+        let mut row = vec![Span::styled(
+            "  alerts 24h  ",
+            Style::default().fg(DIM),
+        )];
+        match counts {
+            None => row.push(Span::styled(
+                "…",
+                Style::default().fg(DIM),
+            )),
+            Some(cs) => {
+                for (i, (name, n)) in cs.iter().enumerate() {
+                    if i > 0 {
+                        // The separator the eye uses to stop counting and start
+                        // reading the next label.
+                        row.push(Span::styled(" │ ", Style::default().fg(DIM)));
+                    }
+                    row.push(Span::styled(
+                        format!("{name} "),
+                        Style::default().fg(LABEL),
+                    ));
+                    // Coloured by how loud it is rather than by a threshold
+                    // somebody picked: grad() is the same ramp every meter on
+                    // this page uses, so a red number here means what red
+                    // means everywhere else.
+                    row.push(Span::styled(
+                        n.to_string(),
+                        Style::default()
+                            .fg(if *n == 0 { DIM } else { grad((*n as f64 / 50.0).min(1.0)) })
+                            .add_modifier(if *n > 0 { Modifier::BOLD } else { Modifier::empty() }),
+                    ));
+                }
+            }
+        }
+        let _ = width;
+        out.push(Line::from(row));
+        out
+    }
+
     fn render_source(&self, f: &mut Frame, area: Rect) {
         let accent = Color::Rgb(120, 200, 255);
         let ms = storage::machines_declared();
@@ -3892,6 +4014,11 @@ impl Dashboard for Monitor {
         let rows = Layout::vertical([
             Constraint::Length(1),     // header
             Constraint::Length(11),    // cpu
+            // The activity strip. Four rows: border, lights, alerts, border —
+            // counted, not guessed, because every previous height in this
+            // layout was exactly full and each new line silently clipped the
+            // one under it instead of appearing.
+            Constraint::Length(4),     // logs
             Constraint::Length(13),    // mem | storage | net
             Constraint::Length(low_h), // psi | slices
             Constraint::Min(6),        // procs
@@ -4099,6 +4226,23 @@ impl Dashboard for Monitor {
             f.render_widget(Paragraph::new(lines), *ca);
         }
 
+        // ── activity + alerts ─────────────────────────────────────────────────
+        // Under cpu because it answers the question cpu raises: the bar says
+        // this box is busy, and this says whether that is a build, a rebuild,
+        // a swap storm, or something that has been complaining for a day.
+        {
+            let lb = bbox("logs", "L for the journals themselves");
+            let lin = lb.inner(rows[2]);
+            f.render_widget(lb, rows[2]);
+            // The counts come from the logs page's own cache and its one round
+            // trip. Asked for HERE too, so the strip fills in on the overview
+            // without anyone opening the logs tab first — the whole point of
+            // it being on the overview.
+            let key = format!("{}|counts", self.machine.clone().unwrap_or_default());
+            self.logs_cache.fetch_counts(key, self.mesh.target().as_deref());
+            f.render_widget(Paragraph::new(self.logs_card(&s, lin.width)), lin);
+        }
+
         // ── mem | storage | net ───────────────────────────────────────────────
         let mid = Layout::horizontal(if self.show[B_STORAGE] {
             // mem took 4 points off net when every memory cell grew to
@@ -4109,7 +4253,7 @@ impl Dashboard for Monitor {
         } else {
             vec![Constraint::Percentage(48), Constraint::Percentage(52)]
         })
-        .split(rows[2]);
+        .split(rows[3]);
 
         // memory — RAM and swap kept apart on purpose. They are two different
         // stores, and a page can be in BOTH at once (SwapCached), so a single
@@ -4403,7 +4547,7 @@ impl Dashboard for Monitor {
                 })
                 .collect::<Vec<_>>()
         })
-        .split(rows[3]);
+        .split(rows[4]);
         let slot = |b: usize| low_boxes.iter().position(|x| *x == b).unwrap_or(0);
         if self.show[B_PSI] {
             let psi_area = low[slot(B_PSI)];
@@ -4687,8 +4831,8 @@ impl Dashboard for Monitor {
                     if self.files_hidden { "shown" } else { "hidden" }
                 ),
             );
-            let fin = fb.inner(rows[4]);
-            f.render_widget(fb, rows[4]);
+            let fin = fb.inner(rows[5]);
+            f.render_widget(fb, rows[5]);
             // One pane per depth, side by side. Four nested trees would be
             // four copies of each other — a level is only interesting next to
             // the other levels, which is what the columns are for.
@@ -4730,7 +4874,7 @@ impl Dashboard for Monitor {
                 },
                 Style::default().fg(LABEL),
             ));
-            f.render_widget(Paragraph::new(status), rows[5]);
+            f.render_widget(Paragraph::new(status), rows[6]);
             self.render_overlays(f, area);
             return;
         }
@@ -4741,8 +4885,8 @@ impl Dashboard for Monitor {
         // why it does not belong in a box that redraws every second.
         if self.about {
             let ab = self.tabs_box("b back to processes");
-            let ain = ab.inner(rows[4]);
-            f.render_widget(ab, rows[4]);
+            let ain = ab.inner(rows[5]);
+            f.render_widget(ab, rows[5]);
             let hi2 = |k: &str| text(&s, &format!("host_info.{k}"));
             let sect = |t: &str| -> Line<'static> {
                 Line::from(Span::styled(
@@ -4911,7 +5055,7 @@ impl Dashboard for Monitor {
                 },
                 Style::default().fg(LABEL),
             ));
-            f.render_widget(Paragraph::new(status), rows[5]);
+            f.render_widget(Paragraph::new(status), rows[6]);
             self.render_overlays(f, area);
             return;
         }
@@ -4935,8 +5079,8 @@ impl Dashboard for Monitor {
                 if self.cmp_desc { "▼" } else { "▲" },
                 Self::dockerd_label(&s)
             ));
-            let cin = cb.inner(rows[4]);
-            f.render_widget(cb, rows[4]);
+            let cin = cb.inner(rows[5]);
+            f.render_widget(cb, rows[5]);
 
             // ONE ROW PER SERVICE, not a paragraph per project. The page was
             // three lines for every service — a project header, the config
@@ -5040,7 +5184,7 @@ impl Dashboard for Monitor {
                         Color::Rgb(240, 160, 90)
                     }),
                 ))),
-                rows[5],
+                rows[6],
             );
             self.render_overlays(f, area);
             return;
@@ -5052,8 +5196,8 @@ impl Dashboard for Monitor {
         // shows what is claimed and what is not, and offers no verb at all.
         if self.volumes {
             let vb = self.tabs_box(&format!("docker volumes · {} · d", Self::dockerd_label(&s)));
-            let vin = vb.inner(rows[4]);
-            f.render_widget(vb, rows[4]);
+            let vin = vb.inner(rows[5]);
+            f.render_widget(vb, rows[5]);
             let vols = arr(&s, "volumes");
             let idle = vols.iter().filter(|v| !flag(v, "in_use")).count();
             let mut l: Vec<Line> = vec![Line::from(Span::styled(
@@ -5099,7 +5243,7 @@ impl Dashboard for Monitor {
                     },
                     Style::default().fg(LABEL),
                 ))),
-                rows[5],
+                rows[6],
             );
             self.render_overlays(f, area);
             return;
@@ -5108,8 +5252,8 @@ impl Dashboard for Monitor {
         // ── containers-network ────────────────────────────────────────────────
         if self.networks {
             let nb = self.tabs_box(&format!("docker networks · {} · d", Self::dockerd_label(&s)));
-            let nin = nb.inner(rows[4]);
-            f.render_widget(nb, rows[4]);
+            let nin = nb.inner(rows[5]);
+            f.render_widget(nb, rows[5]);
             let nets = arr(&s, "networks");
             let mut l: Vec<Line> = vec![Line::from(Span::styled(
                 "  NETWORK                        DRIVER     SCOPE      ID",
@@ -5151,7 +5295,7 @@ impl Dashboard for Monitor {
                     },
                     Style::default().fg(LABEL),
                 ))),
-                rows[5],
+                rows[6],
             );
             self.render_overlays(f, area);
             return;
@@ -5166,8 +5310,8 @@ impl Dashboard for Monitor {
                     Self::dockerd_label(&s)
                 ),
             );
-            let cin = cb.inner(rows[4]);
-            f.render_widget(cb, rows[4]);
+            let cin = cb.inner(rows[5]);
+            f.render_widget(cb, rows[5]);
             let cs = self.ctr_rows(&s);
             let _ = &label;
             if cs.is_empty() {
@@ -5324,7 +5468,7 @@ impl Dashboard for Monitor {
                 },
                 Style::default().fg(LABEL),
             ));
-            f.render_widget(Paragraph::new(status), rows[5]);
+            f.render_widget(Paragraph::new(status), rows[6]);
             self.render_overlays(f, area);
             return;
         }
@@ -5343,8 +5487,8 @@ impl Dashboard for Monitor {
                     Self::dockerd_label(&s)
                 ),
             );
-            let iin = ib.inner(rows[4]);
-            f.render_widget(ib, rows[4]);
+            let iin = ib.inner(rows[5]);
+            f.render_widget(ib, rows[5]);
             let imgs = arr(&s, "images");
             if imgs.is_empty() {
                 f.render_widget(
@@ -5432,7 +5576,7 @@ impl Dashboard for Monitor {
                 },
                 Style::default().fg(LABEL),
             ));
-            f.render_widget(Paragraph::new(status), rows[5]);
+            f.render_widget(Paragraph::new(status), rows[6]);
             self.render_overlays(f, area);
             return;
         }
@@ -5448,8 +5592,8 @@ impl Dashboard for Monitor {
             // consolidated tab shows, so neither can be skipped for cost.
             let fsub = self.sub[self.tab];
             let fb = self.tabs_box("W back · ↑↓ scrolls · two firewalls, one screen");
-            let fin = fb.inner(rows[4]);
-            f.render_widget(fb, rows[4]);
+            let fin = fb.inner(rows[5]);
+            f.render_widget(fb, rows[5]);
             let mut l: Vec<Line> = vec![];
             let dec = storage::firewall_declared();
             let host = text(&s, "host_info.host");
@@ -5648,7 +5792,7 @@ impl Dashboard for Monitor {
                 },
                 Style::default().fg(if undecl > 0 { Color::Rgb(240, 160, 90) } else { LABEL }),
             ));
-            f.render_widget(Paragraph::new(status), rows[5]);
+            f.render_widget(Paragraph::new(status), rows[6]);
             self.render_overlays(f, area);
             return;
         }
@@ -5663,8 +5807,8 @@ impl Dashboard for Monitor {
             let tgt = self.mesh.target();
             let key = format!("{}|{sub}", tgt.as_deref().unwrap_or("local"));
             let lb = self.tabs_box("L back · ←→ section · ↑↓ scrolls");
-            let lin = lb.inner(rows[4]);
-            f.render_widget(lb, rows[4]);
+            let lin = lb.inner(rows[5]);
+            f.render_widget(lb, rows[5]);
             let mut l: Vec<Line> = vec![];
             let mut foot = String::new();
             if sub == "summary" {
@@ -5759,7 +5903,7 @@ impl Dashboard for Monitor {
                     },
                     Style::default().fg(LABEL),
                 ))),
-                rows[5],
+                rows[6],
             );
             self.render_overlays(f, area);
             return;
@@ -5771,8 +5915,8 @@ impl Dashboard for Monitor {
         // renders it, so a peer would answer the same way if it kept one.
         if self.history {
             let hb = self.tabs_box("y back to processes");
-            let hin = hb.inner(rows[4]);
-            f.render_widget(hb, rows[4]);
+            let hin = hb.inner(rows[5]);
+            f.render_widget(hb, rows[5]);
             let win = num(&s, "history.window_s");
             let n = num(&s, "history.samples");
             let mut hl: Vec<Line> = vec![];
@@ -5928,7 +6072,7 @@ impl Dashboard for Monitor {
                 },
                 Style::default().fg(LABEL),
             ));
-            f.render_widget(Paragraph::new(status), rows[5]);
+            f.render_widget(Paragraph::new(status), rows[6]);
             self.render_overlays(f, area);
             return;
         }
@@ -5942,8 +6086,8 @@ impl Dashboard for Monitor {
         // it.
         if self.fleet && self.sub_name() == "storage" {
             let sb = self.tabs_box("what this fleet keeps · ↑↓ to move");
-            let sin = sb.inner(rows[4]);
-            f.render_widget(sb, rows[4]);
+            let sin = sb.inner(rows[5]);
+            f.render_widget(sb, rows[5]);
             let units = self.storage_rows();
             let units = &units;
             let colour = |kind: &str| match kind {
@@ -6040,7 +6184,7 @@ impl Dashboard for Monitor {
                     },
                     Style::default().fg(LABEL),
                 ))),
-                rows[5],
+                rows[6],
             );
             self.render_overlays(f, area);
             return;
@@ -6051,8 +6195,8 @@ impl Dashboard for Monitor {
                 "{flabel}{} · ←→ rank · i inv · enter acts on a machine",
                 if self.fleet_desc { "▼" } else { "▲" }
             ));
-            let fin = fb.inner(rows[4]);
-            f.render_widget(fb, rows[4]);
+            let fin = fb.inner(rows[5]);
+            f.render_widget(fb, rows[5]);
             let got = self.mesh.fleet();
             let peers = self.fleet_view(&s);
             let mut frows: Vec<Row> = vec![];
@@ -6302,7 +6446,7 @@ impl Dashboard for Monitor {
                 },
                 Style::default().fg(LABEL),
             ));
-            f.render_widget(Paragraph::new(status), rows[5]);
+            f.render_widget(Paragraph::new(status), rows[6]);
             self.render_overlays(f, area);
             return;
         }
@@ -6342,8 +6486,8 @@ impl Dashboard for Monitor {
             if self.orphans { "PARENTLESS ONLY · " } else { "" },
         );
         let proc_b = self.tabs_box(&hint);
-        let proc_in = proc_b.inner(rows[4]);
-        f.render_widget(proc_b, rows[4]);
+        let proc_in = proc_b.inner(rows[5]);
+        f.render_widget(proc_b, rows[5]);
 
         // Keep the selection inside the viewport, scrolling only when it would
         // otherwise leave — a table that recentres on every tick is unreadable.
@@ -6572,7 +6716,7 @@ impl Dashboard for Monitor {
                 ),
             ]),
         };
-        f.render_widget(Paragraph::new(status), rows[5]);
+        f.render_widget(Paragraph::new(status), rows[6]);
 
         // ── overlays ──────────────────────────────────────────────────────────
         self.render_overlays(f, area);
