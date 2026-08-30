@@ -109,6 +109,68 @@ pub fn mouse_button_eventflags(buttons: MouseButtons) -> u32 {
     flags
 }
 
+/// A rectangle in window-logical pixels, used to place the content browser
+/// beneath the chrome rows and to hit-test cursor input against it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ContentRect {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+/// Computes the content browser's rect: full window width, starting right
+/// below the chrome rows and running to the bottom of the window.
+// ponytail: `chrome_height` comes from the static `--chrome-height` CLI switch
+// (see main.rs), not from the shell itself. Ceiling: it can't react to the
+// shell changing its own row heights (a themed compact toolbar, a dropped
+// download bar, etc). Upgrade path: have the shell report its real chrome
+// height over the P1 Rust->JS state channel (reversed - here JS->Rust, which
+// P1's ponytail note already flags as the next thing that channel needs) and
+// feed that in each frame instead of this fixed switch value.
+pub fn content_rect(window_width: f32, window_height: f32, chrome_height: f32) -> ContentRect {
+    let chrome_height = chrome_height.clamp(0.0, window_height.max(0.0));
+    ContentRect {
+        x: 0.0,
+        y: chrome_height,
+        width: window_width.max(0.0),
+        height: (window_height - chrome_height).max(0.0),
+    }
+}
+
+/// Which browser a point in window-logical coordinates should be routed to,
+/// carrying the point translated into that browser's own local coordinate
+/// space (the content browser only ever sees coordinates relative to its own
+/// top-left corner, never the window's).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HitTarget {
+    Chrome { x: f32, y: f32 },
+    Content { x: f32, y: f32 },
+}
+
+/// Hit-tests a cursor position (window-logical pixels) against the content
+/// rect. Inside routes to `Content` with coordinates translated into the
+/// content browser's local space; outside (including the chrome rows above
+/// it) routes to `Chrome` with the window coordinates unchanged, since the
+/// chrome browser is sized to the full window.
+pub fn hit_test(cursor_x: f32, cursor_y: f32, content: ContentRect) -> HitTarget {
+    let inside = cursor_x >= content.x
+        && cursor_x < content.x + content.width
+        && cursor_y >= content.y
+        && cursor_y < content.y + content.height;
+    if inside {
+        HitTarget::Content {
+            x: cursor_x - content.x,
+            y: cursor_y - content.y,
+        }
+    } else {
+        HitTarget::Chrome {
+            x: cursor_x,
+            y: cursor_y,
+        }
+    }
+}
+
 // CEF/Chromium key handling expects Windows VK_* codes for `windows_key_code` on
 // every platform (not the native scan code), so map winit's platform-independent
 // KeyCode onto them. Only the keys needed for basic navigation/text entry are mapped.
@@ -460,5 +522,62 @@ mod tests {
         // scale_factor 2.0 halves physical px to get logical px.
         assert_eq!(dx, 10);
         assert_eq!(dy, 20);
+    }
+
+    #[test]
+    fn content_rect_starts_below_chrome_and_spans_full_width() {
+        let rect = content_rect(1000.0, 800.0, 100.0);
+        assert_eq!(rect.x, 0.0);
+        assert_eq!(rect.y, 100.0);
+        assert_eq!(rect.width, 1000.0);
+        assert_eq!(rect.height, 700.0);
+    }
+
+    #[test]
+    fn content_rect_clamps_chrome_height_taller_than_window() {
+        let rect = content_rect(1000.0, 50.0, 100.0);
+        assert_eq!(rect.y, 50.0);
+        assert_eq!(rect.height, 0.0);
+    }
+
+    #[test]
+    fn hit_test_above_content_rect_hits_chrome_unchanged() {
+        let content = content_rect(1000.0, 800.0, 100.0);
+        assert_eq!(
+            hit_test(50.0, 50.0, content),
+            HitTarget::Chrome { x: 50.0, y: 50.0 }
+        );
+    }
+
+    #[test]
+    fn hit_test_top_edge_of_content_rect_hits_content() {
+        // The content rect starts AT y == chrome_height (inclusive).
+        let content = content_rect(1000.0, 800.0, 100.0);
+        assert_eq!(
+            hit_test(50.0, 100.0, content),
+            HitTarget::Content { x: 50.0, y: 0.0 }
+        );
+    }
+
+    #[test]
+    fn hit_test_inside_content_translates_to_local_space() {
+        let content = content_rect(1000.0, 800.0, 100.0);
+        assert_eq!(
+            hit_test(120.0, 250.0, content),
+            HitTarget::Content { x: 120.0, y: 150.0 }
+        );
+    }
+
+    #[test]
+    fn hit_test_outside_content_bounds_hits_chrome() {
+        let content = content_rect(1000.0, 800.0, 100.0);
+        // Past the right/bottom edges of the window entirely.
+        assert_eq!(
+            hit_test(1000.0, 799.0, content),
+            HitTarget::Chrome {
+                x: 1000.0,
+                y: 799.0
+            }
+        );
     }
 }
