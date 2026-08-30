@@ -1520,20 +1520,52 @@ impl Monitor {
                 .count()
         };
 
+        // ── what the machine is DOING to itself ────────────────────────────
         // Swapping is a RATE, not a state: a machine with used swap is not
         // swapping, it swapped once and moved on. Pages moving right now is
         // the thing that makes a box feel broken.
         let swapping = num(s, "reclaim.swap_in") + num(s, "reclaim.swap_out") > 0.0;
         let nix = any(&["nixos-rebuild", "nix-build", "nix-daemon", "nix-env", "switch-to-conf"]);
+        // The x menu's own slow verbs. Nothing else on this page says a garbage
+        // collection is running, so a machine crawling through one looks
+        // broken rather than busy — and it was this panel that started it.
+        let nixgc = any(&["nix-collect-garbage", "nix-store", "nix-optimise"]);
         let compose = any(&["docker-compose", "compose", "containerd-shim"]);
         // Every toolchain that shows up on these machines. A build is the one
         // kind of load that is EXPECTED to hurt, so seeing it is the
         // difference between "something is wrong" and "you are compiling".
         let building = any(&[
             "cargo", "rustc", "cc1", "cc1plus", "gcc", "g++", "clang", "ld", "make",
-            "node", "npm", "tsc", "esbuild", "javac", "gradle", "java",
+            "node", "npm", "tsc", "esbuild", "javac", "gradle", "java", "buildkitd",
         ]);
+        // Both backup tools this fleet runs, plus the transports. A backup
+        // window and a fault look identical from a graph; only the name of the
+        // process tells them apart.
+        let backup = any(&["borg", "bup", "restic", "rsync", "rclone", "borgmatic"]);
+        // btrfs scrub and balance saturate the disk for hours, and this fleet's
+        // storage is btrfs subvolumes. git gc is the same shape at a smaller
+        // scale, and there are twenty-two repos on the phone alone.
+        let scrub = any(&["btrfs", "scrub", "git-gc", "git-repack", "updatedb", "logrotate"]);
         let ssh_in = count(&["sshd"]);
+
+        // ── what is being done TO the machine ──────────────────────────────
+        // These four are counters rather than processes, and they earn their
+        // place by being invisible everywhere else on this page. A process
+        // name can at least be found in the table below; a stolen CPU cannot
+        // be found anywhere — oci-mail sat at 60% steal and the only way to
+        // learn that was to go and measure it by hand.
+        //
+        // Thresholds, not booleans: steal is never exactly zero on a shared
+        // host and refaults are normal in small numbers, so lighting on ">0"
+        // would make both permanent and therefore unreadable.
+        let steal = num(s, "cpu_detail.steal") > 5.0;
+        // Page cache being read back from disk: memory pressure WITHOUT swap,
+        // which is the case `swapping` cannot see. oci-mail ran 701/s.
+        let refault = num(s, "reclaim.refault_file") > 100.0;
+        // Processes in uninterruptible sleep — the shape of an I/O stall.
+        let blocked = num(s, "health.procs_blocked") > 0.0;
+        // Something was killed. Nothing else on the overview says so.
+        let oom = num(s, "health.oom_kill") > 0.0;
 
         let light = |on: bool, label: &str| -> Vec<Span<'static>> {
             vec![
@@ -1549,22 +1581,38 @@ impl Monitor {
             ]
         };
 
-        let mut top = vec![Span::styled("  ", Style::default())];
-        for (on, l) in [
-            (swapping, "swapping"),
-            (nix, "nix switch"),
-            (compose, "compose"),
-            (building, "building"),
-        ] {
-            top.extend(light(on, l));
-            top.push(Span::styled("  ", Style::default()));
-        }
-        top.push(Span::styled(
-            format!("ssh in {ssh_in}"),
-            Style::default().fg(if ssh_in > 0 { Color::Rgb(120, 200, 255) } else { LABEL }),
-        ));
+        // TWO ROWS, and the split is the meaning rather than the width.
+        //
+        // Above: what is being done TO this machine — it is in trouble and
+        // mostly not by its own choice. Below: what it is DOING — busy, and on
+        // purpose. Eleven lights on one line is also 143 columns, which a
+        // phone does not have, so the grouping earns its keep twice.
+        let row_of = |items: &[(bool, &str)], tail: Option<Span<'static>>| -> Line<'static> {
+            let mut sp = vec![Span::styled("  ", Style::default())];
+            for (on, l) in items {
+                sp.extend(light(*on, l));
+                sp.push(Span::styled("  ", Style::default()));
+            }
+            if let Some(t) = tail {
+                sp.push(t);
+            }
+            Line::from(sp)
+        };
 
-        let mut out = vec![Line::from(top)];
+        let mut out = vec![
+            row_of(
+                &[(oom, "oom"), (steal, "steal"), (refault, "refault"), (blocked, "blocked"), (swapping, "swapping")],
+                None,
+            ),
+            row_of(
+                &[(nix, "nix switch"), (nixgc, "nix gc"), (compose, "compose"),
+                  (building, "building"), (backup, "backup"), (scrub, "scrub")],
+                Some(Span::styled(
+                    format!("ssh in {ssh_in}"),
+                    Style::default().fg(if ssh_in > 0 { Color::Rgb(120, 200, 255) } else { LABEL }),
+                )),
+            ),
+        ];
 
         // The counts, in the order the logs tab lists its sections, so the two
         // screens can be read against each other without translating.
@@ -4014,11 +4062,11 @@ impl Dashboard for Monitor {
         let rows = Layout::vertical([
             Constraint::Length(1),     // header
             Constraint::Length(11),    // cpu
-            // The activity strip. Four rows: border, lights, alerts, border —
-            // counted, not guessed, because every previous height in this
-            // layout was exactly full and each new line silently clipped the
-            // one under it instead of appearing.
-            Constraint::Length(4),     // logs
+            // The activity strip. Five rows: border, trouble, busy, alerts,
+            // border — counted, not guessed, because every previous height in
+            // this layout was exactly full and each new line silently clipped
+            // the one under it instead of appearing.
+            Constraint::Length(5),     // logs
             Constraint::Length(13),    // mem | storage | net
             Constraint::Length(low_h), // psi | slices
             Constraint::Min(6),        // procs
