@@ -38,7 +38,15 @@ pub(crate) fn menu_cmd(i: usize) -> Cmd {
         0 => Cmd::Open(Overlay::Target),
         1 => Cmd::Open(Overlay::Boxes),
         2 => Cmd::Open(Overlay::Optimize),
-        3 => Cmd::Open(Overlay::Help),
+        // The about TAB, by name rather than by index: TABS is ordered by how
+        // often a tab is wanted, and hardcoding 7 here would send the menu
+        // somewhere else the first time that order changed.
+        3 => TABS
+            .iter()
+            .position(|t| t.name == "about")
+            .map(|i| Cmd::Go(i, None))
+            .unwrap_or(Cmd::Quit),
+        4 => Cmd::Open(Overlay::Help),
         _ => Cmd::Quit,
     }
 }

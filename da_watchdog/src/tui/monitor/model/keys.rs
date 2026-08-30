@@ -186,10 +186,15 @@ pub(crate) const CMD_HELP: &[(&str, &str)] = &[
 ///
 /// "quit" stays last on purpose — it is the way out, and a test walks to the
 /// bottom of this list and asserts it lands there.
-pub(crate) const MENU: [(&str, &str); 5] = [
+pub(crate) const MENU: [(&str, &str); 6] = [
     ("measure", "this machine, or any mesh peer over ssh"),
     ("options", "sorting, averaging window, which boxes are shown"),
     ("optimize", "system optimization — reclaim, cache, journal, docker, nix"),
+    // A tab, not an overlay — and the only one the menu names, because it is
+    // the only one that answers a question about the MACHINE rather than about
+    // what it is doing this second. `b` reaches it too; the menu exists for
+    // the people who have not learned `b`.
+    ("about", "what this machine is — os, kernel, hardware, addresses"),
     ("help", "every key this dashboard binds"),
     ("quit", "leave the dashboard"),
 ];
