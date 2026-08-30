@@ -106,6 +106,28 @@ jobs:
       - name: Build without the tray
         run: cargo build --release --no-default-features --target ${{ matrix.target }}
 
+      # THE PANEL, FOR THE PHONE ONLY.
+      #
+      # cloud-watchdog runs `my-watchdog-tui tui --serve` inside nix-on-droid,
+      # which is aarch64 — and the desktop leg above builds x86_64 glibc, so
+      # the published tui could not run there at all.
+      #
+      # Its own artifact rather than adding --features tui to the line above:
+      # that binary ships to every VM in the fleet and they are headless, so
+      # linking ratatui into it would triple the thing that has to stay small
+      # to carry a UI no server will draw. --no-default-features keeps the tray
+      # out; a phone has no D-Bus session either.
+      #
+      # arm only: nothing x86_64 asks for a musl panel, and building one would
+      # publish an artifact with no consumer.
+      - name: Build the panel (arm only — the phone)
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: |
+          cargo build --release --no-default-features --features tui \
+            --bin my-watchdog-tui --target ${{ matrix.target }}
+          cp "target/${{ matrix.target }}/release/my-watchdog-tui" \
+             "my-watchdog-tui-aarch64"
+
       - name: Confirm it is actually static
         # A dynamically linked "static" build fails on the first peer with a
         # different libc, and it fails there rather than here — so check here.
@@ -127,3 +149,10 @@ jobs:
           gh release upload my-watchdog-latest \
             ${{ matrix.asset }} \
             --repo "$GITHUB_REPOSITORY" --clobber
+          # Only the arm leg produced one; the x86 leg has nothing to upload
+          # here and must not fail for it.
+          if [ -f my-watchdog-tui-aarch64 ]; then
+            gh release upload my-watchdog-latest \
+              my-watchdog-tui-aarch64 \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          fi
