@@ -316,6 +316,160 @@ pub fn wheel_delta(delta: MouseScrollDelta, scale_factor: f64) -> (i32, i32) {
     }
 }
 
+/// One JS -> Rust command, parsed from the chrome browser's `document.title`
+/// after the shell prefixes it with `COMMAND_PREFIX` (see `parse_command`).
+/// Dispatch - actually calling CEF - lives in main.rs; this module only turns
+/// the wire string into data, so it stays unit-testable with no browser.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Command {
+    Navigate(String),
+    Back,
+    Forward,
+    Reload,
+    Stop,
+    Find(String),
+    FindNext,
+    FindPrev,
+    FindCancel,
+    Scroll(i32, i32),
+    Js(String),
+    Focus(FocusTarget),
+    Quit,
+}
+
+/// Which browser `Command::Focus` should route keyboard input to. A separate
+/// type from main.rs's own `Focus` (same two variants) so this module never
+/// has to name a main.rs type - main.rs maps one onto the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FocusTarget {
+    Content,
+    Chrome,
+}
+
+/// The chrome shell signals a command by setting
+/// `document.title = COMMAND_PREFIX + "<command>"`. main.rs resets the title
+/// after handling it so an identical next command still triggers CEF's
+/// `on_title_change` (CEF does not re-fire that callback when the title
+/// string is unchanged).
+pub const COMMAND_PREFIX: &str = "__CMD__";
+
+/// Parses one raw title string into a `Command`. Returns `None` for anything
+/// not a recognized command - including titles with no `COMMAND_PREFIX`,
+/// since ordinary page titles flow through the same callback on the content
+/// browser - and for malformed arguments to a known verb. The caller logs and
+/// ignores rather than treating this as an error; never panics.
+///
+/// Exact wire syntax (what the shell must emit, one command per
+/// `document.title` assignment):
+///   `navigate <url>` | `back` | `forward` | `reload` | `stop`
+///   `find <text>` | `find-next` | `find-prev` | `find-cancel`
+///   `scroll <dx> <dy>` | `js <script>` | `focus content|chrome` | `quit`
+pub fn parse_command(raw: &str) -> Option<Command> {
+    let body = raw.strip_prefix(COMMAND_PREFIX)?.trim();
+    let (verb, rest) = match body.split_once(char::is_whitespace) {
+        Some((verb, rest)) => (verb, rest.trim()),
+        None => (body, ""),
+    };
+    match verb {
+        "navigate" if !rest.is_empty() => Some(Command::Navigate(rest.to_string())),
+        "back" => Some(Command::Back),
+        "forward" => Some(Command::Forward),
+        "reload" => Some(Command::Reload),
+        "stop" => Some(Command::Stop),
+        "find" if !rest.is_empty() => Some(Command::Find(rest.to_string())),
+        "find-next" => Some(Command::FindNext),
+        "find-prev" => Some(Command::FindPrev),
+        "find-cancel" => Some(Command::FindCancel),
+        "scroll" => {
+            let mut parts = rest.split_whitespace();
+            let dx: i32 = parts.next()?.parse().ok()?;
+            let dy: i32 = parts.next()?.parse().ok()?;
+            if parts.next().is_some() {
+                return None; // trailing garbage
+            }
+            Some(Command::Scroll(dx, dy))
+        }
+        "js" if !rest.is_empty() => Some(Command::Js(rest.to_string())),
+        "focus" => match rest {
+            "content" => Some(Command::Focus(FocusTarget::Content)),
+            "chrome" => Some(Command::Focus(FocusTarget::Chrome)),
+            _ => None,
+        },
+        "quit" => Some(Command::Quit),
+        _ => None,
+    }
+}
+
+/// The content browser's navigation state, reported to the shell via
+/// `nav_state_js` below. Every field is backed by a verified CEF callback
+/// (`on_address_change`, `on_title_change`, `on_loading_state_change` - see
+/// `webrender.rs`'s `OsrDisplayHandler`/`OsrLoadHandler`), per the P1 rule of
+/// only reporting state actually observed, not guessed.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct NavState {
+    pub url: String,
+    pub title: String,
+    pub loading: bool,
+    pub can_back: bool,
+    pub can_forward: bool,
+}
+
+/// Escapes a string for embedding as a JSON string literal. Hand-rolled
+/// instead of a `serde_json` dependency (none added by this change, per the
+/// task's "no new dependencies" constraint) - the input is a page title or
+/// URL, not attacker-controlled structured data, so covering the
+/// JSON-mandatory escapes is enough.
+pub fn json_escape_str(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// Renders `nav` as the complete `shell/state/nav.js` script body: a single
+/// `window.__NAV = {...};` assignment, matching the wire format
+/// `2_configs/shell/state.js` polls for (see that file's header comment).
+/// main.rs writes this atomically (temp file + rename); this function only
+/// builds the string.
+pub fn nav_state_js(nav: &NavState) -> String {
+    format!(
+        "window.__NAV = {{\"url\":{},\"title\":{},\"loading\":{},\"can_back\":{},\"can_forward\":{}}};\n",
+        json_escape_str(&nav.url),
+        json_escape_str(&nav.title),
+        nav.loading,
+        nav.can_back,
+        nav.can_forward,
+    )
+}
+
+/// Derives the `shell/state/` directory from the chrome shell's `file://`
+/// URL (the same URL loaded into the chrome browser), so main.rs writes
+/// `nav.js` next to `state.js` without needing a separate `--state-dir`
+/// switch. `None` for any non-`file://` shell URL - nothing sensible to
+/// write to.
+///
+/// Strips a `#fragment` first: `build.sh`'s launcher appends
+/// `#open=<base64>` when it hands the shell a URL to open in a tab, and
+/// base64's alphabet includes `/` - left in, that could make `Path::parent`
+/// treat a byte inside the fragment as a directory separator.
+pub fn shell_state_dir(shell_url: &str) -> Option<std::path::PathBuf> {
+    let without_fragment = shell_url.split('#').next().unwrap_or(shell_url);
+    let path = without_fragment.strip_prefix("file://")?;
+    let parent = std::path::Path::new(path).parent()?;
+    Some(parent.join("state"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -578,6 +732,145 @@ mod tests {
                 x: 1000.0,
                 y: 799.0
             }
+        );
+    }
+
+    #[test]
+    fn parse_command_requires_prefix() {
+        assert_eq!(parse_command("navigate https://example.com"), None);
+    }
+
+    #[test]
+    fn parse_command_navigate() {
+        assert_eq!(
+            parse_command("__CMD__navigate https://example.com"),
+            Some(Command::Navigate("https://example.com".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_command_navigate_requires_url() {
+        assert_eq!(parse_command("__CMD__navigate"), None);
+        assert_eq!(parse_command("__CMD__navigate   "), None);
+    }
+
+    #[test]
+    fn parse_command_simple_verbs() {
+        assert_eq!(parse_command("__CMD__back"), Some(Command::Back));
+        assert_eq!(parse_command("__CMD__forward"), Some(Command::Forward));
+        assert_eq!(parse_command("__CMD__reload"), Some(Command::Reload));
+        assert_eq!(parse_command("__CMD__stop"), Some(Command::Stop));
+        assert_eq!(parse_command("__CMD__quit"), Some(Command::Quit));
+    }
+
+    #[test]
+    fn parse_command_find_family() {
+        assert_eq!(
+            parse_command("__CMD__find hello world"),
+            Some(Command::Find("hello world".to_string()))
+        );
+        assert_eq!(parse_command("__CMD__find-next"), Some(Command::FindNext));
+        assert_eq!(parse_command("__CMD__find-prev"), Some(Command::FindPrev));
+        assert_eq!(
+            parse_command("__CMD__find-cancel"),
+            Some(Command::FindCancel)
+        );
+        assert_eq!(parse_command("__CMD__find"), None);
+    }
+
+    #[test]
+    fn parse_command_scroll() {
+        assert_eq!(
+            parse_command("__CMD__scroll 0 120"),
+            Some(Command::Scroll(0, 120))
+        );
+        assert_eq!(
+            parse_command("__CMD__scroll -10 -20"),
+            Some(Command::Scroll(-10, -20))
+        );
+        assert_eq!(parse_command("__CMD__scroll 1"), None);
+        assert_eq!(parse_command("__CMD__scroll a b"), None);
+        assert_eq!(parse_command("__CMD__scroll 1 2 3"), None);
+    }
+
+    #[test]
+    fn parse_command_js() {
+        assert_eq!(
+            parse_command("__CMD__js alert(1)"),
+            Some(Command::Js("alert(1)".to_string()))
+        );
+        assert_eq!(parse_command("__CMD__js"), None);
+    }
+
+    #[test]
+    fn parse_command_focus() {
+        assert_eq!(
+            parse_command("__CMD__focus content"),
+            Some(Command::Focus(FocusTarget::Content))
+        );
+        assert_eq!(
+            parse_command("__CMD__focus chrome"),
+            Some(Command::Focus(FocusTarget::Chrome))
+        );
+        assert_eq!(parse_command("__CMD__focus tab"), None);
+    }
+
+    #[test]
+    fn parse_command_unknown_verb_is_none() {
+        assert_eq!(parse_command("__CMD__bogus"), None);
+    }
+
+    #[test]
+    fn json_escape_handles_quotes_and_backslashes() {
+        let escaped = json_escape_str("a\"b\\c");
+        assert!(escaped.starts_with('"') && escaped.ends_with('"'));
+        assert!(escaped.contains("\\\"")); // escaped quote
+        assert!(escaped.contains("\\\\")); // escaped backslash
+    }
+
+    #[test]
+    fn json_escape_handles_control_chars() {
+        assert_eq!(json_escape_str("a\nb"), "\"a\\nb\"");
+    }
+
+    #[test]
+    fn nav_state_js_produces_window_assignment() {
+        let nav = NavState {
+            url: "https://example.com".to_string(),
+            title: "Example".to_string(),
+            loading: true,
+            can_back: false,
+            can_forward: true,
+        };
+        let js = nav_state_js(&nav);
+        assert!(js.starts_with("window.__NAV = {"));
+        assert!(js.contains("\"url\":\"https://example.com\""));
+        assert!(js.contains("\"title\":\"Example\""));
+        assert!(js.contains("\"loading\":true"));
+        assert!(js.contains("\"can_back\":false"));
+        assert!(js.contains("\"can_forward\":true"));
+    }
+
+    #[test]
+    fn shell_state_dir_from_file_url() {
+        assert_eq!(
+            shell_state_dir("file:///home/x/shell/index.html"),
+            Some(std::path::PathBuf::from("/home/x/shell/state"))
+        );
+    }
+
+    #[test]
+    fn shell_state_dir_rejects_non_file_url() {
+        assert_eq!(shell_state_dir("https://example.com/index.html"), None);
+    }
+
+    #[test]
+    fn shell_state_dir_strips_fragment_with_embedded_slash() {
+        // A base64 fragment can contain '/' - it must not be mistaken for a
+        // path separator when deriving the parent directory.
+        assert_eq!(
+            shell_state_dir("file:///home/x/shell/index.html#open=aG/R0cA=="),
+            Some(std::path::PathBuf::from("/home/x/shell/state"))
         );
     }
 }

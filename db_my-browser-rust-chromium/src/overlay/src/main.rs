@@ -2,7 +2,7 @@ mod input;
 mod webrender;
 
 use cef::{args::Args, *};
-use std::{cell::RefCell, process::ExitCode, sync::Arc, thread::sleep, time::Duration};
+use std::{cell::RefCell, process::ExitCode, rc::Rc, sync::Arc, thread::sleep, time::Duration};
 use wgpu::{Backends, CurrentSurfaceTexture, util::DeviceExt};
 use winit::{
     application::ApplicationHandler,
@@ -323,6 +323,23 @@ struct App {
     /// by hit-testing the cursor instead (see `content_rect_for`); only
     /// keyboard events need a sticky notion of "focus".
     focus: Focus,
+    /// P2: the chrome browser's title-change queue, doubling as the JS ->
+    /// Rust command channel (see `input::parse_command`). Placeholder here,
+    /// replaced with the real shared state once `resumed` creates the
+    /// browser and its `DisplayHandler`.
+    chrome_display: Rc<RefCell<webrender::DisplayState>>,
+    /// P1's remaining leg: the content browser's title/URL, republished to
+    /// `shell/state/nav.js`. Same placeholder-then-replace pattern.
+    content_display: Rc<RefCell<webrender::DisplayState>>,
+    /// The content browser's loading/back/forward state, for the same
+    /// `nav.js` channel.
+    content_load: Rc<RefCell<webrender::LoadState>>,
+    /// Remembers the active search text so `find-next`/`find-prev` (which
+    /// carry no text of their own) can re-issue `BrowserHost::find`.
+    last_find_text: Option<String>,
+    /// `shell/state/` next to the chrome shell's `file://` URL, or `None` if
+    /// the shell was loaded some other way (see `input::shell_state_dir`).
+    shell_state_dir: Option<std::path::PathBuf>,
 }
 
 /// Which browser currently has keyboard focus. Defaults to `Chrome`; a mouse
@@ -351,6 +368,7 @@ fn content_rect_for(state: &State, chrome_height: f32) -> ContentRect {
 
 impl App {
     fn new(url: String, chrome_height: f32) -> Self {
+        let shell_state_dir = input::shell_state_dir(&url);
         App {
             state: None,
             chrome: None,
@@ -361,6 +379,14 @@ impl App {
             modifiers: 0,
             buttons: MouseButtons::default(),
             focus: Focus::Chrome,
+            // Placeholders: `resumed` overwrites these with the shared state
+            // returned by the real `OsrDisplayHandler`/`OsrLoadHandler` it
+            // creates for each browser.
+            chrome_display: Rc::new(RefCell::new(webrender::DisplayState::default())),
+            content_display: Rc::new(RefCell::new(webrender::DisplayState::default())),
+            content_load: Rc::new(RefCell::new(webrender::LoadState::default())),
+            last_find_text: None,
+            shell_state_dir,
         }
     }
 }
@@ -413,9 +439,19 @@ impl ApplicationHandler for App {
             device_scale_factor as _,
             window_logical,
         );
+        // P2/P1: the chrome browser's title changes are the JS -> Rust
+        // command channel; it has no navigation state worth reporting to
+        // `nav.js`, so `chrome_load_state` is built but never read.
+        let (chrome_display_handler, chrome_display_state) = webrender::OsrDisplayHandler::new();
+        let (chrome_load_handler, _chrome_load_state) = webrender::OsrLoadHandler::new();
+        self.chrome_display = chrome_display_state;
         let chrome_browser = cef::browser_host_create_browser_sync(
             Some(&chrome_window_info),
-            Some(&mut ClientBuilder::build(chrome_render_handler)),
+            Some(&mut ClientBuilder::build(
+                chrome_render_handler,
+                chrome_display_handler,
+                chrome_load_handler,
+            )),
             Some(&CefString::from(self.url.as_str())),
             Some(&browser_settings),
             None,
@@ -442,9 +478,21 @@ impl ApplicationHandler for App {
             device_scale_factor as _,
             winit::dpi::LogicalSize::new(content_logical_rect.width, content_logical_rect.height),
         );
+        // P1's remaining leg + P6 prerequisite: the content browser's real
+        // title/URL/load state, republished to `shell/state/nav.js` (see
+        // `maybe_write_nav_state`).
+        let (content_display_handler, content_display_state) =
+            webrender::OsrDisplayHandler::new();
+        let (content_load_handler, content_load_state) = webrender::OsrLoadHandler::new();
+        self.content_display = content_display_state;
+        self.content_load = content_load_state;
         let content_browser = cef::browser_host_create_browser_sync(
             Some(&content_window_info),
-            Some(&mut ClientBuilder::build(content_render_handler)),
+            Some(&mut ClientBuilder::build(
+                content_render_handler,
+                content_display_handler,
+                content_load_handler,
+            )),
             Some(&CefString::from("about:blank")),
             Some(&browser_settings),
             None,
@@ -467,29 +515,57 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-                if let Some(host) = self.browser.as_mut().and_then(|b| b.browser.host()) {
-                    host.send_external_begin_frame();
+                {
+                    if let Some(host) = self.chrome.as_mut().and_then(|b| b.browser.host()) {
+                        host.send_external_begin_frame();
+                    }
+                    if let Some(host) = self.content.as_mut().and_then(|b| b.browser.host()) {
+                        host.send_external_begin_frame();
+                    }
                 }
-                state.render();
+                let chrome_id = self.chrome.as_ref().map(|b| b.browser.identifier());
+                let content_id = self.content.as_ref().map(|b| b.browser.identifier());
+                state.render(chrome_id, content_id);
                 state.get_window().request_redraw();
+                self.drain_chrome_commands(event_loop);
+                self.maybe_write_nav_state();
             }
             WindowEvent::Resized(size) => {
-                state.resize(size);
-                if let Some(browser) = self.browser.as_mut() {
-                    *browser.size.borrow_mut() =
-                        size.to_logical(self.state.as_ref().unwrap().get_window().scale_factor());
-                    if let Some(host) = self.browser.as_mut().and_then(|b| b.browser.host()) {
+                let scale_factor = state.get_window().scale_factor();
+                state.resize(size, self.chrome_height);
+                if let Some(chrome) = self.chrome.as_mut() {
+                    *chrome.size.borrow_mut() = size.to_logical(scale_factor);
+                    if let Some(host) = chrome.browser.host() {
+                        host.was_resized();
+                    }
+                }
+                if let Some(content) = self.content.as_mut() {
+                    let window_logical = size.to_logical::<f32>(scale_factor);
+                    let content_rect = input::content_rect(
+                        window_logical.width,
+                        window_logical.height,
+                        self.chrome_height,
+                    );
+                    *content.size.borrow_mut() =
+                        winit::dpi::LogicalSize::new(content_rect.width, content_rect.height);
+                    if let Some(host) = content.browser.host() {
                         host.was_resized();
                     }
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor_pos = position;
-                if let Some(host) = self.browser.as_mut().and_then(|b| b.browser.host()) {
-                    let logical = position.to_logical::<f32>(state.get_window().scale_factor());
+                let logical = position.to_logical::<f32>(state.get_window().scale_factor());
+                let content_rect = content_rect_for(state, self.chrome_height);
+                let target = input::hit_test(logical.x, logical.y, content_rect);
+                let (slot, x, y) = match target {
+                    HitTarget::Content { x, y } => (self.content.as_mut(), x, y),
+                    HitTarget::Chrome { x, y } => (self.chrome.as_mut(), x, y),
+                };
+                if let Some(host) = slot.and_then(|b| b.browser.host()) {
                     let mouse_event = MouseEvent {
-                        x: logical.x as i32,
-                        y: logical.y as i32,
+                        x: x as i32,
+                        y: y as i32,
                         modifiers: input::mouse_button_eventflags(self.buttons) | self.modifiers,
                     };
                     host.send_mouse_move_event(Some(&mouse_event), 0);
@@ -511,13 +587,27 @@ impl ApplicationHandler for App {
                 if let Some(bit) = input::mouse_button_bit(button) {
                     self.buttons.set(bit, true);
                 }
-                if let Some(host) = self.browser.as_mut().and_then(|b| b.browser.host()) {
-                    let logical = self
-                        .cursor_pos
-                        .to_logical::<f32>(state.get_window().scale_factor());
+                let logical = self
+                    .cursor_pos
+                    .to_logical::<f32>(state.get_window().scale_factor());
+                let content_rect = content_rect_for(state, self.chrome_height);
+                let target = input::hit_test(logical.x, logical.y, content_rect);
+                // A press over the content rect moves keyboard focus there too
+                // (see `Focus`'s doc comment); a release does not re-route it.
+                if button_state.is_pressed() {
+                    self.focus = match target {
+                        HitTarget::Content { .. } => Focus::Content,
+                        HitTarget::Chrome { .. } => Focus::Chrome,
+                    };
+                }
+                let (slot, x, y) = match target {
+                    HitTarget::Content { x, y } => (self.content.as_mut(), x, y),
+                    HitTarget::Chrome { x, y } => (self.chrome.as_mut(), x, y),
+                };
+                if let Some(host) = slot.and_then(|b| b.browser.host()) {
                     let mouse_event = MouseEvent {
-                        x: logical.x as i32,
-                        y: logical.y as i32,
+                        x: x as i32,
+                        y: y as i32,
                         modifiers: input::mouse_button_eventflags(self.buttons) | self.modifiers,
                     };
                     let mouse_up = !button_state.is_pressed() as i32;
@@ -530,12 +620,18 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                if let Some(host) = self.browser.as_mut().and_then(|b| b.browser.host()) {
-                    let scale_factor = state.get_window().scale_factor();
-                    let logical = self.cursor_pos.to_logical::<f32>(scale_factor);
+                let scale_factor = state.get_window().scale_factor();
+                let logical = self.cursor_pos.to_logical::<f32>(scale_factor);
+                let content_rect = content_rect_for(state, self.chrome_height);
+                let target = input::hit_test(logical.x, logical.y, content_rect);
+                let (slot, x, y) = match target {
+                    HitTarget::Content { x, y } => (self.content.as_mut(), x, y),
+                    HitTarget::Chrome { x, y } => (self.chrome.as_mut(), x, y),
+                };
+                if let Some(host) = slot.and_then(|b| b.browser.host()) {
                     let mouse_event = MouseEvent {
-                        x: logical.x as i32,
-                        y: logical.y as i32,
+                        x: x as i32,
+                        y: y as i32,
                         modifiers: input::mouse_button_eventflags(self.buttons) | self.modifiers,
                     };
                     let (delta_x, delta_y) = input::wheel_delta(delta, scale_factor);
@@ -546,17 +642,220 @@ impl ApplicationHandler for App {
                 self.modifiers = input::keyboard_eventflags(mods.state());
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                if let Some(host) = self.browser.as_mut().and_then(|b| b.browser.host()) {
+                // Sticky focus, not hit-tested per event - see `Focus`'s doc comment.
+                let slot = match self.focus {
+                    Focus::Content => self.content.as_mut(),
+                    Focus::Chrome => self.chrome.as_mut(),
+                };
+                if let Some(host) = slot.and_then(|b| b.browser.host()) {
                     forward_key_event(host, &event, self.modifiers);
                 }
             }
             WindowEvent::Focused(focused) => {
-                if let Some(host) = self.browser.as_mut().and_then(|b| b.browser.host()) {
+                if let Some(host) = self.chrome.as_mut().and_then(|b| b.browser.host()) {
+                    host.set_focus(focused as i32);
+                }
+                if let Some(host) = self.content.as_mut().and_then(|b| b.browser.host()) {
                     host.set_focus(focused as i32);
                 }
             }
             _ => (),
         }
+    }
+}
+
+impl App {
+    /// Drains the chrome browser's title-change queue (P2's JS -> Rust
+    /// channel) and dispatches whatever commands parse out of it. Reads the
+    /// queue fully before dispatching any command, so a command handler that
+    /// somehow triggers another title change (it shouldn't) can't reenter a
+    /// held `RefCell` borrow.
+    fn drain_chrome_commands(&mut self, event_loop: &ActiveEventLoop) {
+        let raw_titles: Vec<String> = {
+            let mut state = self.chrome_display.borrow_mut();
+            state.titles.drain(..).collect()
+        };
+        if raw_titles.is_empty() {
+            return;
+        }
+        for raw in &raw_titles {
+            match input::parse_command(raw) {
+                Some(cmd) => self.dispatch_command(cmd, event_loop),
+                None => {
+                    if raw.starts_with(input::COMMAND_PREFIX) {
+                        eprintln!("overlay: unrecognized command from shell: {raw:?}");
+                    }
+                }
+            }
+        }
+        // Reset the title: CEF does not re-fire on_title_change when the
+        // string is unchanged, so without this an identical next command
+        // (e.g. two "navigate" to the same URL in a row) would be silently
+        // dropped.
+        if let Some(frame) = self.chrome.as_ref().and_then(|c| c.browser.main_frame()) {
+            frame.execute_java_script(
+                Some(&CefString::from("document.title = '';")),
+                Some(&CefString::from("")),
+                0,
+            );
+        }
+    }
+
+    /// Executes one parsed command. All commands except `focus`/`quit`
+    /// target the content browser, per the P2 contract.
+    fn dispatch_command(&mut self, cmd: input::Command, event_loop: &ActiveEventLoop) {
+        use input::Command;
+        match cmd {
+            Command::Navigate(url) => {
+                if let Some(frame) = self.content.as_ref().and_then(|c| c.browser.main_frame()) {
+                    frame.load_url(Some(&CefString::from(url.as_str())));
+                }
+            }
+            Command::Back => {
+                if let Some(content) = self.content.as_ref() {
+                    content.browser.go_back();
+                }
+            }
+            Command::Forward => {
+                if let Some(content) = self.content.as_ref() {
+                    content.browser.go_forward();
+                }
+            }
+            Command::Reload => {
+                if let Some(content) = self.content.as_ref() {
+                    content.browser.reload();
+                }
+            }
+            Command::Stop => {
+                if let Some(content) = self.content.as_ref() {
+                    content.browser.stop_load();
+                }
+            }
+            Command::Find(text) => {
+                self.last_find_text = Some(text.clone());
+                if let Some(host) = self.content.as_mut().and_then(|c| c.browser.host()) {
+                    host.find(Some(&CefString::from(text.as_str())), 1, 0, 0);
+                }
+            }
+            Command::FindNext => self.find_again(true),
+            Command::FindPrev => self.find_again(false),
+            Command::FindCancel => {
+                self.last_find_text = None;
+                if let Some(host) = self.content.as_mut().and_then(|c| c.browser.host()) {
+                    host.stop_finding(1);
+                }
+            }
+            Command::Scroll(dx, dy) => {
+                if let Some(content) = self.content.as_mut() {
+                    // ponytail: no real cursor position for a command-triggered
+                    // scroll, so aim at the content rect's center. Ceiling: a
+                    // page that scrolls "under the mouse" differently from
+                    // "under the viewport center" will feel slightly off.
+                    // Upgrade path: none needed unless that's ever reported.
+                    let size = *content.size.borrow();
+                    if let Some(host) = content.browser.host() {
+                        let mouse_event = MouseEvent {
+                            x: (size.width / 2.0) as i32,
+                            y: (size.height / 2.0) as i32,
+                            modifiers: 0,
+                        };
+                        host.send_mouse_wheel_event(Some(&mouse_event), dx, dy);
+                    }
+                }
+            }
+            Command::Js(script) => {
+                if let Some(frame) = self.content.as_ref().and_then(|c| c.browser.main_frame()) {
+                    frame.execute_java_script(
+                        Some(&CefString::from(script.as_str())),
+                        Some(&CefString::from("")),
+                        0,
+                    );
+                }
+            }
+            Command::Focus(target) => {
+                self.focus = match target {
+                    input::FocusTarget::Content => Focus::Content,
+                    input::FocusTarget::Chrome => Focus::Chrome,
+                };
+                let (content_focus, chrome_focus) = match target {
+                    input::FocusTarget::Content => (1, 0),
+                    input::FocusTarget::Chrome => (0, 1),
+                };
+                if let Some(host) = self.content.as_mut().and_then(|c| c.browser.host()) {
+                    host.set_focus(content_focus);
+                }
+                if let Some(host) = self.chrome.as_mut().and_then(|c| c.browser.host()) {
+                    host.set_focus(chrome_focus);
+                }
+            }
+            Command::Quit => event_loop.exit(),
+        }
+    }
+
+    /// Re-issues the last `find` search for `find-next`/`find-prev`, which
+    /// carry no text of their own. A no-op if there is no active search.
+    fn find_again(&mut self, forward: bool) {
+        let Some(text) = self.last_find_text.clone() else {
+            return;
+        };
+        if let Some(host) = self.content.as_mut().and_then(|c| c.browser.host()) {
+            host.find(
+                Some(&CefString::from(text.as_str())),
+                forward as i32,
+                0,
+                1,
+            );
+        }
+    }
+
+    /// Writes `shell/state/nav.js` if the content browser's title, URL or
+    /// load state changed since the last write (see P1's Rust -> JS state
+    /// channel and `2_configs/shell/state.js`'s wire format).
+    fn maybe_write_nav_state(&mut self) {
+        let Some(dir) = self.shell_state_dir.clone() else {
+            return;
+        };
+        let nav = {
+            let mut display = self.content_display.borrow_mut();
+            let mut load = self.content_load.borrow_mut();
+            if !display.dirty && !load.dirty {
+                return;
+            }
+            let nav = input::NavState {
+                url: display.last_url.clone().unwrap_or_default(),
+                title: display.last_title.clone().unwrap_or_default(),
+                loading: load.is_loading,
+                can_back: load.can_go_back,
+                can_forward: load.can_go_forward,
+            };
+            display.dirty = false;
+            // Bounded: the content browser never drains this queue for
+            // commands (only the chrome browser's does), so it would grow
+            // without limit otherwise.
+            display.titles.clear();
+            load.dirty = false;
+            nav
+        };
+        write_nav_state(&dir, &nav);
+    }
+}
+
+/// Atomically writes `nav.js` (temp file + rename, per `state.js`'s wire
+/// format contract) so a poll never lands on a half-written file. Best
+/// effort: I/O failures are logged, not fatal - a missing/stale `nav.js` just
+/// means the shell keeps showing whatever it had before.
+fn write_nav_state(dir: &std::path::Path, nav: &input::NavState) {
+    if let Err(err) = std::fs::create_dir_all(dir) {
+        eprintln!("overlay: could not create {}: {err}", dir.display());
+        return;
+    }
+    let tmp = dir.join(".nav.js.tmp");
+    if let Err(err) = std::fs::write(&tmp, input::nav_state_js(nav)) {
+        eprintln!("overlay: could not write {}: {err}", tmp.display());
+        return;
+    }
+    if let Err(err) = std::fs::rename(&tmp, dir.join("nav.js")) {
+        eprintln!("overlay: could not rename {} into place: {err}", tmp.display());
     }
 }
 
@@ -629,6 +928,16 @@ fn main() -> std::process::ExitCode {
         "about:blank".to_string()
     };
 
+    let chrome_height_switch = CefString::from("chrome-height");
+    let chrome_height = if cmd.has_switch(Some(&chrome_height_switch)) == 1 {
+        CefString::from(&cmd.switch_value(Some(&chrome_height_switch)))
+            .to_string()
+            .parse::<f32>()
+            .unwrap_or(DEFAULT_CHROME_HEIGHT)
+    } else {
+        DEFAULT_CHROME_HEIGHT
+    };
+
     let switch = CefString::from("type");
     let is_browser_process = cmd.has_switch(Some(&switch)) != 1;
     let mut app = webrender::AppBuilder::build(OsrApp::new());
@@ -666,7 +975,7 @@ fn main() -> std::process::ExitCode {
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app = App::new(url);
+    let mut app = App::new(url, chrome_height);
     let ret = loop {
         do_message_loop_work();
         let timeout = Some(Duration::ZERO);

@@ -48,7 +48,36 @@
   // format; everything else in this file goes through here so that when the
   // format is settled only this function changes.
   // ---------------------------------------------------------------------
-  function sendToRust(cmd) { document.title = '__CMD__' + JSON.stringify(cmd); }
+  // The one place the shell talks to Rust. Wire format is PLAIN TEXT, not JSON:
+  // "__CMD__<verb> <args...>", parsed by input::parse_command on the Rust side.
+  // No JSON, because parsing it in Rust would mean a new dependency.
+  // Rust clears document.title after draining, so sending the same command twice
+  // in a row still fires -- CEF does not re-emit on_title_change for an unchanged
+  // string.
+  const RUST_VERB = {
+    navigate: (c) => 'navigate ' + c.url,
+    back: () => 'back',
+    forward: () => 'forward',
+    reload: () => 'reload',
+    stop: () => 'stop',
+    find: (c) => 'find ' + c.text,
+    'find-next': () => 'find-next',
+    'find-prev': () => 'find-prev',
+    'find-cancel': () => 'find-cancel',
+    // parse_command demands exactly two integers and rejects trailing garbage,
+    // so round: a fractional delta from a trackpad would fail to parse.
+    scroll: (c) => 'scroll ' + Math.round(c.dx || 0) + ' ' + Math.round(c.dy || 0),
+    js: (c) => 'js ' + c.script,
+    focus: (c) => 'focus ' + c.target,
+    quit: () => 'quit',
+  };
+
+  function sendToRust(cmd) {
+    const build = cmd && RUST_VERB[cmd.op];
+    if (!build) { setStatus('internal: no wire form for ' + (cmd && cmd.op)); return; }
+    // A newline would truncate the command inside a window title.
+    document.title = '__CMD__' + build(cmd).replace(/[\r\n]+/g, ' ');
+  }
 
   // ---------------------------------------------------------------------
   // Tiny event bus for window.SHELL.on('navigate' | 'tabchange', cb)

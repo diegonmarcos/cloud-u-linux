@@ -3,7 +3,7 @@ use cef::{
 };
 use cef::{ImplRequestContextHandler, RequestContextHandler, WrapRequestContextHandler};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 #[derive(Clone)]
 pub struct OsrApp {}
@@ -414,6 +414,146 @@ impl RenderHandlerBuilder {
     }
 }
 
+// P2 (JS -> Rust commands) + P1's remaining Rust->JS leg for real page state:
+// both ride on `CefClient::GetDisplayHandler`/`GetLoadHandler` (confirmed via
+// docs.rs's generated `ImplDisplayHandler`/`ImplLoadHandler`/`ImplClient`
+// trait pages for this exact `cef` crate version - see main.rs's report for
+// the precise signatures). One shared state type per handler kind, used for
+// both the chrome and content browsers: the chrome browser's title changes
+// carry shell commands (see `input::parse_command`), the content browser's
+// carry the real page title/URL/load state that `main.rs` republishes to
+// `shell/state/nav.js`.
+
+/// Shared state written by `OsrDisplayHandler`'s callbacks, read by `main.rs`.
+#[derive(Default)]
+pub struct DisplayState {
+    /// Every `on_title_change` value since the last drain, in order. Only the
+    /// chrome browser's consumer (command parsing) drains this queue -
+    /// dropping titles would silently drop shell commands, so unlike
+    /// `last_title` below this is not just the latest value.
+    pub titles: VecDeque<String>,
+    pub last_title: Option<String>,
+    /// Set only from the main frame's address change (see `on_address_change`
+    /// below) - the content browser can host subframes whose own navigations
+    /// are not the page URL the shell should show.
+    pub last_url: Option<String>,
+    /// Set on any title or address change; cleared by whichever consumer
+    /// (main.rs) acts on it.
+    pub dirty: bool,
+}
+
+#[derive(Clone)]
+pub struct OsrDisplayHandler {
+    state: std::rc::Rc<RefCell<DisplayState>>,
+}
+
+impl OsrDisplayHandler {
+    pub fn new() -> (Self, std::rc::Rc<RefCell<DisplayState>>) {
+        let state = std::rc::Rc::new(RefCell::new(DisplayState::default()));
+        (
+            Self {
+                state: state.clone(),
+            },
+            state,
+        )
+    }
+}
+
+wrap_display_handler! {
+    pub struct DisplayHandlerBuilder {
+        handler: OsrDisplayHandler,
+    }
+
+    impl DisplayHandler {
+        fn on_title_change(&self, _browser: Option<&mut Browser>, title: Option<&CefString>) {
+            let Some(title) = title else { return };
+            let title = title.to_string();
+            let mut state = self.handler.state.borrow_mut();
+            state.titles.push_back(title.clone());
+            state.last_title = Some(title);
+            state.dirty = true;
+        }
+
+        fn on_address_change(
+            &self,
+            _browser: Option<&mut Browser>,
+            frame: Option<&mut Frame>,
+            url: Option<&CefString>,
+        ) {
+            let (Some(frame), Some(url)) = (frame, url) else { return };
+            if frame.is_main() == 0 {
+                return;
+            }
+            let mut state = self.handler.state.borrow_mut();
+            state.last_url = Some(url.to_string());
+            state.dirty = true;
+        }
+    }
+}
+
+impl DisplayHandlerBuilder {
+    pub fn build(handler: OsrDisplayHandler) -> DisplayHandler {
+        Self::new(handler)
+    }
+}
+
+/// Shared state written by `OsrLoadHandler`'s `on_loading_state_change`,
+/// read by `main.rs`. CEF reports `is_loading`/`can_go_back`/`can_go_forward`
+/// together in one callback, so this is the only load-state source needed for
+/// `nav.js`.
+#[derive(Default, Clone, Copy)]
+pub struct LoadState {
+    pub is_loading: bool,
+    pub can_go_back: bool,
+    pub can_go_forward: bool,
+    pub dirty: bool,
+}
+
+#[derive(Clone)]
+pub struct OsrLoadHandler {
+    state: std::rc::Rc<RefCell<LoadState>>,
+}
+
+impl OsrLoadHandler {
+    pub fn new() -> (Self, std::rc::Rc<RefCell<LoadState>>) {
+        let state = std::rc::Rc::new(RefCell::new(LoadState::default()));
+        (
+            Self {
+                state: state.clone(),
+            },
+            state,
+        )
+    }
+}
+
+wrap_load_handler! {
+    pub struct LoadHandlerBuilder {
+        handler: OsrLoadHandler,
+    }
+
+    impl LoadHandler {
+        fn on_loading_state_change(
+            &self,
+            _browser: Option<&mut Browser>,
+            is_loading: ::std::os::raw::c_int,
+            can_go_back: ::std::os::raw::c_int,
+            can_go_forward: ::std::os::raw::c_int,
+        ) {
+            let mut state = self.handler.state.borrow_mut();
+            state.is_loading = is_loading != 0;
+            state.can_go_back = can_go_back != 0;
+            state.can_go_forward = can_go_forward != 0;
+            state.dirty = true;
+        }
+    }
+}
+
+impl LoadHandlerBuilder {
+    pub fn build(handler: OsrLoadHandler) -> LoadHandler {
+        Self::new(handler)
+    }
+}
+
 // Keyed by `browser.identifier()` (P3: chrome + content are two independent
 // CEF browsers, each painting into its own slot instead of one global texture).
 thread_local! {
@@ -423,18 +563,36 @@ thread_local! {
 wrap_client! {
     pub(crate) struct ClientBuilder {
         render_handler: RenderHandler,
+        display_handler: DisplayHandler,
+        load_handler: LoadHandler,
     }
 
     impl Client {
         fn render_handler(&self) -> Option<cef::RenderHandler> {
             Some(self.render_handler.clone())
         }
+
+        fn display_handler(&self) -> Option<cef::DisplayHandler> {
+            Some(self.display_handler.clone())
+        }
+
+        fn load_handler(&self) -> Option<cef::LoadHandler> {
+            Some(self.load_handler.clone())
+        }
     }
 }
 
 impl ClientBuilder {
-    pub(crate) fn build(render_handler: OsrRenderHandler) -> Client {
-        Self::new(RenderHandlerBuilder::build(render_handler))
+    pub(crate) fn build(
+        render_handler: OsrRenderHandler,
+        display_handler: OsrDisplayHandler,
+        load_handler: OsrLoadHandler,
+    ) -> Client {
+        Self::new(
+            RenderHandlerBuilder::build(render_handler),
+            DisplayHandlerBuilder::build(display_handler),
+            LoadHandlerBuilder::build(load_handler),
+        )
     }
 }
 
