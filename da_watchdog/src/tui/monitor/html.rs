@@ -90,6 +90,40 @@ fn sections(snap: &Value) -> Vec<String> {
     out
 }
 
+/// The page with no machine in it — the UI the phone app ships.
+///
+/// The report was always written with its data already baked in, which made
+/// the UI a property of having measured something. On a phone that is wrong
+/// twice over: the app has to open before it can reach a machine, and the
+/// machine it reaches answers over ssh a second or two later. An app whose
+/// interface only exists once a remote command has succeeded shows an error
+/// where a dashboard should be, every time the phone is out of range of the
+/// thing it monitors.
+///
+/// So the shell is generated once, at release time, and carried in the APK:
+/// the app bar, the drawer, the tab tree and every panel frame, rendered
+/// against an empty machine. `window.__wdRender` then swaps a real envelope in
+/// when one arrives, and the reader keeps whichever panel they were on.
+///
+/// One placeholder row per section, because [`sections`] admits a tab only for
+/// a non-empty array of objects, and a drawer of dead entries is not a menu.
+/// The rows are `{}` rather than fake fields: an empty object gives a table
+/// with no columns instead of a column of invented ones.
+pub(crate) fn app_shell() -> String {
+    let mut snap = serde_json::Map::new();
+    for k in PREFERRED {
+        snap.insert((*k).into(), serde_json::json!([{}]));
+    }
+    let env = serde_json::json!({
+        "snapshot": Value::Object(snap),
+        "files": [],
+        "machines": [],
+        "exported": "",
+        "measured": "device",
+    });
+    page("watchdog", &env, "", "", "data-view=\"mobile\"")
+}
+
 /// One page: the envelope, the Markdown report, and the panel's tab tree.
 ///
 /// `title` names the machine and the moment, so a directory of these is

@@ -1,11 +1,12 @@
 (() => {
   const MIB = 1048576;
   const GIB = 1073741824;
-  const E = JSON.parse(
+  let E = JSON.parse(
     document.getElementById("env").textContent || "{}"
   );
-  const S = E.snapshot || {};
+  let S = E.snapshot || {};
   const out = document.getElementById("out");
+  let current = "__overview";
   const MOBILE = document.body.dataset.view === "mobile";
   let fitNow = () => {
   };
@@ -345,7 +346,8 @@
     b.onclick = () => {
       document.querySelectorAll(".t").forEach((x) => x.classList.remove("on"));
       b.classList.add("on");
-      show(b.dataset.k || "__overview");
+      current = b.dataset.k || "__overview";
+      show(current);
     };
   });
   if (MOBILE) {
@@ -395,6 +397,18 @@
     window.addEventListener("resize", fit);
     fitNow = fit;
   }
+  window.__wdRender = (json) => {
+    let next;
+    try {
+      next = JSON.parse(json);
+    } catch (e) {
+      return false;
+    }
+    E = next;
+    S = E.snapshot || {};
+    show(current);
+    return true;
+  };
   show("__overview");
   if (MOBILE) requestAnimationFrame(fitNow);
 })();

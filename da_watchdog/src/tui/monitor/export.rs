@@ -389,7 +389,7 @@ fn report(
 /// machines turns six machines into sixteen rows of noise. Keyed by address,
 /// shortest alias wins, and entries that resolve to no address at all (github.com)
 /// are not machines.
-fn fleet_machines() -> Vec<Value> {
+pub(super) fn fleet_machines() -> Vec<Value> {
     let mut out: Vec<Value> = vec![];
     let mut seen: Vec<String> = vec![];
 

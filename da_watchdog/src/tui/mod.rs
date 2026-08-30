@@ -45,6 +45,28 @@ pub fn run(args: Vec<String>) -> std::io::Result<()> {
         return Ok(());
     }
 
+    // The UI with no machine in it, for the phone app to carry. Generated at
+    // release time rather than fetched at runtime: an app that downloads its
+    // own interface before it can draw is an app that shows nothing on a train.
+    if cmd == "app-shell" {
+        println!("{}", monitor::app_shell());
+        return Ok(());
+    }
+
+    // The numbers alone, for a caller that already has the UI. This is the
+    // other half of `app-shell`: the app ships the interface and asks the
+    // machine only for what changes.
+    if cmd == "snapshot" {
+        match monitor::envelope_json() {
+            Ok(json) => println!("{json}"),
+            Err(e) => {
+                eprintln!("my-watchdog-tui snapshot: {e}");
+                std::process::exit(1);
+            }
+        }
+        return Ok(());
+    }
+
     // One screen as HTML, for a caller that has a WebView and no terminal —
     // or, with --serve, the panel driven from stdin a key at a time.
     if cmd == "tui" {

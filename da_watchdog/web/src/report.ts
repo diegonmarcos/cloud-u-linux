@@ -27,10 +27,23 @@ interface Snap extends Dict {
   slice_gib?: number; slice_max_gib?: number; slice_pct?: number;
 }
 
-const E: Envelope = JSON.parse(
+// `let`, not `const`, and that is the whole point. The page used to be a
+// frozen export: one envelope, baked in at write time, read once. The phone
+// app renders the SAME document but gets its snapshot afterwards, over ssh,
+// and may get a new one every few seconds — so the envelope has to be
+// replaceable without rebuilding the page around it.
+//
+// It also means the UI no longer depends on having data to exist. With an
+// empty envelope every panel renders its own frame with zeros, which is what
+// lets the app open instantly and fill in later instead of showing an error
+// where a dashboard should be.
+let E: Envelope = JSON.parse(
   (document.getElementById('env') as HTMLElement).textContent || '{}');
-const S: Snap = E.snapshot || {};
+let S: Snap = E.snapshot || {};
 const out = document.getElementById('out') as HTMLElement;
+// Which panel is on screen, so a data refresh redraws THAT one rather than
+// throwing the reader back to the overview every time a snapshot lands.
+let current = '__overview';
 // Set by index-mobile.html. Not a viewport query: the page is chosen when it
 // is written, so a phone in landscape gets the phone page and a narrow window
 // on a desktop does not.
@@ -423,7 +436,8 @@ document.querySelectorAll<HTMLElement>('.t').forEach(b => {
   b.onclick = () => {
     document.querySelectorAll('.t').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
-    show(b.dataset.k || '__overview');
+    current = b.dataset.k || '__overview';
+    show(current);
   };
 });
 // ── the phone application ──────────────────────────────────────────────────
@@ -493,6 +507,24 @@ if (MOBILE) {
   window.addEventListener('resize', fit);
   fitNow = fit;
 }
+
+/**
+ * Hand the page a new envelope. The app calls this when a snapshot comes back
+ * from the machine; nothing else changes, so the drawer, the scroll position
+ * and the selected panel all survive a refresh.
+ *
+ * Returns false rather than throwing on bad JSON: a half-written snapshot is
+ * a thing that happens while the sampler is writing one, and dropping that
+ * frame is correct — the next one is two seconds away.
+ */
+(window as unknown as Dict).__wdRender = (json: string): boolean => {
+  let next: Envelope;
+  try { next = JSON.parse(json); } catch { return false; }
+  E = next;
+  S = E.snapshot || {};
+  show(current);
+  return true;
+};
 
 show('__overview');
 // The first fit has to wait for layout: scrollWidth is 0 until the browser

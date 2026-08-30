@@ -472,6 +472,35 @@ pub(crate) fn overview_html() -> Result<(String, String), String> {
     Ok((wide, narrow))
 }
 
+/// The UI, with no machine in it. Printed once at release time and carried
+/// in the APK so the app can open without having reached anything yet.
+pub(crate) fn app_shell() -> String {
+    html::app_shell()
+}
+
+/// The live envelope as JSON on stdout, for a caller that already has the UI
+/// and only needs numbers.
+///
+/// The same envelope [`export_snapshot`] writes, minus the file tree and the
+/// fleet fold: the phone asks for this every few seconds, and the two things
+/// it does not draw were most of the bytes. `machines` stays — the app's
+/// machine switcher is built from it.
+pub(crate) fn envelope_json() -> Result<String, String> {
+    let p = snapshot_path();
+    let s = read_json(&p);
+    if text(&s, "host_info.host").is_empty() {
+        return Err(format!("no usable snapshot at {p} — is my-watchdog running?"));
+    }
+    let env = serde_json::json!({
+        "snapshot": s,
+        "files": [],
+        "machines": export::fleet_machines(),
+        "exported": "",
+        "measured": "local",
+    });
+    serde_json::to_string(&env).map_err(|e| e.to_string())
+}
+
 pub(crate) fn export_headless() -> Result<String, String> {
     let p = snapshot_path();
     let s = read_json(&p);

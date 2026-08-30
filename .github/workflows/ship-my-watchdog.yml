@@ -65,9 +65,15 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --title "my-watchdog (rolling)" \
               --notes "The machine sampler and its panel. Rebuilt on every push to da_watchdog/."
+          # The phone app's UI, generated from the same template as the
+          # report and carried inside the APK. Emitted here rather than
+          # fetched at runtime: an app that downloads its own interface
+          # before it can draw shows nothing on a train.
+          ./target/release/my-watchdog-tui app-shell > watchdog-app.html
           gh release upload my-watchdog-latest \
             target/release/my-watchdog \
             target/release/my-watchdog-tui \
+            watchdog-app.html \
             --repo "$GITHUB_REPOSITORY" --clobber
 
   # The fleet build. Static musl, no tray: a headless VM has no tray to put an
