@@ -200,7 +200,7 @@ fn proc_slice(pid: i32) -> String {
 /// XDG_RUNTIME_DIR at all, so relying on it alone meant the sampler started
 /// happily on every VM, logged one line nobody was reading, and published
 /// nothing. It looked exactly like a working deployment.
-fn runtime_dir() -> PathBuf {
+pub fn runtime_dir() -> PathBuf {
     if let Some(d) = std::env::var_os("XDG_RUNTIME_DIR") {
         let p = PathBuf::from(d);
         if p.is_dir() {

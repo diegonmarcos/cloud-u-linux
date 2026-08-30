@@ -472,6 +472,56 @@ pub(crate) fn overview_html() -> Result<(String, String), String> {
     Ok((wide, narrow))
 }
 
+/// Start the sampler beside us, once.
+///
+/// LOCKED, because nothing else stops a second one. Two samplers publishing to
+/// one path is not a hypothetical: oci-mail ran two for long enough to read
+/// 8GB, and neither knew about the other. O_EXCL on a lock file is the whole
+/// mechanism — the loser exits, and a lock left behind by a killed process is
+/// ignored once it is older than the sampler's own interval by a wide margin.
+///
+/// The binary is looked for beside this one under both names it ships as:
+/// `my-watchdog` everywhere, and `libmywatchdog.so` inside an APK, where
+/// nativeLibraryDir is the only directory Android will execute from and the
+/// `.so` suffix is the price of admission.
+fn start_sampler() {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    let lock = format!("{}/my-konsole-watchdog.lock", crate::watchdog::runtime_dir().display());
+    if let Ok(md) = fs::metadata(&lock) {
+        let stale = md
+            .modified()
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|e| e.as_secs() > 60);
+        if !stale {
+            return;
+        }
+        let _ = fs::remove_file(&lock);
+    }
+    if fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&lock).is_err() {
+        return;
+    }
+
+    let Ok(exe) = std::env::current_exe() else { return };
+    let Some(dir) = exe.parent() else { return };
+    for name in ["my-watchdog", "libmywatchdog.so"] {
+        let bin = dir.join(name);
+        if !bin.is_file() {
+            continue;
+        }
+        // Detached: this process is answering one question and exiting, and a
+        // sampler that dies with it would have to be started again for every
+        // refresh.
+        let _ = std::process::Command::new(&bin)
+            .arg("--no-tray")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+        return;
+    }
+}
+
 /// The UI, with no machine in it. Printed once at release time and carried
 /// in the APK so the app can open without having reached anything yet.
 pub(crate) fn app_shell() -> String {
@@ -487,9 +537,24 @@ pub(crate) fn app_shell() -> String {
 /// machine switcher is built from it.
 pub(crate) fn envelope_json() -> Result<String, String> {
     let p = snapshot_path();
-    let s = read_json(&p);
+    let mut s = read_json(&p);
+    // The panel reads a snapshot it does not collect, so with no sampler
+    // running there is nothing here at all. Over ssh the caller started one;
+    // over the terminal's exec service nobody did, and "is my-watchdog
+    // running?" is not an answer a phone app can act on. So it starts one
+    // itself and waits for the first publish.
     if text(&s, "host_info.host").is_empty() {
-        return Err(format!("no usable snapshot at {p} — is my-watchdog running?"));
+        start_sampler();
+        for _ in 0..25 {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            s = read_json(&p);
+            if !text(&s, "host_info.host").is_empty() {
+                break;
+            }
+        }
+    }
+    if text(&s, "host_info.host").is_empty() {
+        return Err(format!("no usable snapshot at {p} — the sampler did not publish"));
     }
     let env = serde_json::json!({
         "snapshot": s,

@@ -68,14 +68,29 @@ pub(crate) fn arr<'a>(v: &'a Value, path: &str) -> &'a [Value] {
     cur.as_array().map(|a| a.as_slice()).unwrap_or(&[])
 }
 
+/// The daemon's own resolution, not a second copy of it.
+///
+/// These used to read XDG_RUNTIME_DIR or fall back to a hardcoded
+/// /run/user/1000, while the sampler resolved XDG_RUNTIME_DIR ->
+/// /run/user/$uid -> /tmp/my-konsole-$uid. Anywhere that variable is unset the
+/// two disagreed and the panel read a path nothing had ever written: an empty
+/// dashboard on a machine that was being sampled perfectly well.
+///
+/// That is not exotic. A non-login ssh session has no XDG_RUNTIME_DIR — which
+/// is exactly how commands are run on the fleet — and Android has neither the
+/// variable nor /run/user at all, so the phone could never have worked. The
+/// hardcoded 1000 was a second bug hiding behind the first: it named another
+/// user's directory on any box where the reader was not uid 1000.
+fn runtime_dir() -> String {
+    crate::watchdog::runtime_dir().to_string_lossy().into_owned()
+}
+
 pub(crate) fn snapshot_path() -> String {
-    let dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/run/user/1000".into());
-    format!("{dir}/my-konsole-watchdog.json")
+    format!("{}/my-konsole-watchdog.json", runtime_dir())
 }
 
 pub(crate) fn kill_path() -> String {
-    let dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/run/user/1000".into());
-    format!("{dir}/my-konsole-watchdog.kill")
+    format!("{}/my-konsole-watchdog.kill", runtime_dir())
 }
 
 pub(crate) fn read_json(path: &str) -> Value {
