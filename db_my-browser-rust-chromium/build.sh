@@ -87,8 +87,37 @@ case "$cmd" in
     for want in 'id="mybar"' 'id="pinbar"' 'id="tabbar"' 'id="statusbar"' 'class="tab'; do
       case "$dom" in *"$want"*) ;; *) echo "check: MISSING $want"; fail=1 ;; esac
     done
+
+    # Rows rendering is not enough: the six internal pages are separate renderers
+    # and were once wired to nothing at all while the shell still looked fine.
+    # Drive each one and assert it produced real content.
+    cat >> "$tmp/index.html" <<'PROBE'
+<div id="__probe"></div>
+<script>window.addEventListener('load',function(){setTimeout(function(){
+  var out=[], names=(window.PAGES&&PAGES.list)?PAGES.list():[];
+  names.forEach(function(n){ try { SHELL.showPage(n);
+    var b=document.getElementById('pages-body');
+    out.push(n+':'+((b&&b.textContent.trim().length)||0));
+  } catch(e){ out.push(n+':ERR'); } });
+  document.getElementById('__probe').textContent=out.join(' ');
+},400);});</script>
+PROBE
+    pdom="$("$bin" --headless --disable-gpu --no-sandbox --virtual-time-budget=6000 \
+              --dump-dom "file://$tmp/index.html" 2>/dev/null)"
+    probe="$(printf '%s' "$pdom" | sed -n 's/.*id="__probe"[^>]*>\([^<]*\)<.*/\1/p')"
+    if [ -z "$probe" ]; then
+      echo "check: internal-page probe produced nothing"; fail=1
+    else
+      echo "check: pages -> $probe"
+      for pair in $probe; do
+        n="${pair%%:*}"; len="${pair##*:}"
+        case "$len" in ''|*[!0-9]*) echo "check: page $n FAILED"; fail=1 ;;
+          *) [ "$len" -lt 20 ] && { echo "check: page $n rendered only $len chars"; fail=1; } ;;
+        esac
+      done
+    fi
     rm -rf "$tmp"
-    [ "$fail" = 0 ] && echo "check: shell renders (rows + at least one tab)" || exit 1 ;;
+    [ "$fail" = 0 ] && echo "check: shell renders (rows, a tab, and all internal pages)" || exit 1 ;;
 
   clean)   rm -rf "$WORK" "$DIST" ;;
 
