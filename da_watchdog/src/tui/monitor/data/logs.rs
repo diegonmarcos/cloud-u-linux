@@ -26,8 +26,18 @@ pub(crate) const SECTIONS: &[Section] = &[
     Section { name: "system", desc: "the system manager and everything it started", args: &["_PID=1"] },
     Section { name: "user", desc: "this login's own services", args: &["--user"] },
     Section { name: "docker", desc: "the container daemon", args: &["-u", "docker.service"] },
-    Section { name: "network", desc: "NetworkManager and the wireguard links", args: &["-u", "NetworkManager.service", "-u", "wg-quick@wg0.service"] },
-    Section { name: "ssh", desc: "who reached this box, and who was refused", args: &["-u", "sshd.service"] },
+    // EVERY network manager this fleet actually runs, because it runs more than
+    // one: a desktop has NetworkManager and a server has systemd-networkd, and
+    // filtering on the desktop's gave every VM an empty page. Repeated -u is
+    // OR'd by journalctl, so naming all of them costs nothing on a box that
+    // has only one.
+    Section { name: "network", desc: "the network manager and the wireguard links", args: &["-u", "NetworkManager.service", "-u", "systemd-networkd.service", "-u", "systemd-resolved.service", "-u", "wg-quick@wg0.service"] },
+    // BY IDENTIFIER, NOT BY UNIT. The unit is sshd.service on NixOS and
+    // ssh.service on Debian and Ubuntu, so a unit filter is wrong on half this
+    // fleet — oci-mail had 300 lines of sshd and showed an empty page. The
+    // SYSLOG_IDENTIFIER is "sshd" on both, because it is the program's own
+    // name rather than the distribution's opinion about it.
+    Section { name: "ssh", desc: "who reached this box, and who was refused", args: &["-t", "sshd"] },
     Section { name: "watchdog", desc: "the sampler's own journal", args: &["--user", "-u", "my-watchdog.service"] },
 ];
 
