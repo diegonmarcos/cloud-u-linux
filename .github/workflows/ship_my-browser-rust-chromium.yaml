@@ -14,7 +14,16 @@ on:
     paths:
       - "db_my-browser-rust-chromium/build.sh"
       - "db_my-browser-rust-chromium/build.json"
-      - "db_my-browser-rust-chromium/src/**"
+      # Only the Rust overlay affects the binary. Deliberately NOT src/**:
+      # src/nix/ is packaging that consumes the published tarball rather than
+      # producing it, and tarball-hash.nix pins that tarball's sha256. If a hash
+      # commit rebuilt, the rebuild would emit a new tarball and invalidate the
+      # hash that just landed -- it could never converge.
+      - "db_my-browser-rust-chromium/src/overlay/**"
+      # The shell and the JSON config are COPIED INTO THE BUNDLE by `release`,
+      # so a change here changes the artifact. This was missing, which meant a
+      # shell-only commit silently never shipped.
+      - "db_my-browser-rust-chromium/2_configs/**"
       - ".github/workflows/ship_my-browser-rust-chromium.yaml"
 
 permissions:

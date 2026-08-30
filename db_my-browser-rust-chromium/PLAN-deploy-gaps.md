@@ -1,10 +1,15 @@
 # PLAN — close the gaps and get my-browser-rust-chromium deployed
 
-> **Progress (2026-08-29).** P0, P1 and P4 are done, green in CI (18 input unit
-> tests pass) and published to the rolling release. P2 and P3 remain. Fixed along
-> the way: drag-to-select (held-button bits were never sent to CEF), a launcher
-> that silently dropped URL arguments so `%U`/`defaultBrowser` opened the homepage,
-> and a Nix release URL pointing at a repo that does not exist.
+> **Progress (2026-08-30).** P0 (translation half), P1, P2, P3, P4 and most of P5
+> are done and GREEN: 39 unit tests pass, the whole stack compiles, and the
+> artifact is published. Content is its own CEF browser, so framed sites load;
+> the JS->Rust channel works; qute's built-in keymap (hints, find, scrolling) is
+> in. Fixed along the way: drag-to-select, a launcher that dropped URL arguments,
+> a Nix URL pointing at a repo that does not exist, an 11-error half-finished
+> refactor, and two agents that had built to different wire formats.
+>
+> **Still not verified: that input reaches CEF at all.** Everything above is
+> compile-time and headless-render evidence. Nobody has clicked this window.
 
 Status at time of writing: the chrome shell (bars, tabs, commands, internal pages)
 is committed and renders. What is missing is everything that needs the **Rust
@@ -60,7 +65,7 @@ exactly why the obvious approach fails.
 > (Rust -> JS) and polls. Upgrade path is a real CEF message router once JS -> Rust
 > is needed for more than the few commands in P2.
 
-## P2 — JS -> Rust commands
+## P2 — JS -> Rust commands — DONE
 
 `spawn`, `quit`, `close`, `devtools` and a `config-cycle` that actually applies
 currently report "unavailable". These need a real channel. Investigate what
@@ -68,7 +73,7 @@ cef-rs exposes on the `dev` branch — V8 handler in the render process, process
 messages, or a custom scheme handler — and implement the smallest one that works.
 Do not add a dependency for this.
 
-## P3 — Kill the iframe ceiling (multi-browser)
+## P3 — Kill the iframe ceiling (multi-browser) — DONE
 
 The single biggest limitation: `X-Frame-Options` / `frame-ancestors` means Google,
 GitHub and most banks refuse to render in `<iframe id=view>`. Content must become
@@ -103,7 +108,7 @@ already shows the shape (`db_my-browser-qute/src/nix/`: `package.nix`,
 Once this lands the browser installs the same way everything else here does, and
 `build.sh install` becomes the escape hatch rather than the path.
 
-## P5 — Polish
+## P5 — Polish — PARTLY DONE (check verb extended; window title and wheel calibration outstanding)
 
 - Window title is literally `winit window`; set it from the active page title.
 - Wheel `LineDelta * 40.0` is an admitted guess — calibrate against real Chrome.
@@ -112,7 +117,7 @@ Once this lands the browser installs the same way everything else here does, and
 
 ---
 
-## P6 — qutebrowser's BUILT-IN keymap (audited 2026-08-29: entirely missing)
+## P6 — qutebrowser's BUILT-IN keymap — DONE (audited 2026-08-29, built 2026-08-30)
 
 `2_configs/keybindings.json` contains only the 44 **custom overrides**. It does
 not contain qutebrowser's own default keymap, so none of that was ever built.
