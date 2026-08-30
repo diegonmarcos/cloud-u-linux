@@ -1,0 +1,13 @@
+# The ONE ssh key every constellation app uses to reach this phone's terminal.
+# cloud-ide and cloud-watchdog are the first two; anything after them uses this
+# same pair rather than minting its own.
+#
+# DECLARED, NOT GENERATED. A key an app invents at first run cannot be
+# provisioned ahead of time: authorized_keys would have to wait for the app to
+# exist, be launched, and have its key read off a screen and pasted. Declared,
+# this file ships with the env and the private half is baked into the APKs from
+# the vault at build time, so a fresh phone works with no setup step.
+#
+# A public key is not a secret. The private half lives sops-encrypted in
+# cloud-vault: A0_keys/providers/android/ssh.secrets.yaml.
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICP/TWd0q7KEm29dOrPMX5sEn/8THgsrdHJ1NfPiKElK cloud-constellation@android
