@@ -112,11 +112,7 @@ jobs:
       - name: Build without the tray
         run: cargo build --release --no-default-features --target ${{ matrix.target }}
 
-      # THE PANEL, FOR THE PHONE ONLY.
-      #
-      # cloud-watchdog runs `my-watchdog-tui tui --serve` inside nix-on-droid,
-      # which is aarch64 — and the desktop leg above builds x86_64 glibc, so
-      # the published tui could not run there at all.
+      # THE PANEL, PER ARCHITECTURE.
       #
       # Its own artifact rather than adding --features tui to the line above:
       # that binary ships to every VM in the fleet and they are headless, so
@@ -124,15 +120,19 @@ jobs:
       # to carry a UI no server will draw. --no-default-features keeps the tray
       # out; a phone has no D-Bus session either.
       #
-      # arm only: nothing x86_64 asks for a musl panel, and building one would
-      # publish an artifact with no consumer.
-      - name: Build the panel (arm only — the phone)
-        if: matrix.target == 'aarch64-unknown-linux-musl'
+      # BOTH ARCHITECTURES NOW. This was arm-only, on the reasoning that
+      # nothing x86_64 asked for a musl panel — true while the only consumer
+      # was a phone. The terminal forks are built per ABI like every other app
+      # here, and the x86_64 APK carries these binaries too, so an arm-only
+      # panel would ship an x86 terminal that cannot draw a dashboard.
+      - name: Build the panel
         run: |
           cargo build --release --no-default-features --features tui \
             --bin my-watchdog-tui --target ${{ matrix.target }}
+          # Named off matrix.asset so the pair always agrees: my-watchdog-X and
+          # my-watchdog-tui-X are the same build for the same architecture.
           cp "target/${{ matrix.target }}/release/my-watchdog-tui" \
-             "my-watchdog-tui-aarch64"
+             "$(echo '${{ matrix.asset }}' | sed 's/^my-watchdog-/my-watchdog-tui-/')"
 
       - name: Confirm it is actually static
         # A dynamically linked "static" build fails on the first peer with a
@@ -155,10 +155,10 @@ jobs:
           gh release upload my-watchdog-latest \
             ${{ matrix.asset }} \
             --repo "$GITHUB_REPOSITORY" --clobber
-          # Only the arm leg produced one; the x86 leg has nothing to upload
-          # here and must not fail for it.
-          if [ -f my-watchdog-tui-aarch64 ]; then
-            gh release upload my-watchdog-latest \
-              my-watchdog-tui-aarch64 \
-              --repo "$GITHUB_REPOSITORY" --clobber
-          fi
+          # Both legs produce one now, so this is unconditional. It used to
+          # be guarded because only the arm leg built a panel — a guard that
+          # would silently keep publishing one architecture if the build step
+          # above ever stopped producing the other.
+          tui="$(echo '${{ matrix.asset }}' | sed 's/^my-watchdog-/my-watchdog-tui-/')"
+          gh release upload my-watchdog-latest "$tui" \
+            --repo "$GITHUB_REPOSITORY" --clobber
