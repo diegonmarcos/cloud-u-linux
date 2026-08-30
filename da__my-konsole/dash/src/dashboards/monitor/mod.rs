@@ -281,6 +281,27 @@ pub struct Monitor {
 /// network rates are deltas between two refreshes: a single pass reads as
 /// zero for every rate on the page, which looks like an idle machine rather
 /// than an unmeasured one.
+/// One transcript at a caller-chosen grid: `my-konsole-dash tui 104 90`.
+///
+/// The phone app asks for a grid sized to the DEVICE it is running on rather
+/// than taking a constant compiled in here — a 6.1" phone and a foldable open
+/// are not the same terminal, and the whole reason the panel is asked to draw
+/// is that it already knows how to be any width.
+///
+/// Prints the transcript alone, no envelope and no page, because the caller
+/// already has a page and wants the screen to put in it.
+pub(crate) fn tui_at(cols: u16, rows: u16) -> Result<String, String> {
+    let mut m = Monitor::new();
+    // Twice: CPU% and the network rates are deltas between refreshes, and one
+    // pass reads as zero everywhere — an idle machine rather than an unmeasured
+    // one. The sleep is the sampler's own interval; without it the second pass
+    // diffs against a counter that has not moved.
+    m.update();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    m.update();
+    tui_html::render(&mut m, cols.clamp(40, 400), rows.clamp(20, 200))
+}
+
 pub(crate) fn overview_html() -> Result<(String, String), String> {
     let mut m = Monitor::new();
     m.update();
