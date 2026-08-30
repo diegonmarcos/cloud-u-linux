@@ -52,7 +52,7 @@ mod view;
 // Re-imported so a view still says `num(&s, "cpu")`: the split is for
 // organising the source, not for making every call site longer.
 use data::parse::{age_secs, ctr_mem, ctr_num};
-use data::sort::{avg_or, num_opt, sort_procs, tree_order, Sort, Win, SORT_ORDER};
+use data::sort::{avg_or, num_opt, sort_procs, tree_order, Sort, Win};
 use data::storage;
 use data::tree::TreeCache;
 use data::{arr, flag, kill_path, now_secs, num, read_json, snapshot_path, text};
@@ -63,11 +63,11 @@ use model::columns::{
     UNIT_ACTIONS,
 };
 use model::keys::{
-    ACTIONS, BOX_NAMES, B_MESH, B_NET, B_PSI, B_SLICES, B_STORAGE, CMD_HELP, FRAME_RESERVED, MENU,
+    ACTIONS, BOX_NAMES, B_MESH, B_NET, B_PSI, B_SLICES, B_STORAGE, CMD_HELP, MENU,
     OPTIMIZE, OTHER_KEYS, SORT_KEYS,
 };
 use model::tabs::TABS;
-use view::draw::{bbox, braille_graph, grad, meter, tabbox, DIM, GRAPH_FLOOR, LABEL};
+use view::draw::{bbox, braille_graph, grad, meter, tabbox, DIM, LABEL};
 use view::fmt::{
     fmt_bps, fmt_bytes_short, fmt_g, fmt_gib, fmt_mem_cell, fmt_mib, fmt_mib_g, fmt_mib_pair_g,
     fmt_rate,
