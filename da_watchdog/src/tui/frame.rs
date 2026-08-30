@@ -1,7 +1,7 @@
 // The shared frame contract (mirrors cloud-terminal/frame.js): a common toolbar
 // (title · "as of" stamp · auto-refresh toggle · refresh/quit) wrapping each
 // dashboard. The frame owns WHEN to refresh; the dashboard owns WHAT to render.
-// NOTE: my-konsole-dash has its own copy of this loop, and my-watchdog-tui/
+// NOTE: my-watchdog-tui has its own copy of this loop, and my-watchdog-tui/
 // my-konsole-dash each keep one deliberately. It is ~110 lines of generic
 // scaffolding — a trait and an event loop — and sharing it would make two
 // independent products depend on each other for the least interesting code

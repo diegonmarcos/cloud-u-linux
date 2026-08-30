@@ -19,7 +19,7 @@
 // It also means a change to the TUI shows up in the report with no work here
 // at all, which is the property the hand-written version could never have.
 use super::Monitor;
-use crate::frame::Dashboard;
+use crate::tui::frame::Dashboard;
 use ratatui::backend::TestBackend;
 use ratatui::style::{Color, Modifier};
 use ratatui::Terminal;

@@ -3,8 +3,8 @@ use std::fs;
 
 use serde_json::Value;
 
-use crate::dashboards::monitor::data::{arr, num, text};
-use crate::dashboards::monitor::view::fmt::{fmt_bytes_short, fmt_g, fmt_mib, fmt_mib_g, fmt_uptime};
+use crate::tui::monitor::data::{arr, num, text};
+use crate::tui::monitor::view::fmt::{fmt_bytes_short, fmt_g, fmt_mib, fmt_mib_g, fmt_uptime};
 
 /// Everything on screen, written out twice: the snapshot verbatim as JSON and
 /// a readable report as Markdown.
@@ -417,7 +417,7 @@ fn fleet_machines() -> Vec<Value> {
         }));
     }
 
-    for p in crate::dashboards::mesh::peers_from_ssh_config() {
+    for p in crate::tui::mesh::peers_from_ssh_config() {
         if p.ip.is_empty() || p.ip == p.alias {
             continue; // a Host with no HostName is not a machine
         }
@@ -605,7 +605,7 @@ pub(crate) fn export_snapshot(
                 "<li><a class=\"m{}\" href=\"{}\">{}</a></li>",
                 if file.as_str() == cur { " on" } else { "" },
                 file.replace(".html", sfx),
-                crate::dashboards::monitor::html::esc(label)
+                crate::tui::monitor::html::esc(label)
             ));
         }
         o
@@ -618,7 +618,7 @@ pub(crate) fn export_snapshot(
     // Rendered once, not per page. A failure here is not a failed export: the
     // page falls back to the boxes it builds itself, and says nothing rather
     // than showing half a screen.
-    let tui = crate::dashboards::monitor::overview_html().ok();
+    let tui = crate::tui::monitor::overview_html().ok();
 
     for (label, file, snap, from) in &machines {
         let local = file.as_str() == "index.html";
@@ -665,7 +665,7 @@ pub(crate) fn export_snapshot(
         let title = format!("{label} · {stamp}");
         let hp = format!("{html_dir}/{file}");
         let write = |path: &str, view: &str, sfx: &str| -> Result<(), String> {
-            let html = crate::dashboards::monitor::html::page(
+            let html = crate::tui::monitor::html::page(
                 &title,
                 &env,
                 &mreport,

@@ -3,7 +3,7 @@
 //
 // Moved out of monitor/mod.rs, which had grown to 6007 lines. Same code,
 // same order; only the file it lives in changed.
-use crate::dashboards::monitor::data::sort::Sort;
+use crate::tui::monitor::data::sort::Sort;
 
 
 /// What the `k` menu can send. RESTART is first because it is the thing people

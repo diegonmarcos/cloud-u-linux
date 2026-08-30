@@ -34,7 +34,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Cell, Clear, Paragraph, Row, 
 use ratatui::Frame;
 use serde_json::Value;
 
-use crate::frame::Dashboard;
+use crate::tui::frame::Dashboard;
 
 // ── the parts of this dashboard that are their own concern ─────────────
 // Split out because a four-thousand-line file is not a module, it is a
@@ -226,7 +226,7 @@ pub struct Monitor {
     show: [bool; BOX_NAMES.len()],
     /// The mesh peer table and the remote-snapshot fetcher, both on their
     /// own threads so a dead peer's connect timeout cannot stall a render.
-    mesh: crate::dashboards::mesh::Mesh,
+    mesh: crate::tui::mesh::Mesh,
     target_sel: usize,
     opt_sel: usize,
     unit_sel: usize,
@@ -509,7 +509,7 @@ impl Monitor {
             menu_sel: 0,
             act_sel: 0,
             show: [true; BOX_NAMES.len()],
-            mesh: crate::dashboards::mesh::Mesh::start(),
+            mesh: crate::tui::mesh::Mesh::start(),
             target_sel: 0,
             opt_sel: 0,
             unit_sel: 0,
@@ -891,7 +891,7 @@ impl Monitor {
     /// first row of the picker as the local option, so listing it again among
     /// the ssh targets would offer to ssh to yourself — and, worse, would put
     /// the drawn list and the picked index one apart.
-    fn selectable_peers(mesh: &crate::dashboards::mesh::Mesh) -> Vec<crate::dashboards::mesh::Peer> {
+    fn selectable_peers(mesh: &crate::tui::mesh::Mesh) -> Vec<crate::tui::mesh::Peer> {
         mesh.list().into_iter().filter(|p| !p.local).collect()
     }
 
@@ -2133,7 +2133,7 @@ impl Monitor {
     /// list made oci-analytics and oci-analytics-pub read as two machines
     /// rather than two roads to one. Split by network they read correctly,
     /// and "is it up" gets the per-tunnel answer it always had.
-    fn visible_peers(&self) -> Vec<crate::dashboards::mesh::Peer> {
+    fn visible_peers(&self) -> Vec<crate::tui::mesh::Peer> {
         let net = TABS[self.tab].subs.get(self.sub[self.tab]).and_then(|sb| sb.net);
         let Some(pfx) = net else { return vec![] };
         self.mesh
@@ -2152,14 +2152,14 @@ impl Monitor {
     /// the keys walked the whole mesh while the table drew a filtered subset,
     /// so enter on the second row opened whichever machine happened to be
     /// second in the UNFILTERED list. Ranking would have made that worse.
-    fn fleet_view(&self, s: &Value) -> Vec<crate::dashboards::mesh::Peer> {
+    fn fleet_view(&self, s: &Value) -> Vec<crate::tui::mesh::Peer> {
         let got = self.mesh.fleet();
         let mut v = self.visible_peers();
         let (label, field) = FLEET_SORT[self.fleet_sort.min(FLEET_SORT.len() - 1)];
         // A peer that has not answered has no number to rank on. Sorting it to
         // the bottom is the useful answer: you rank by CPU to find the busy
         // machine, not to be shown six silent ones first.
-        let key = |p: &crate::dashboards::mesh::Peer| -> f64 {
+        let key = |p: &crate::tui::mesh::Peer| -> f64 {
             let snap = if p.local {
                 Some(s.clone())
             } else {
@@ -2177,7 +2177,7 @@ impl Monitor {
                 // Down is not a time. It sorts as "worst", which is where a
                 // machine you cannot reach belongs in an RTT ranking.
                 "RTT" => {
-                    let r = |p: &crate::dashboards::mesh::Peer| {
+                    let r = |p: &crate::tui::mesh::Peer| {
                         if p.local {
                             0.0
                         } else if p.up {

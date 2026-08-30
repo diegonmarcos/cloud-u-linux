@@ -3,7 +3,7 @@
 // One module because the rules are shared and easy to get subtly inconsistent
 // otherwise: which unit a size uses, when a zero is a dash and when it is a
 // measurement, how wide a column's value may be.
-use crate::dashboards::monitor::data::HIST;
+use crate::tui::monitor::data::HIST;
 
 pub(crate) fn push(v: &mut Vec<f64>, x: f64) {
     v.push(x);

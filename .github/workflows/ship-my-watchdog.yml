@@ -44,11 +44,17 @@ jobs:
       - name: Compile-verify
         run: |
           cargo fmt --check || true
-          cargo clippy --release --all-targets -- -D warnings
-          cargo test --release
+          # --features tui, or the panel is not checked at all: its binary
+          # declares required-features, so --all-targets skips it silently and
+          # 11k lines of moved code would go out unverified.
+          cargo clippy --release --all-targets --features tui -- -D warnings
+          cargo test --release --features tui
 
       - name: Build
-        run: cargo build --release
+        # Desktop gets the daemon AND the panel. The fleet leg below builds
+        # neither the tray nor the tui — see its own comment for why that
+        # matters more than one artifact would.
+        run: cargo build --release --features tui
 
       - name: Publish to the rolling release
         env:
@@ -58,9 +64,10 @@ jobs:
             gh release create my-watchdog-latest \
               --repo "$GITHUB_REPOSITORY" \
               --title "my-watchdog (rolling)" \
-              --notes "The machine sampler. Rebuilt on every push to da_watchdog/."
+              --notes "The machine sampler and its panel. Rebuilt on every push to da_watchdog/."
           gh release upload my-watchdog-latest \
             target/release/my-watchdog \
+            target/release/my-watchdog-tui \
             --repo "$GITHUB_REPOSITORY" --clobber
 
   # The fleet build. Static musl, no tray: a headless VM has no tray to put an
@@ -116,7 +123,7 @@ jobs:
             gh release create my-watchdog-latest \
               --repo "$GITHUB_REPOSITORY" \
               --title "my-watchdog (rolling)" \
-              --notes "The machine sampler. Rebuilt on every push to da_watchdog/."
+              --notes "The machine sampler and its panel. Rebuilt on every push to da_watchdog/."
           gh release upload my-watchdog-latest \
             ${{ matrix.asset }} \
             --repo "$GITHUB_REPOSITORY" --clobber

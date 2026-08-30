@@ -8,3 +8,8 @@
 // filesystem symlink because cargo compiles it once and rustc resolves it the
 // same way on every machine, where a symlink is a property of one checkout.
 pub mod watchdog;
+
+// The terminal UI. Optional so the fleet daemon stays std + libc — see
+// tui/mod.rs for why that matters more than the convenience of one binary.
+#[cfg(feature = "tui")]
+pub mod tui;

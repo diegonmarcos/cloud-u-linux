@@ -11,6 +11,15 @@ path = "src/lib.rs"
 name = "my-watchdog"
 path = "src/main.rs"
 
+# The panel, as its own binary and only when asked for. Two binaries rather
+# than one with a subcommand, because the daemon ships to every box in the
+# fleet and most of them are headless: linking ratatui into the thing that has
+# to stay small, to carry a UI no server will draw, is the wrong trade.
+[[bin]]
+name = "my-watchdog-tui"
+path = "src/bin/my-watchdog-tui.rs"
+required-features = ["tui"]
+
 [dependencies]
 # The sampler is pure std + libc: every figure comes out of /proc, /sys and
 # cgroupfs, and nothing here needs a JSON crate because the snapshot is
@@ -27,9 +36,18 @@ libc = "0.2"
 # binary that runs on any Linux of that architecture regardless of its libc.
 ksni = { version = "0.3", features = ["blocking"], optional = true }
 
+# The panel's crates, all optional for the same reason ksni is: they are what
+# separates an 800KB static musl sampler from a 2MB one carrying a terminal UI.
+# The daemon itself still writes its snapshot by hand and parses nothing.
+ratatui = { version = "0.28", optional = true }
+crossterm = { version = "0.28", optional = true }
+serde_json = { version = "1", optional = true }
+
 [features]
+# The fleet builds neither: `--no-default-features` gives the bare sampler.
 default = ["tray"]
 tray = ["dep:ksni"]
+tui = ["dep:ratatui", "dep:crossterm", "dep:serde_json"]
 
 [profile.release]
 opt-level = "s"

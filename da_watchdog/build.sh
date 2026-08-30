@@ -34,8 +34,11 @@ CAPS="cap_sys_ptrace,cap_dac_read_search,cap_net_admin+ep"
 grant_caps() { # host -> apply on a remote box, empty -> apply here
   local h="$1" cmd="setcap $CAPS \"\$1\" 2>/dev/null || sudo -n setcap $CAPS \"\$1\" 2>/dev/null"
   if [ -z "$h" ]; then
-    setcap "$CAPS" "$LINK" 2>/dev/null || sudo -n setcap "$CAPS" "$LINK" 2>/dev/null || {
-      say "could not grant capabilities — run: sudo setcap $CAPS $LINK"
+    # The real file, never the symlink: setcap follows nothing and an xattr on
+    # a symlink is not read by anything.
+    local target; target="$(readlink -f "$LINK" 2>/dev/null || echo "$LINK")"
+    setcap "$CAPS" "$target" 2>/dev/null || sudo -n setcap "$CAPS" "$target" 2>/dev/null || {
+      say "could not grant capabilities — run: sudo setcap $CAPS $target"
       say "  without them per-process io, PSS and the firewall page stay blank"
       return 0
     }
@@ -63,6 +66,27 @@ case "${1:-fetch}" in
     chmod +x "$tmp"
     mv -f "$tmp" "$DEST/$BIN"
     ln -sf "$DEST/$BIN" "$LINK"
+    # The panel, beside the daemon it reads. Best-effort: the fleet artifacts
+    # are the sampler alone (no tui feature), so a box that has no panel to
+    # download is a normal headless box and not a failure.
+    tui_tmp="$(mktemp "$DEST/.$BIN-tui.XXXXXX")"
+    if gh release download "$TAG" --repo "$REPO" --pattern "$BIN-tui" --output "$tui_tmp" --clobber 2>/dev/null; then
+      chmod +x "$tui_tmp"
+      mv -f "$tui_tmp" "$DEST/$BIN-tui"
+      ln -sf "$DEST/$BIN-tui" "$(dirname "$LINK")/$BIN-tui"
+      say "panel: $BIN-tui"
+    else
+      rm -f "$tui_tmp"
+      say "no $BIN-tui in $TAG (headless build) — daemon only"
+    fi
+    # A file capability is an xattr on the INODE, so replacing the binary drops
+    # it — every fetch silently un-privileges the daemon. That is why the
+    # firewall page went blank after an update and stayed blank: nft list
+    # ruleset needs CAP_NET_ADMIN, and the new inode had none. Re-granted here
+    # rather than only in `install`, because fetch is what people actually run
+    # to update, and a capability that survives installation but not updates is
+    # one nobody has for long.
+    grant_caps ""
     # The policy travels with the binary. One source of truth means every
     # machine resolves the same document, so it has to actually arrive on
     # every machine.
