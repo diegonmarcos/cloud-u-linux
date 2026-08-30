@@ -39,6 +39,8 @@ pub mod watchdog;
     clippy::useless_vec,
     clippy::new_without_default,
     clippy::absurd_extreme_comparisons,
+    // rustc's, not clippy's, and separate for that reason.
+    unused_mut,
     dead_code
 )]
 pub mod tui;

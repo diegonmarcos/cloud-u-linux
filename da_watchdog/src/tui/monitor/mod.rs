@@ -6062,7 +6062,9 @@ impl Dashboard for Monitor {
             // were already wired to detail_scroll for this branch; the view
             // simply never applied it, so the extra rows would have been drawn
             // into a box that quietly cut them off.
-            let hmax = (hl.len() as u16).saturating_sub(hin.height).max(0);
+            // saturating_sub on u16 cannot go below zero, so the .max(0) that used
+            // to be here guarded nothing.
+            let hmax = (hl.len() as u16).saturating_sub(hin.height);
             self.detail_scroll = self.detail_scroll.min(hmax);
             f.render_widget(Paragraph::new(hl).scroll((self.detail_scroll, 0)), hin);
             let status = Line::from(Span::styled(
@@ -6733,6 +6735,13 @@ impl Dashboard for Monitor {
 mod tests {
     use super::*;
     use serde_json::json;
+    // Imported HERE rather than at the top of the file: these three are used
+    // only by the assertions below, so a top-level import is genuinely unused
+    // in the library build — which is what clippy said, correctly, and what
+    // deleting them outright then broke.
+    use super::data::sort::SORT_ORDER;
+    use super::model::keys::FRAME_RESERVED;
+    use super::view::draw::GRAPH_FLOOR;
 
     // The whole point of the keybinding tables: a key cannot be advertised in
     // one place and handled in another, and it cannot collide with a key the
