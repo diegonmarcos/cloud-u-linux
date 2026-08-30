@@ -269,21 +269,24 @@ body {
 }
 
 /* ---------------------------------------------------------------------
- * Row 4: #content — fills remaining height, holds the page view
+ * Row 4: #content — fills remaining height; sizes the rect Rust composites
+ * the real content browser into. Left transparent (not white) so there is
+ * no painted-over gap between the chrome and the composited page below it.
  * --------------------------------------------------------------------- */
 #content {
   flex: 1 1 auto;
   min-height: 0; /* required so the flex child can shrink and scroll, not the page */
   position: relative;
-  overflow: auto;
-  background: #ffffff;
+  overflow: hidden;
+  background: transparent;
 }
 
+/* #view is dead markup left over from the pre-P3 iframe architecture (see
+ * shell.js). It is never given a src any more; hidden outright so it can
+ * never paint over or intercept input meant for the composited content
+ * browser. */
 #view {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 0;
+  display: none;
 }
 
 /* ---------------------------------------------------------------------
@@ -369,8 +372,16 @@ body {
 
 #status-scroll,
 #status-tabs,
-#status-progress {
+#status-progress,
+.status-find {
   flex: 0 0 auto;
+}
+
+/* transient message + active-find-term side channels, appended into
+ * #statusbar by shell.js (setStatus() / updateFindStatus()) */
+.status-msg,
+.status-find {
+  opacity: 0.9;
 }
 
 /* ---------------------------------------------------------------------

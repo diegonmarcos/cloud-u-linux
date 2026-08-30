@@ -2,9 +2,13 @@
 //
 // This file IS the browser chrome. It runs inside the shell HTML page, which
 // is itself displayed by a CEF (Chromium Embedded Framework) native window.
-// Page content the user navigates to lives in <iframe id="view">. There is no
-// native/Rust-side API available to this script — everything here is plain
-// DOM/JS, matching the qutebrowser behavior documented in:
+// Page content the user navigates to is now its OWN CEF browser, composited
+// by Rust underneath the chrome rows — it is NOT the <iframe id="view"> any
+// more (that element is inert legacy markup from index.html; this file never
+// writes to it). Everything this shell needs from Rust goes through the
+// single sendToRust() function below; nothing else in this file should know
+// or care about the wire format, because a parallel change is defining it.
+// Matches the qutebrowser behavior documented in:
 //   - db_my-browser-qute/src/2_configs/qute-keybindings.json (normal-mode keys)
 //   - db_my-browser-rust-chromium/UI-SPEC.md (row order, statusbar, colors)
 //
@@ -38,6 +42,13 @@
 
   const DATA = window.MYDATA || {};
   const KEYBINDINGS = (DATA.keybindings && DATA.keybindings.normal) || {};
+
+  // ---------------------------------------------------------------------
+  // The one place the shell talks to Rust. A parallel change defines the wire
+  // format; everything else in this file goes through here so that when the
+  // format is settled only this function changes.
+  // ---------------------------------------------------------------------
+  function sendToRust(cmd) { document.title = '__CMD__' + JSON.stringify(cmd); }
 
   // ---------------------------------------------------------------------
   // Tiny event bus for window.SHELL.on('navigate' | 'tabchange', cb)
@@ -222,7 +233,7 @@
     // must not overwrite it with the raw URL -- that is what made the PinBar show
     // "file:///home/..." instead of "Bookmarks" for whichever pin was selected.
     t.title = t.label || prettyTitle(url);
-    loadUrlIntoFrame(t, url);
+    loadUrlIntoBrowser(t, url);
     render();
     emit('navigate', { id: t.id, url, tab: t });
   }
@@ -232,7 +243,7 @@
     if (!t || t.histIndex <= 0) { setStatus('No back history'); return; }
     t.histIndex -= 1;
     t.url = t.history[t.histIndex];
-    loadUrlIntoFrame(t, t.url);
+    sendToRust({ op: 'back' });
     render();
     emit('navigate', { id: t.id, url: t.url, tab: t });
   }
@@ -242,7 +253,7 @@
     if (!t || t.histIndex >= t.history.length - 1) { setStatus('No forward history'); return; }
     t.histIndex += 1;
     t.url = t.history[t.histIndex];
-    loadUrlIntoFrame(t, t.url);
+    sendToRust({ op: 'forward' });
     render();
     emit('navigate', { id: t.id, url: t.url, tab: t });
   }
@@ -263,113 +274,46 @@
   function loadSelected() {
     const t = currentTab();
     if (!t) {
-      if (dom.view) dom.view.src = 'about:blank';
-      clearFrameFailure();
+      sendToRust({ op: 'navigate', url: 'about:blank' });
       return;
     }
-    loadUrlIntoFrame(t, t.url);
+    loadUrlIntoBrowser(t, t.url);
   }
 
   // ---------------------------------------------------------------------
-  // FRAME LOADING + X-Frame-Options / CSP frame-ancestors failure detection
+  // NAVIGATION -> content browser
   //
-  // ponytail: many real sites (banks, Google, most SPAs behind Cloudflare)
-  // send X-Frame-Options: DENY or a CSP frame-ancestors directive that makes
-  // Chromium refuse to render them inside <iframe id=view> at all — the
-  // frame silently stays blank, or onload never fires. There is no DOM
-  // signal that distinguishes "still loading" from "refused"; we can only
-  // infer it heuristically (a load timeout with a blank/about:blank frame).
-  // This is a structural ceiling of the "webview chrome as HTML+iframe"
-  // architecture, not a bug in this file. The real fix is a second,
-  // independently-composited CEF browser view (no iframe, no framing
-  // restrictions) drawn into the same window via a wgpu compositor — i.e.
-  // true multi-process browser tabs instead of embedding pages inside our
-  // own page. Tracked as a known architectural debt, not fixed here.
-  const FRAME_LOAD_TIMEOUT_MS = 6000;
-
-  function loadUrlIntoFrame(tab, url) {
-    if (!dom.view) return;
-    clearFrameFailure();
-    setProgress(10);
-    if (tab.loadTimer) clearTimeout(tab.loadTimer);
-
-    let loaded = false;
-    const onload = () => {
-      loaded = true;
-      setProgress(100);
-      setTimeout(() => setProgress(0), 300);
-      try {
-        tab.title = tab.label
-          || (dom.view.contentDocument && dom.view.contentDocument.title)
-          || prettyTitle(url);
-      } catch (e) {
-        tab.title = tab.label || prettyTitle(url); // cross-origin document
-      }
-      renderTabbars();
-      updateStatusUrl();
-      dom.view.removeEventListener('load', onload);
-    };
-    dom.view.addEventListener('load', onload);
-
-    tab.loadTimer = setTimeout(() => {
-      if (loaded) return;
-      let blocked = false;
-      try {
-        // If we can't reach the frame's location at all, or it silently
-        // fell back to about:blank while we asked for something else, the
-        // most likely cause is a frame-busting header rejecting embedding.
-        const href = dom.view.contentWindow && dom.view.contentWindow.location.href;
-        blocked = !href || (href === 'about:blank' && url !== 'about:blank');
-      } catch (e) {
-        // cross-origin throw on .location access is normal for a page that
-        // DID load; only treat it as blocked if combined with no load event
-        blocked = !loaded;
-      }
-      if (blocked && url !== 'about:blank') {
-        showFrameFailure(url);
-      }
-    }, FRAME_LOAD_TIMEOUT_MS);
-
+  // Content is its own CEF browser now, composited by Rust below the chrome
+  // rows — not the <iframe id=view> in index.html (dead markup, left alone).
+  // There is no iframe to fail to load, so the old X-Frame-Options / CSP
+  // frame-ancestors "refused to load" heuristic no longer applies and has
+  // been removed rather than left inert. Real page title/load-progress, once
+  // Rust publishes them, arrive via the window.__NAV STATE channel handled
+  // in applyNavState() below; until then title/progress are best-effort from
+  // the URL alone.
+  // ---------------------------------------------------------------------
+  function loadUrlIntoBrowser(tab, url) {
     if (url === 'about:blank') {
-      dom.view.src = 'about:blank';
+      sendToRust({ op: 'navigate', url: 'about:blank' });
+      updateStatusUrl();
       return;
     }
-    dom.view.src = url;
+    sendToRust({ op: 'navigate', url });
     updateStatusUrl();
   }
 
-  function showFrameFailure(url) {
-    if (!dom.content) return;
-    let box = dom.content.querySelector('.frame-refused');
-    if (!box) {
-      box = document.createElement('div');
-      box.className = 'frame-refused';
-      box.style.cssText =
-        'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;' +
-        'background:#1b1e20;color:#eff0f1;font-family:sans-serif;z-index:5;';
-      dom.content.style.position = dom.content.style.position || 'relative';
-      dom.content.appendChild(box);
-    }
-    box.innerHTML =
-      '<div style="max-width:32em;text-align:center;padding:2em;">' +
-      '<p style="font-size:1.1em;">This site refused to load inside the browser view.</p>' +
-      '<p style="opacity:.8;font-size:.9em;">It likely sends <code>X-Frame-Options</code> or a ' +
-      '<code>Content-Security-Policy: frame-ancestors</code> header that blocks embedding.</p>' +
-      '<button id="frame-open-external" style="margin-top:1em;padding:.5em 1em;">Open in a real window</button>' +
-      '</div>';
-    const btn = box.querySelector('#frame-open-external');
-    if (btn) {
-      btn.addEventListener('click', () => {
-        window.open(url, '_blank');
-      });
-    }
-    setStatus('Blocked by site (frame-ancestors): ' + url);
-  }
-
-  function clearFrameFailure() {
-    if (!dom.content) return;
-    const box = dom.content.querySelector('.frame-refused');
-    if (box) box.remove();
+  // window.__NAV (published by Rust via the STATE channel in state.js, see
+  // boot()) may report { url, title, loading, can_back, can_forward }. It
+  // may never arrive — every field access here is guarded.
+  function applyNavState(nav) {
+    if (!nav || typeof nav !== 'object') return;
+    const t = currentTab();
+    if (!t) return;
+    if (nav.url) { t.url = nav.url; }
+    if (nav.title && !t.label) { t.title = nav.title; }
+    renderTabbars();
+    updateStatusUrl();
+    setProgress(nav.loading ? 50 : 0);
   }
 
   function setProgress(pct) {
@@ -577,9 +521,9 @@
     if (dom.statusMode) dom.statusMode.textContent = next;
     if (dom.statusbar) {
       dom.statusbar.classList.toggle('mode-insert', next === 'insert');
-      dom.statusbar.classList.toggle('mode-command', next === 'command');
+      dom.statusbar.classList.toggle('mode-command', next === 'command' || next === 'find');
     }
-    if (next === 'command') {
+    if (next === 'command' || next === 'find') {
       if (dom.cmdline) {
         dom.cmdline.classList.remove('hidden');
         dom.cmdline.focus();
@@ -617,12 +561,155 @@
       }
       if (e.key === 'Enter') {
         e.preventDefault();
+        if (mode === 'find') {
+          const raw = dom.cmdline.value;
+          const text = raw.slice(1); // drop the leading '/' or '?'
+          dom.cmdline.value = '';
+          setMode('normal');
+          if (text) {
+            findActive = true;
+            findTerm = text;
+            sendToRust({ op: 'find', text });
+            updateFindStatus();
+          }
+          return;
+        }
         const text = dom.cmdline.value.replace(/^:/, '');
         dom.cmdline.value = '';
         setMode('normal');
         runCommand(text);
       }
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // FIND (in-page search) — '/' and '?' reuse #cmdline with a prefix char;
+  // Enter sends {op:'find'}, n/N send find-next/find-prev, Escape cancels.
+  // ---------------------------------------------------------------------
+  let findActive = false;
+  let findTerm = '';
+
+  function enterFindMode(prefix) {
+    setMode('find');
+    if (dom.cmdline) {
+      dom.cmdline.value = prefix;
+      dom.cmdline.selectionStart = dom.cmdline.selectionEnd = dom.cmdline.value.length;
+    }
+  }
+
+  function cancelFind() {
+    findActive = false;
+    findTerm = '';
+    sendToRust({ op: 'find-cancel' });
+    updateFindStatus();
+  }
+
+  function updateFindStatus() {
+    if (!dom.statusbar) return;
+    let el = dom.statusbar.querySelector('.status-find');
+    if (!findActive) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement('span');
+      el.className = 'status-find';
+      dom.statusbar.appendChild(el);
+    }
+    el.textContent = '/' + findTerm;
+  }
+
+  // ---------------------------------------------------------------------
+  // LINK HINTS ('f' / 'F') — the shell cannot see the content browser's DOM,
+  // so hints are done entirely by injecting JS into it via {op:'js'}. The
+  // injected script overlays a labelled badge on every clickable element and
+  // exposes window.__hintPick(label) for the shell to call once the user has
+  // typed a full 2-letter label.
+  //
+  // ponytail: hints are injected JS running in the content browser's own top
+  // document — they cannot see inside cross-origin sub-frames (e.g. a login
+  // widget or ad served from another origin), so elements inside those never
+  // get a badge. That is a ceiling of the injected-JS approach, not a bug.
+  // ---------------------------------------------------------------------
+  let hintBuffer = '';
+
+  function buildHintScript(action) {
+    // action is one of 'click' | 'newtab' — a fixed enum, never interpolated
+    // from anything untrusted.
+    return '(function(){' +
+      'var ALPHA="abcdefghijklmnopqrstuvwxyz";' +
+      'function label(i){return ALPHA[Math.floor(i/26)%26]+ALPHA[i%26];}' +
+      'if (window.__hintCleanup) window.__hintCleanup();' +
+      'var els = Array.prototype.slice.call(document.querySelectorAll(' +
+        '"a[href],button,input,[onclick],[role=button]"));' +
+      'var overlay = document.createElement("div");' +
+      'overlay.id = "__shell_hints__";' +
+      'overlay.style.cssText = "position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647;";' +
+      'document.documentElement.appendChild(overlay);' +
+      'var map = {};' +
+      'els.forEach(function(el, i){' +
+        'if (i > 675) return;' +
+        'var r = el.getBoundingClientRect();' +
+        'if (r.width === 0 && r.height === 0) return;' +
+        'var lab = label(i);' +
+        'map[lab] = el;' +
+        'var badge = document.createElement("div");' +
+        'badge.textContent = lab;' +
+        'badge.style.cssText = "position:fixed;left:" + Math.max(0, r.left) + "px;top:" + ' +
+          'Math.max(0, r.top) + "px;background:#e5c07b;color:#1b1e20;' +
+          'font:bold 11px monospace;padding:1px 3px;border-radius:2px;' +
+          'z-index:2147483647;pointer-events:none;box-shadow:0 0 0 1px #1b1e20;";' +
+        'overlay.appendChild(badge);' +
+      '});' +
+      'window.__hintPick = function(lab){' +
+        'var el = map[String(lab).toLowerCase()];' +
+        'if (!el) return false;' +
+        'try {' +
+          (action === 'newtab'
+            ? 'window.open(el.href || el.getAttribute("href") || "", "_blank");'
+            : 'el.click();') +
+        '} catch (e) {}' +
+        'window.__hintCleanup();' +
+        'return true;' +
+      '};' +
+      'window.__hintCleanup = function(){' +
+        'var o = document.getElementById("__shell_hints__");' +
+        'if (o) o.remove();' +
+        'delete window.__hintPick;' +
+        'delete window.__hintCleanup;' +
+      '};' +
+    '})();';
+  }
+
+  function startHints(action) {
+    hintBuffer = '';
+    setMode('hint');
+    setStatus('Hints: type 2 letters (Esc to cancel)');
+    sendToRust({ op: 'js', script: buildHintScript(action) });
+  }
+
+  function cancelHints() {
+    hintBuffer = '';
+    setMode('normal');
+    sendToRust({ op: 'js', script: 'window.__hintCleanup && window.__hintCleanup();' });
+  }
+
+  function handleHintKey(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelHints();
+      return;
+    }
+    e.preventDefault();
+    if (!/^[a-zA-Z]$/.test(e.key)) return; // swallow everything else while hinting
+    hintBuffer += e.key.toLowerCase();
+    setStatus('Hint: ' + hintBuffer);
+    if (hintBuffer.length >= 2) {
+      const label = hintBuffer;
+      hintBuffer = '';
+      setMode('normal');
+      sendToRust({ op: 'js', script: 'window.__hintPick && window.__hintPick(' + JSON.stringify(label) + ');' });
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -733,11 +820,12 @@
           goForward();
           break;
         case 'reload':
-          if (dom.view && currentTab()) loadUrlIntoFrame(currentTab(), currentTab().url);
+          sendToRust({ op: 'reload' });
           break;
         case 'stop':
-          if (dom.view) { try { dom.view.contentWindow.stop(); } catch (e) {} }
+          sendToRust({ op: 'stop' });
           setProgress(0);
+          if (findActive) cancelFind();
           break;
         case 'fullscreen':
           if (!document.fullscreenElement) {
@@ -771,7 +859,7 @@
           break;
         }
         case 'devtools':
-          setStatus('devtools: not available inside an iframe-hosted view');
+          setStatus('devtools: no host command for this yet');
           break;
         case 'config-shortcuts':
         case 'config-edit':
@@ -794,6 +882,42 @@
           setStatus('spawn: unavailable in browser-chrome JS (no host bridge): ' + rest.join(' '));
           break;
         }
+
+        // -- qutebrowser built-in keymap (P6) -----------------------------
+        case 'scroll-down':          sendToRust({ op: 'scroll', dx: 0, dy: 40 }); break;
+        case 'scroll-up':            sendToRust({ op: 'scroll', dx: 0, dy: -40 }); break;
+        case 'scroll-left':          sendToRust({ op: 'scroll', dx: -40, dy: 0 }); break;
+        case 'scroll-right':         sendToRust({ op: 'scroll', dx: 40, dy: 0 }); break;
+        case 'scroll-halfpage-down': sendToRust({ op: 'scroll', dx: 0, dy: 300 }); break;
+        case 'scroll-halfpage-up':   sendToRust({ op: 'scroll', dx: 0, dy: -300 }); break;
+        case 'scroll-page-down':     sendToRust({ op: 'scroll', dx: 0, dy: 600 }); break;
+        // top/bottom: a delta large enough that the content browser clamps
+        // it against the real scroll extent, rather than a magic "go to end"
+        // op the wire format doesn't define.
+        case 'scroll-top':           sendToRust({ op: 'scroll', dx: 0, dy: -1e9 }); break;
+        case 'scroll-bottom':        sendToRust({ op: 'scroll', dx: 0, dy: 1e9 }); break;
+
+        case 'find-forward':  enterFindMode('/'); break;
+        case 'find-backward': enterFindMode('?'); break;
+        case 'find-next':     sendToRust({ op: 'find-next' }); break;
+        case 'find-prev':     sendToRust({ op: 'find-prev' }); break;
+        case 'find-cancel':   cancelFind(); break;
+
+        case 'mode-enter': {
+          const target = rest[0];
+          if (target === 'insert') setMode('insert');
+          else if (target === 'caret') {
+            // Stub: enters caret mode and says so — does NOT implement real
+            // text-selection/caret-navigation behaviour.
+            setMode('caret');
+            setStatus('Caret mode (stub — no selection behaviour implemented)');
+          }
+          break;
+        }
+
+        case 'hint-links':     startHints('click'); break;
+        case 'hint-links-tab': startHints('newtab'); break;
+
         default:
           setStatus('Unknown command: ' + name);
       }
@@ -817,6 +941,38 @@
   let pending = '';
   let pendingTimer = null;
 
+  // qutebrowser's built-in normal-mode keymap (P6). Only the subset that maps
+  // onto sendToRust ops or the mode/hint/find machinery below — layered
+  // UNDER the custom KEYBINDINGS so a key already claimed in
+  // keybindings.json (e.g. 'u' -> undo, 'H'/'L' -> back/forward, 'r' ->
+  // reload) always wins. 'd' and 'u' are qute defaults for
+  // scroll-halfpage-down/up; 'u' is skipped here because keybindings.json
+  // already claims it for undo.
+  const DEFAULT_BINDINGS = {
+    j: { cmd: 'scroll-down' },
+    k: { cmd: 'scroll-up' },
+    h: { cmd: 'scroll-left' },
+    l: { cmd: 'scroll-right' },
+    d: { cmd: 'scroll-halfpage-down' },
+    gg: { cmd: 'scroll-top' },
+    G: { cmd: 'scroll-bottom' },
+    '<Ctrl-d>': { cmd: 'scroll-halfpage-down' },
+    '<Ctrl-u>': { cmd: 'scroll-halfpage-up' },
+    '<Space>': { cmd: 'scroll-page-down' },
+    '<PageDown>': { cmd: 'scroll-page-down' },
+    '/': { cmd: 'find-forward' },
+    '?': { cmd: 'find-backward' },
+    n: { cmd: 'find-next' },
+    N: { cmd: 'find-prev' },
+    i: { cmd: 'mode-enter insert' },
+    v: { cmd: 'mode-enter caret' },
+    f: { cmd: 'hint-links' },
+    F: { cmd: 'hint-links-tab' },
+  };
+  // Object.assign applies DEFAULT_BINDINGS first, then KEYBINDINGS on top —
+  // any key present in both ends up with the custom entry, i.e. custom wins.
+  const NORMAL_BINDINGS = Object.assign({}, DEFAULT_BINDINGS, KEYBINDINGS);
+
   function keyToToken(e) {
     // Build the qute-style token for this event: prefer named keys wrapped
     // in <...>, fall back to the literal character for plain keys.
@@ -825,6 +981,7 @@
       ArrowUp: 'Up', ArrowDown: 'Down', F1: 'F1', F2: 'F2', F3: 'F3', F4: 'F4',
       F5: 'F5', F6: 'F6', F7: 'F7', F8: 'F8', F9: 'F9', F10: 'F10', F11: 'F11',
       F12: 'F12', Enter: 'Return', Backspace: 'Backspace', Delete: 'Delete',
+      ' ': 'Space', PageDown: 'PageDown', PageUp: 'PageUp',
     };
     const mods = [];
     if (e.ctrlKey) mods.push('Ctrl');
@@ -857,7 +1014,7 @@
   // Resolve a key token stream against the KEYBINDINGS map. Returns
   // { match: entry } | { prefix: true } | null
   function resolveSequence(seq, bindings) {
-    bindings = bindings || KEYBINDINGS;
+    bindings = bindings || NORMAL_BINDINGS;
     if (Object.prototype.hasOwnProperty.call(bindings, seq)) {
       return { match: bindings[seq] };
     }
@@ -867,12 +1024,16 @@
   }
 
   function handleKeydown(e) {
+    if (mode === 'hint') {
+      handleHintKey(e);
+      return;
+    }
     if (mode !== 'normal') {
-      if (mode === 'insert' && e.key === 'Escape') {
+      if ((mode === 'insert' || mode === 'caret') && e.key === 'Escape') {
         e.preventDefault();
         setMode('normal');
       }
-      return; // never intercept keys while in insert/command mode
+      return; // never intercept keys while in insert/caret/command/find mode
     }
     if (isEditableTarget(document.activeElement)) {
       // focus is in an editable field somewhere in the chrome (not iframe
@@ -955,21 +1116,14 @@
     loadSelected();
 
     if (dom.statusScroll) dom.statusScroll.textContent = '[top]';
-    if (dom.view) {
-      dom.view.addEventListener('load', () => {
-        // best-effort scroll position; cross-origin frames will throw, which
-        // is fine — we just leave the last known value in place.
-        try {
-          const win = dom.view.contentWindow;
-          const doc = win.document;
-          const atTop = doc.documentElement.scrollTop === 0 && doc.body.scrollTop === 0;
-          const max = doc.documentElement.scrollHeight - win.innerHeight;
-          const atBottom = max <= 0 || (doc.documentElement.scrollTop + win.innerHeight) >= doc.documentElement.scrollHeight - 2;
-          if (dom.statusScroll) {
-            dom.statusScroll.textContent = atTop ? '[top]' : atBottom ? '[bot]' : '[---]';
-          }
-        } catch (e) { /* cross-origin: leave as-is */ }
-      });
+
+    // window.__NAV, published by Rust via the STATE poller (state.js), may
+    // report { url, title, loading, can_back, can_forward } for the content
+    // browser. It may never arrive (P1/P2 wiring on the Rust side is
+    // separate work) — guard every access.
+    if (window.STATE && typeof window.STATE.on === 'function') {
+      window.STATE.on('nav', applyNavState);
+      if (typeof window.STATE.get === 'function') applyNavState(window.STATE.get('nav'));
     }
   }
 
@@ -1003,12 +1157,16 @@
     const testBindings = {
       'gD': { cmd: 'open -t qute://downloads' },
       'gI': { cmd: 'open -t qute://history' },
+      'gg': { cmd: 'scroll-top' },
       ',d': { cmd: 'open file:///bookmarks.html' },
       '<Ctrl-p>': { cmd: 'tab-pin' },
+      '<Ctrl-d>': { cmd: 'scroll-halfpage-down' },
       '<Alt-Left>': { cmd: 'back' },
       '<Shift-Tab>': { cmd: 'tab-prev' },
       '<F5>': { cmd: 'reload' },
       't': { cmd: 'cmd-set-text -s :open -t' },
+      '/': { cmd: 'find-forward' },
+      'f': { cmd: 'hint-links' },
     };
 
     // 'g' alone is a known prefix of 'gD'/'gI' -> should report prefix, not match
@@ -1049,6 +1207,37 @@
     r = resolveSequence('Z', testBindings);
     console.assert(r === null, 'demo: unbound key "Z" should resolve to null');
 
+    // -- P6: qutebrowser default keymap parsing --------------------------
+
+    // 'gg' (repeated-key sequence): 'g' alone is still a prefix, 'gg' matches
+    r = resolveSequence('g', testBindings);
+    console.assert(r && r.prefix === true, 'demo: "g" should resolve as a pending prefix (gg)');
+    r = resolveSequence('gg', testBindings);
+    console.assert(r && r.match && r.match.cmd === 'scroll-top',
+      'demo: "gg" should resolve to scroll-top');
+
+    // '<Ctrl-d>' chord (default scroll-halfpage-down binding)
+    r = resolveSequence('<Ctrl-d>', testBindings);
+    console.assert(r && r.match && r.match.cmd === 'scroll-halfpage-down',
+      'demo: "<Ctrl-d>" should resolve to scroll-halfpage-down');
+
+    // '/' find-forward
+    r = resolveSequence('/', testBindings);
+    console.assert(r && r.match && r.match.cmd === 'find-forward',
+      'demo: "/" should resolve to find-forward');
+
+    // 'f' link hints
+    r = resolveSequence('f', testBindings);
+    console.assert(r && r.match && r.match.cmd === 'hint-links',
+      'demo: "f" should resolve to hint-links');
+
+    // custom config wins over the built-in default for a key present in both
+    // (e.g. 'u' -> undo in keybindings.json vs. qute's default scroll-halfpage-up)
+    console.assert(NORMAL_BINDINGS.u && NORMAL_BINDINGS.u.cmd === 'undo',
+      'demo: custom "u" (undo) must win over the DEFAULT_BINDINGS entry');
+    console.assert(DEFAULT_BINDINGS.u === undefined,
+      'demo: DEFAULT_BINDINGS must not define "u" — keybindings.json already claims it');
+
     // keyToToken sanity checks using synthetic event-like objects
     const tokCtrlP = keyToToken({ key: 'p', ctrlKey: true, altKey: false, shiftKey: false });
     console.assert(tokCtrlP === '<Ctrl-p>', 'demo: keyToToken ctrl+p -> <Ctrl-p>, got ' + tokCtrlP);
@@ -1064,6 +1253,9 @@
 
     const tokPlainT = keyToToken({ key: 't', ctrlKey: false, altKey: false, shiftKey: false });
     console.assert(tokPlainT === 't', 'demo: keyToToken plain "t" -> "t", got ' + tokPlainT);
+
+    const tokSpace = keyToToken({ key: ' ', ctrlKey: false, altKey: false, shiftKey: false });
+    console.assert(tokSpace === '<Space>', 'demo: keyToToken " " -> <Space>, got ' + tokSpace);
 
     console.log('[shell] demo() self-checks complete — see console.assert output above for failures');
   };
