@@ -169,7 +169,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cp target/${{ matrix.target }}/release/my-watchdog ${{ matrix.asset }}
+          cp target/${{ matrix.target }}/release/watchdog-d ${{ matrix.asset }}
           gh release view my-watchdog-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
             gh release create my-watchdog-latest \
               --repo "$GITHUB_REPOSITORY" \
