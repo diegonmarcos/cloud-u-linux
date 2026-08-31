@@ -165,20 +165,16 @@ fn proc_protected_slice(pid: i32, protected: &[String]) -> Option<String> {
     None
 }
 
-/// Which slice of the `slices` box a pid is accounted to, without the
-/// ".slice" suffix — "user-1000", "system", "os".
-///
-/// A cgroup path has several .slice components and only one of them is the
-/// answer: /user.slice/user-1000.slice/user@1000.service/app.slice/app-x.scope
-/// yields [user, user-1000, app], and it is the SECOND that the accounting
-/// (and the slices box) is keyed on, not the generic "user" above it or the
-/// "app" grouping below. Second-if-present, else first, reproduces that for
-/// /system.slice/foo.service and /os.slice/... alike.
-fn proc_slice(pid: i32) -> String {
-    proc_slice_and_origin(pid, &[]).0
-}
-
 /// The slice AND where the process came from, from ONE read of the cgroup.
+///
+/// THE SLICE is what the `slices` box accounts the pid to, without the
+/// ".slice" suffix — "user-1000", "system", "os". A cgroup path has several
+/// .slice components and only one is the answer:
+/// /user.slice/user-1000.slice/user@1000.service/app.slice/app-x.scope yields
+/// [user, user-1000, app], and it is the SECOND the accounting is keyed on —
+/// not the generic "user" above it or the "app" grouping below.
+/// Second-if-present, else first, reproduces that for /system.slice/foo.service
+/// and /os.slice/... alike.
 ///
 /// Two questions off one file because this runs for every pid on every tick,
 /// and reading /proc/<pid>/cgroup twice to answer them separately doubles the
