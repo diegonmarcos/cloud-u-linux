@@ -7073,8 +7073,11 @@ impl Dashboard for Monitor {
                     Style::default()
                 };
                 if spine {
+                    // SLICE, ORIGIN, then the name — the spine row mirrors the
+                    // real one, so it loses the pid cell with it and keeps the
+                    // same total width. One cell out of step here shifts every
+                    // column in the tree view.
                     let mut c = vec![
-                        Cell::from(format!("{}", num(p, "pid") as i64)).style(base),
                         Cell::from("").style(base),
                         Cell::from("").style(base),
                         Cell::from(name).style(base),
@@ -7083,7 +7086,6 @@ impl Dashboard for Monitor {
                     return Row::new(c);
                 }
                 Row::new(vec![
-                    Cell::from(format!("{}", num(p, "pid") as i64)).style(base.fg(if sel { Color::White } else { LABEL })),
                     Cell::from(text(p, "slice")).style(base.fg(if sel { Color::White } else { DIM })),
                     // COLOURED BY LAYER, because the value alone is a word and
                     // the question is usually "is this mine, the system's, or a
@@ -7200,7 +7202,6 @@ impl Dashboard for Monitor {
         let table = Table::new(
             trows,
             [
-                Constraint::Length(7),  // PID
                 Constraint::Length(9),  // SLICE
                 Constraint::Length(14), // ORIGIN — container names are long
                 Constraint::Length(8),  // USER
@@ -7222,7 +7223,6 @@ impl Dashboard for Monitor {
             ],
         )
         .header(Row::new(vec![
-            hdr("PID", Sort::Pid),
             hdr("SLICE", Sort::Slice),
             hdr("ORIGIN", Sort::Origin),
             hdr("USER", Sort::User),
@@ -7347,7 +7347,7 @@ mod tests {
         // that SORT_ORDER reads left to right the way the header does.
         let at = |k: Sort| SORT_ORDER.iter().position(|x| *x == k).expect("column is sortable");
         let header_order = [
-            Sort::Pid, Sort::Slice, Sort::User, Sort::Name, Sort::Cpu,
+            Sort::Slice, Sort::Origin, Sort::User, Sort::Name, Sort::Cpu,
             Sort::C10s, Sort::C60s, Sort::Mem, Sort::M10s, Sort::M60s,
             Sort::Pss, Sort::Net, Sort::Disk, Sort::Runq, Sort::Majflt,
         ];

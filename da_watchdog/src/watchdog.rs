@@ -231,27 +231,57 @@ fn proc_slice_and_origin(pid: i32, containers: &[(String, String)]) -> (String, 
         }
     }
 
-    // ── otherwise, the top-level slice IS the origin ─────────────────────
-    // On this fleet those are os, connectivity, workload and user — the
-    // guard's own slices, the ones it freezes and protects. Naming them per
-    // process is what turns "workload.slice was frozen 986 times" into "these
-    // are the processes that were frozen".
-    let top = path
-        .split('/')
-        .find(|c| c.ends_with(".slice"))
-        .map(|c| c.trim_end_matches(".slice"))
-        .unwrap_or("");
-    let origin = match top {
-        "" => {
-            if path.contains("init.scope") { "init".into() } else { String::new() }
+    // ── otherwise, the LEAF says what started it ─────────────────────────
+    // The top-level slice is the accounting bucket, and SLICE already shows
+    // it — repeating it here was a second column saying the same word twice.
+    // The leaf of the cgroup path is a different fact: the unit or scope that
+    // actually launched the process.
+    //
+    //   app-org.kde.konsole@<id>.service  -> konsole      a desktop app
+    //   plasma-kwin_wayland.service       -> kwin_wayland a session service
+    //   docker.service                    -> docker       a system service
+    //   session-3.scope                   -> login        an interactive login
+    //   init.scope                        -> init
+    //
+    // Trailing ids are stripped because they are per-launch: keeping them
+    // would make every restart of the same app look like a different origin,
+    // and the column would never group.
+    let leaf = path.rsplit('/').next().unwrap_or("");
+    let origin = if let Some(u) = leaf.strip_suffix(".service") {
+        // app-<name>@<id>.service and app-<name>-<id>.scope are how a desktop
+        // launches a .desktop file. The name in the middle is the application;
+        // the rest is bookkeeping.
+        let u = u.strip_prefix("app-").unwrap_or(u);
+        let u = u.split('@').next().unwrap_or(u);
+        // Reverse-DNS ids (org.kde.konsole) are the application's ID, and the
+        // last component is the part a person recognises.
+        let u = u.rsplit('.').next().unwrap_or(u);
+        if u == "user" || u.is_empty() { "session".to_string() } else { u.to_string() }
+    } else if let Some(sc) = leaf.strip_suffix(".scope") {
+        let sc = sc.strip_prefix("app-").unwrap_or(sc);
+        if sc.starts_with("session-") {
+            "login".into()
+        } else if sc == "init" {
+            "init".into()
+        } else {
+            // app-firefox-<uuid>.scope: drop the trailing id, keep the name.
+            let name = sc.rsplit_once('-').map(|(a, b)| {
+                if b.len() >= 8 && b.chars().all(|c| c.is_ascii_hexdigit() || c.is_ascii_digit()) {
+                    a
+                } else {
+                    sc
+                }
+            }).unwrap_or(sc);
+            name.split('@').next().unwrap_or(name).rsplit('.').next().unwrap_or(name).to_string()
         }
-        "user" => {
-            // user-1000.slice below it is the real accounting unit, and the
-            // login it belongs to is more useful than the word "user".
-            parts.get(1).map(|c| c.trim_end_matches(".slice").to_string()).unwrap_or("user".into())
-        }
-        other => other.to_string(),
+    } else {
+        // No unit and no scope: a bare process under a slice. The slice is the
+        // only thing known about it, and saying so is honest — but it is also
+        // the one case where this column and SLICE agree, which is why it is
+        // the fallback rather than the rule.
+        String::new()
     };
+
     (slice, origin)
 }
 
