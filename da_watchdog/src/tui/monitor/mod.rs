@@ -218,6 +218,13 @@ pub struct Monitor {
     /// cloud-infra and reads /proc/mounts; neither belongs on a 1s render
     /// loop, and neither changes while you are looking at it.
     storage_cache: Vec<storage::Unit>,
+    /// The update sequence: its transcript, and whether one is going.
+    ///
+    /// Lives on the Monitor rather than in the render function because it
+    /// outlives a frame — the whole point is that a switch keeps running
+    /// while the panel keeps redrawing.
+    pub(crate) updater: data::update::Runner,
+
     /// Drive quotas and repository lists, filled by a background thread.
     /// Separate from the cache above because that one is read synchronously
     /// and this one arrives when the network decides to answer.
@@ -643,6 +650,7 @@ impl Monitor {
             files_hidden: false,
             files_cache: TreeCache::default(),
             logs_cache: data::logs::LogsCache::default(),
+            updater: data::update::Runner::default(),
             storage_cache: vec![],
             repos: storage::Extras::default(),
             files_scroll: 0,
@@ -3837,6 +3845,25 @@ impl Dashboard for Monitor {
         // These were handled inside each view's own match, five copies of the
         // same three lines, and a view that forgot one simply had no escape
         // key. One place, every view.
+        // THE UPDATE TRIGGER, scoped as tightly as it can be.
+        //
+        // Only on about/update, only when nothing is already running, and
+        // ahead of the global keys purely so `u` cannot be swallowed by a
+        // view that binds it for something else. Everywhere else `u` keeps
+        // whatever meaning it already had — this is the narrowest condition
+        // that makes the key exist at all.
+        if self.about
+            && self.sub[self.tab] == 2
+            && matches!(k, KeyCode::Char('u'))
+        {
+            self.msg = Some(if self.updater.start() {
+                ("update started — sync, fetch, switch".into(), false)
+            } else {
+                ("an update is already running".into(), true)
+            });
+            return;
+        }
+
         match k {
             // esc opens HELP now, not the menu. The menu moved to `m`: the
             // first thing anyone presses on an unfamiliar TUI is escape, and
@@ -5082,7 +5109,50 @@ impl Dashboard for Monitor {
             // lived only in a 500-line JSON file under /etc. Read from that
             // same file rather than restated here: a rulebook that can
             // disagree with the rules is worse than no rulebook.
-            if self.sub[self.tab] == 1 {
+            // ── about/update ──────────────────────────────────────────────
+            // The one page here with a verb. It prints the exact argv of every
+            // step BEFORE running any of them, because an update that will not
+            // say what it does is one nobody should press.
+            if self.sub[self.tab] == 2 {
+                let mut ul: Vec<Line> = vec![];
+                let running = self.updater.is_running();
+                ul.push(Line::from(Span::styled(
+                    if running { "updating — running now" } else { "update this machine — press u to run" },
+                    Style::default()
+                        .fg(if running { Color::Rgb(255, 200, 90) } else { Color::Rgb(120, 200, 255) })
+                        .add_modifier(Modifier::BOLD),
+                )));
+                ul.push(Line::from(""));
+                for (i, st) in data::update::steps().iter().enumerate() {
+                    ul.push(Line::from(vec![
+                        Span::styled(format!("  {}. {:<7}", i + 1, st.name), Style::default().fg(LABEL)),
+                        Span::styled(st.why.to_string(), Style::default().fg(Color::Gray)),
+                    ]));
+                    ul.push(Line::from(Span::styled(
+                        format!("     $ {}", st.argv.join(" ")),
+                        Style::default().fg(DIM),
+                    )));
+                }
+                let transcript = self.updater.lines();
+                if !transcript.is_empty() {
+                    ul.push(Line::from(""));
+                    // Tail, not head: what a switch is doing NOW is the part
+                    // worth seeing, and the box is shorter than the output.
+                    let room = (ain.height as usize).saturating_sub(ul.len()).max(1);
+                    let skip = transcript.len().saturating_sub(room);
+                    for line in transcript.iter().skip(skip) {
+                        let c = if line.contains(" ! ") || line.starts_with("   !") {
+                            Color::Rgb(255, 120, 90)
+                        } else if line.starts_with("──") {
+                            Color::Rgb(120, 200, 255)
+                        } else {
+                            Color::Gray
+                        };
+                        ul.push(Line::from(Span::styled(line.clone(), Style::default().fg(c))));
+                    }
+                }
+                f.render_widget(Paragraph::new(ul), ain);
+            } else if self.sub[self.tab] == 1 {
                 let mut rl: Vec<Line> = vec![];
                 match data::rules::rules() {
                     Ok(sections) => {
@@ -5287,7 +5357,9 @@ impl Dashboard for Monitor {
             let status = Line::from(Span::styled(
                 match &self.msg {
                     Some((m, _)) => format!(" {m}"),
-                    None => if self.sub[self.tab] == 1 {
+                    None => if self.sub[self.tab] == 2 {
+                        " update · u runs sync → fetch → switch · h keys · esc menu".to_string()
+                    } else if self.sub[self.tab] == 1 {
                         " rules · read from /etc/cloud-data/disk-protection.json · h keys · esc menu".to_string()
                     } else {
                         " about · ↑↓ scroll · h keys · esc menu · ^c quits".to_string()

@@ -2,6 +2,7 @@
 pub(crate) mod logs;
 pub(crate) mod parse;
 pub(crate) mod rules;
+pub(crate) mod update;
 pub(crate) mod sort;
 pub(crate) mod storage;
 pub(crate) mod tree;
