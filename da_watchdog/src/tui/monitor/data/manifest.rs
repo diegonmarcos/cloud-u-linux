@@ -70,14 +70,25 @@ mod tests {
 
         // And every branch must be in the manifest, or the manifest is a
         // partial list — which is worse than none, because it reads complete.
+        // Cut at the OPENING quote and read to the closing one. The first
+        // version indexed past `k === '__` and lost a character, so it hunted
+        // for `_overview` and reported a page that does not exist — the test
+        // caught its own parser before it caught any drift, which is at least
+        // the right order.
         let mut found = vec![];
         let mut rest = TS;
-        while let Some(i) = rest.find("k === '__") {
-            let tail = &rest[i + 7..];
-            if let Some(end) = tail[1..].find('\'') {
-                found.push(&tail[1..1 + end]);
+        while let Some(i) = rest.find("k === '") {
+            let after = &rest[i + 7..];
+            match after.find('\'') {
+                Some(end) => {
+                    let key = &after[..end];
+                    if key.starts_with("__") {
+                        found.push(key);
+                    }
+                    rest = &after[end + 1..];
+                }
+                None => break,
             }
-            rest = &rest[i + 9..];
         }
         for f in found {
             assert!(

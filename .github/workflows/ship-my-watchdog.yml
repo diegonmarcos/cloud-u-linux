@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: write
+  packages: write   # ghcr.io/diegonmarcos/my-watchdog
 
 jobs:
   build:
@@ -173,3 +174,90 @@ jobs:
           tui="$(echo '${{ matrix.asset }}' | sed 's/^my-watchdog-/my-watchdog-tui-/')"
           gh release upload my-watchdog-latest "$tui" \
             --repo "$GITHUB_REPOSITORY" --clobber
+
+  # ── the container ────────────────────────────────────────────────────────
+  # The third way in. The flake covers NixOS, the release binary covers anyone
+  # who can download a file, and this covers a box where the only thing you can
+  # rely on is that it runs containers.
+  #
+  # AFTER the fleet job, not beside it: the image is a wrapper around the static
+  # musl binaries that job publishes, so building in parallel would race the
+  # upload and bake whichever artifact happened to be there.
+  image:
+    needs: fleet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      # GITHUB_TOKEN, NEVER A PAT — and on the first push that is the whole
+      # design rather than a convenience.
+      #
+      # A package created by a personal access token belongs to the ACCOUNT and
+      # is born private, with no API that will flip it: PATCH /user/packages
+      # returns 404 even with write:packages. That is how cloud-watchdog ended
+      # up with a private APK blob in a public repo and no way back except
+      # deleting it.
+      #
+      # A package created by a workflow's GITHUB_TOKEN is created FOR THE
+      # REPOSITORY, and takes the repository's visibility at creation. This
+      # repo is public, so the package is public — but only if it does not
+      # already exist. Visibility is decided ONCE, when the package is first
+      # created; every later push inherits whatever that first one settled on.
+      #
+      # So a package that is already private cannot be fixed by pushing again.
+      # It has to be deleted and recreated by a GITHUB_TOKEN push, which is
+      # exactly what the check below exists to tell you.
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Both architectures, because the fleet is arm and x86 both and an image
+      # that only runs on the machine that built it is not a distribution.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: da_watchdog
+          file: da_watchdog/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/diegonmarcos/my-watchdog:latest
+            ghcr.io/diegonmarcos/my-watchdog:${{ github.sha }}
+          # Links the package to THIS repo. It does not make it public —
+          # GitHub creates every new user-owned package private and no API
+          # flips it, which is why the release binaries stay the channel that
+          # is public by construction. The label is so the package page points
+          # somewhere useful for whoever can see it.
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Machine sampler and TUI panel
+            org.opencontainers.image.licenses=MIT
+
+      # Say out loud what the push produced. Visibility is settled at creation
+      # and silently inherited forever after, so the ONE moment it can be
+      # observed cheaply is right now — and a private image in a public repo is
+      # the thing this project has already had to clean up once.
+      #
+      # A warning, not a failure: the image is built and pushed either way, and
+      # failing the build would delete nothing and fix nothing. What it cannot
+      # do is stay quiet.
+      - name: Report the package's visibility
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="$(gh api user/packages/container/my-watchdog --jq .visibility 2>/dev/null || echo unknown)"
+          echo "ghcr.io/diegonmarcos/my-watchdog is: $v"
+          if [ "$v" = "public" ]; then
+            echo "::notice::my-watchdog package is PUBLIC — it inherited this repo"
+          elif [ "$v" = "unknown" ]; then
+            echo "::warning::could not read the package visibility (GITHUB_TOKEN cannot list user packages) — check it by hand once"
+          else
+            echo "::warning::my-watchdog package is $v in a PUBLIC repo. Visibility is set at CREATION and cannot be patched. Delete the package and let the next GITHUB_TOKEN push recreate it."
+          fi
