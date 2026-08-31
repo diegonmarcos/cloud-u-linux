@@ -541,6 +541,17 @@ pub(crate) fn export_snapshot(
                 .collect(),
         ),
     );
+    envelope.insert(
+        "app_map".into(),
+        Value::Array(
+            super::data::appmap::map()
+                .iter()
+                .map(|n| serde_json::json!({
+                    "depth": n.depth, "key": n.key, "name": n.name, "desc": n.desc,
+                }))
+                .collect(),
+        ),
+    );
     envelope.insert("exported".into(), serde_json::json!(stamp));
     envelope.insert(
         "measured".into(),

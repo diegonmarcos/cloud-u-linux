@@ -645,6 +645,12 @@ pub(crate) fn envelope_json_for(alias: Option<&str>) -> Result<String, String> {
         "tui": wide,
         "tui_narrow": narrow,
         "rules": rules,
+        // The panel's own page tree, generated from the tab table. Carried so
+        // the report and the phone show the same map without either of them
+        // knowing what a Tab is.
+        "app_map": data::appmap::map().iter().map(|n| serde_json::json!({
+            "depth": n.depth, "key": n.key, "name": n.name, "desc": n.desc,
+        })).collect::<Vec<_>>(),
     });
     serde_json::to_string(&env).map_err(|e| e.to_string())
 }
@@ -5185,6 +5191,40 @@ impl Dashboard for Monitor {
             // lived only in a 500-line JSON file under /etc. Read from that
             // same file rather than restated here: a rulebook that can
             // disagree with the rules is worse than no rulebook.
+            // ── about/app-map ─────────────────────────────────────────────
+            // Generated from TABS and MENU, so it cannot describe a page that
+            // does not exist or miss one that does. A hand-written map is a
+            // second list to maintain and the worst kind of documentation:
+            // one that is confidently wrong.
+            if self.sub[self.tab] == 3 {
+                let mut ml: Vec<Line> = vec![];
+                for n in data::appmap::map() {
+                    let indent = "  ".repeat(n.depth as usize);
+                    let (kc, nc) = match n.depth {
+                        0 => (Color::Rgb(120, 200, 255), Color::Rgb(120, 200, 255)),
+                        1 => (Color::Rgb(255, 200, 90), Color::Gray),
+                        _ => (LABEL, Color::Gray),
+                    };
+                    ml.push(Line::from(vec![
+                        Span::styled(
+                            format!("  {indent}{:<4}", n.key),
+                            Style::default().fg(kc).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            format!("{:<16}", n.name),
+                            Style::default().fg(nc).add_modifier(
+                                if n.depth == 0 { Modifier::BOLD } else { Modifier::empty() },
+                            ),
+                        ),
+                        Span::styled(n.desc, Style::default().fg(DIM)),
+                    ]));
+                }
+                let max = (ml.len() as u16).saturating_sub(ain.height);
+                f.render_widget(
+                    Paragraph::new(ml).scroll((self.detail_scroll.min(max), 0)),
+                    ain,
+                );
+            } else
             // ── about/update ──────────────────────────────────────────────
             // The one page here with a verb. It prints the exact argv of every
             // step BEFORE running any of them, because an update that will not
@@ -5484,7 +5524,9 @@ impl Dashboard for Monitor {
             let status = Line::from(Span::styled(
                 match &self.msg {
                     Some((m, _)) => format!(" {m}"),
-                    None => if self.sub[self.tab] == 2 {
+                    None => if self.sub[self.tab] == 3 {
+                        " app-map · ↑↓ scroll · generated from the tab table · h keys".to_string()
+                    } else if self.sub[self.tab] == 2 {
                         " update · u runs sync → fetch → switch · h keys · esc menu".to_string()
                     } else if self.sub[self.tab] == 1 {
                         " rules · read from /etc/cloud-data/disk-protection.json · h keys · esc menu".to_string()

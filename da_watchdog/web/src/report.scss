@@ -668,3 +668,21 @@ button.measure {
 
   &:active { background: #16202e; }
 }
+
+// The app map. Indentation carries the hierarchy, so the depth classes are the
+// whole layout — no nested lists, because the panel sends a flat list with a
+// depth on each node and three renderers should not each rebuild a tree.
+.d0 { margin-top: .7em; .mn { color: #78c8ff; font-weight: 700; } }
+.d1 .mn { color: #b8c0cc; }
+.d1 { padding-left: 1.2em; }
+.d2 { padding-left: 2.6em; }
+
+.mk {
+  display: inline-block;
+  min-width: 3.2em;
+  color: #ffc850;
+  font-weight: 700;
+}
+
+.mn { display: inline-block; min-width: 11em; }
+.md { color: #6b7686; }

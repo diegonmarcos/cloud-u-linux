@@ -950,3 +950,39 @@ button.measure {
 button.measure:active {
   background: #16202e;
 }
+
+.d0 {
+  margin-top: 0.7em;
+}
+.d0 .mn {
+  color: #78c8ff;
+  font-weight: 700;
+}
+
+.d1 .mn {
+  color: #b8c0cc;
+}
+
+.d1 {
+  padding-left: 1.2em;
+}
+
+.d2 {
+  padding-left: 2.6em;
+}
+
+.mk {
+  display: inline-block;
+  min-width: 3.2em;
+  color: #ffc850;
+  font-weight: 700;
+}
+
+.mn {
+  display: inline-block;
+  min-width: 11em;
+}
+
+.md {
+  color: #6b7686;
+}

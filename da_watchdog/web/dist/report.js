@@ -326,7 +326,16 @@
   }
   function show(k) {
     if (k === "__overview") out.innerHTML = overview();
-    else if (k === "__machines") {
+    else if (k === "__appmap") {
+      const ns = E.app_map || [];
+      const b = ns.map((n) => `<div class="r d${n.depth}"><span class="mk">${esc(n.key)}</span><span class="mn">${esc(n.name)}</span><span class="md">${esc(n.desc)}</span></div>`).join("");
+      out.innerHTML = panel(
+        "app map",
+        ns.length ? ns.length + " entries" : null,
+        ns.length ? b : "<pre>this build shipped no map</pre>",
+        true
+      );
+    } else if (k === "__machines") {
       const ms = E.machines || [];
       const host = window.AndroidWatchdog;
       const can = !!(host && host.refresh);

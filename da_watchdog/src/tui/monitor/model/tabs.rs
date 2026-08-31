@@ -143,5 +143,6 @@ pub(crate) const TABS: &[Tab] = &[
         Sub { name: "about", key: None, desc: "hardware, kernel, uptime — what this machine IS", net: None },
         Sub { name: "rules", key: None, desc: "the guards: thresholds, protected slices, what gets frozen or killed", net: None },
         Sub { name: "update", key: None, desc: "sync the declarations, fetch the built binaries, switch — press u", net: None },
+        Sub { name: "app-map", key: None, desc: "every page this panel has, generated from the tab table itself", net: None },
     ] },
 ];
