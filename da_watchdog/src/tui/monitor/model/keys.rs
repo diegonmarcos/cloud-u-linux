@@ -121,6 +121,7 @@ pub(crate) const SORT_KEYS: &[(char, Sort, &str)] = &[
     ('u', Sort::User, "user"),
     ('e', Sort::Net, "network"),
     ('s', Sort::Slice, "slice"),
+    ('O', Sort::Origin, "origin — container, slice or kernel"),
 ];
 
 /// Everything else this dashboard binds: key, section, what it does.

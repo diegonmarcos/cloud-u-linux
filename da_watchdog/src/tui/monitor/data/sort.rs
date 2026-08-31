@@ -27,6 +27,7 @@ pub(crate) enum Sort {
     Name,
     User,
     Slice,
+    Origin,
     Runq,
     /// Major faults per second — who is thrashing.
     Majflt,
@@ -37,6 +38,7 @@ pub(crate) enum Sort {
 pub(crate) const SORT_ORDER: [Sort; 16] = [
     Sort::Pid,
     Sort::Slice,
+    Sort::Origin,
     Sort::User,
     Sort::Name,
     Sort::Cpu,
@@ -72,6 +74,7 @@ impl Sort {
             Sort::Name => "name",
             Sort::User => "user",
             Sort::Slice => "slice",
+            Sort::Origin => "origin",
             Sort::Runq => "runq",
             Sort::Majflt => "majflt",
         }
@@ -175,7 +178,7 @@ pub(crate) fn sort_procs<'a>(snap: &'a Value, sort: Sort, desc: bool, win: Win) 
                 Sort::M10s => avg_or(p, "10s", "mem_pct"),
                 Sort::M60s => avg_or(p, "1m", "mem_pct"),
                 Sort::Pid => num(p, "pid"),
-                Sort::Name | Sort::User | Sort::Slice => 0.0,
+                Sort::Name | Sort::User | Sort::Slice | Sort::Origin => 0.0,
             }
         };
         let ord = match sort {
@@ -183,6 +186,7 @@ pub(crate) fn sort_procs<'a>(snap: &'a Value, sort: Sort, desc: bool, win: Win) 
             Sort::Name => text(a, "name").to_lowercase().cmp(&text(b, "name").to_lowercase()),
             Sort::User => text(a, "user").to_lowercase().cmp(&text(b, "user").to_lowercase()),
             Sort::Slice => text(a, "slice").cmp(&text(b, "slice")),
+            Sort::Origin => text(a, "origin").cmp(&text(b, "origin")),
             _ => key(a).partial_cmp(&key(b)).unwrap_or(std::cmp::Ordering::Equal),
         };
         if desc { ord.reverse() } else { ord }

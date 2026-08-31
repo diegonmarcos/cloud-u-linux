@@ -4241,6 +4241,7 @@ impl Dashboard for Monitor {
                 self.sort = SORT_KEYS.iter().find(|(k, _, _)| *k == c).map(|(_, s, _)| *s).unwrap();
             }
             KeyCode::Char('s') => self.sort = Sort::Slice,
+            KeyCode::Char('O') => self.sort = Sort::Origin,
             KeyCode::Char('i') => self.desc = !self.desc,
             KeyCode::Char('w') => self.win = self.win.next(),
             KeyCode::Char('x') => {
@@ -7084,6 +7085,33 @@ impl Dashboard for Monitor {
                 Row::new(vec![
                     Cell::from(format!("{}", num(p, "pid") as i64)).style(base.fg(if sel { Color::White } else { LABEL })),
                     Cell::from(text(p, "slice")).style(base.fg(if sel { Color::White } else { DIM })),
+                    // COLOURED BY LAYER, because the value alone is a word and
+                    // the question is usually "is this mine, the system's, or a
+                    // container's". The guard's own slices get the colours it
+                    // uses elsewhere: workload is what gets frozen, os and
+                    // connectivity are what never do.
+                    {
+                        let o = text(p, "origin");
+                        let c = if sel {
+                            Color::White
+                        } else if o.starts_with("container:") || !matches!(
+                            o.as_str(),
+                            "" | "kernel" | "init" | "system" | "os" | "connectivity" | "workload"
+                        ) && !o.starts_with("user")
+                        {
+                            // A named container.
+                            Color::Rgb(120, 200, 255)
+                        } else {
+                            match o.as_str() {
+                                "kernel" => Color::Rgb(110, 120, 140),
+                                "workload" => Color::Rgb(255, 200, 90),
+                                "os" | "connectivity" => Color::Rgb(140, 220, 140),
+                                "system" | "init" => Color::Rgb(160, 170, 190),
+                                _ => DIM,
+                            }
+                        };
+                        Cell::from(o).style(base.fg(c))
+                    },
                     Cell::from(text(p, "user")).style(base.fg(if sel { Color::White } else { LABEL })),
                     Cell::from(name).style(base),
                     Cell::from(zp(cpu, 5)).style(base.fg(grad(cpu / 100.0))),
@@ -7174,6 +7202,7 @@ impl Dashboard for Monitor {
             [
                 Constraint::Length(7),  // PID
                 Constraint::Length(9),  // SLICE
+                Constraint::Length(14), // ORIGIN — container names are long
                 Constraint::Length(8),  // USER
                 Constraint::Min(12),    // PROGRAM
                 Constraint::Length(5),  // CPU%
@@ -7195,6 +7224,7 @@ impl Dashboard for Monitor {
         .header(Row::new(vec![
             hdr("PID", Sort::Pid),
             hdr("SLICE", Sort::Slice),
+            hdr("ORIGIN", Sort::Origin),
             hdr("USER", Sort::User),
             hdr("PROGRAM", Sort::Name),
             hdr("CPU%", Sort::Cpu),

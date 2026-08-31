@@ -175,19 +175,119 @@ fn proc_protected_slice(pid: i32, protected: &[String]) -> Option<String> {
 /// "app" grouping below. Second-if-present, else first, reproduces that for
 /// /system.slice/foo.service and /os.slice/... alike.
 fn proc_slice(pid: i32) -> String {
+    proc_slice_and_origin(pid, &[]).0
+}
+
+/// The slice AND where the process came from, from ONE read of the cgroup.
+///
+/// Two questions off one file because this runs for every pid on every tick,
+/// and reading /proc/<pid>/cgroup twice to answer them separately doubles the
+/// cost of the most expensive loop in the sampler for nothing.
+///
+/// ORDER MATTERS, and it is the whole subtlety. A container's processes live
+/// at /system.slice/docker-<id>.scope — INSIDE system.slice — so a system test
+/// that runs first swallows every container into "system" and the column looks
+/// right while being wrong for exactly the processes you most want named.
+/// Container first, always.
+///
+/// `containers` maps a container id prefix to its name, so the cell says
+/// "cloud-mail" rather than "docker": which container is the question, and
+/// "docker" is an answer everyone already knows.
+fn proc_slice_and_origin(pid: i32, containers: &[(String, String)]) -> (String, String) {
     // A kernel thread is in no slice because it is not a service — it is part
     // of the kernel. An empty cell there reads as "we failed to look it up",
     // which is the wrong story: an empty cmdline is how you tell.
     if fs::read(format!("/proc/{pid}/cmdline")).map(|c| c.is_empty()).unwrap_or(false) {
-        return "kernel".into();
+        return ("kernel".into(), "kernel".into());
     }
-    let Ok(s) = fs::read_to_string(format!("/proc/{pid}/cgroup")) else { return String::new() };
-    let Some(path) = s.lines().next().and_then(|l| l.rsplit(':').next()) else { return String::new() };
+    let Ok(s) = fs::read_to_string(format!("/proc/{pid}/cgroup")) else {
+        return (String::new(), String::new());
+    };
+    let Some(path) = s.lines().next().and_then(|l| l.rsplit(':').next()) else {
+        return (String::new(), String::new());
+    };
+
     let parts: Vec<&str> = path.split('/').filter(|c| c.ends_with(".slice")).collect();
-    parts
+    let slice = parts
         .get(1)
         .or(parts.first())
         .map(|c| c.trim_end_matches(".slice").to_string())
+        .unwrap_or_default();
+
+    // ── container, before anything else ──────────────────────────────────
+    // docker-<64 hex>.scope, and podman's libpod-<64 hex>.scope beside it.
+    // Matched on the id PREFIX because docker ps reports 12 characters and the
+    // cgroup carries all 64 — comparing them whole never matches, which is the
+    // kind of bug that shows an empty column and looks like "no containers".
+    for comp in path.split('/') {
+        let id = comp
+            .strip_suffix(".scope")
+            .and_then(|c| c.strip_prefix("docker-").or_else(|| c.strip_prefix("libpod-")));
+        if let Some(id) = id {
+            if let Some((_, name)) = containers.iter().find(|(cid, _)| id.starts_with(cid.as_str()))
+            {
+                return (slice, name.clone());
+            }
+            // Running under a container runtime we can see but cannot name:
+            // still worth saying, because "some container" and "the system"
+            // are very different answers.
+            return (slice, format!("container:{}", &id[..id.len().min(12)]));
+        }
+    }
+
+    // ── otherwise, the top-level slice IS the origin ─────────────────────
+    // On this fleet those are os, connectivity, workload and user — the
+    // guard's own slices, the ones it freezes and protects. Naming them per
+    // process is what turns "workload.slice was frozen 986 times" into "these
+    // are the processes that were frozen".
+    let top = path
+        .split('/')
+        .find(|c| c.ends_with(".slice"))
+        .map(|c| c.trim_end_matches(".slice"))
+        .unwrap_or("");
+    let origin = match top {
+        "" => {
+            if path.contains("init.scope") { "init".into() } else { String::new() }
+        }
+        "user" => {
+            // user-1000.slice below it is the real accounting unit, and the
+            // login it belongs to is more useful than the word "user".
+            parts.get(1).map(|c| c.trim_end_matches(".slice").to_string()).unwrap_or("user".into())
+        }
+        other => other.to_string(),
+    };
+    (slice, origin)
+}
+
+/// Container id → name, for the proc table's origin column.
+///
+/// Its own one-line `docker ps` rather than a field added to the containers
+/// view: that one is built for a different box, at a different cadence, and
+/// threading a map out of it would couple the process table to the shape of
+/// the container table for one string.
+///
+/// {{.ID}} is what makes the mapping possible at all — the cgroup path carries
+/// the id and nothing else, so without it a container's processes can only be
+/// labelled "docker", which is the one thing about them nobody needed to be
+/// told.
+///
+/// Empty when docker is absent, unreachable, or slow — a box with no docker is
+/// the common case on this fleet, and the origin column simply falls back to
+/// the slice.
+fn container_ids() -> Vec<(String, String)> {
+    clean_command("docker")
+        .args(["ps", "--no-trunc", "--format", "{{.ID}}\t{{.Names}}"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|out| {
+            out.lines()
+                .filter_map(|l| l.split_once('\t'))
+                .map(|(id, name)| (id.trim().to_string(), name.trim().to_string()))
+                .filter(|(id, name)| !id.is_empty() && !name.is_empty())
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -1115,6 +1215,7 @@ fn build_proc_table(
         ppid: i32,
         state: String,
         slice: String,
+        origin: String,
         name: String,
         uid: u32,
         rss_kb: f64,
@@ -1140,6 +1241,9 @@ fn build_proc_table(
     let mut rows: Vec<Row> = Vec::new();
     // One inet_diag query for the whole tick, not one per pid.
     let net = read_proc_net();
+    // Same rule, same reason: one `docker ps` for the tick rather than one per
+    // process in a container.
+    let containers = container_ids();
     let Ok(rd) = fs::read_dir("/proc") else { return ("[]".into(), "[]".into(), next) };
 
     for e in rd.flatten() {
@@ -1172,7 +1276,7 @@ fn build_proc_table(
         let ppid: i32 = field("PPid:").parse().unwrap_or(0);
         // "Z" here is what makes a zombie a zombie; the panel groups on it.
         let state = field("State:").to_string();
-        let slice = proc_slice(pid);
+        let (slice, origin) = proc_slice_and_origin(pid, &containers);
 
         let (cpu_ticks, majflt) = read_proc_stat_bits(pid).unwrap_or((0, 0));
         let (read_bytes, write_bytes) = read_proc_io(pid);
@@ -1300,6 +1404,7 @@ fn build_proc_table(
             ppid,
             state,
             slice,
+            origin,
             name: comm,
             uid,
             rss_kb,
@@ -1450,6 +1555,7 @@ fn build_proc_table(
             let safe_name = json_escape(&r.name);
             let safe_state = json_escape(&r.state);
             let safe_slice = json_escape(&r.slice);
+            let safe_origin = json_escape(&r.origin);
             let user = uid_names.get(&r.uid).cloned().unwrap_or_else(|| r.uid.to_string());
             let safe_user = json_escape(&user);
             let (is_protected, reason) = if r.pid == 1 {
@@ -1469,6 +1575,7 @@ fn build_proc_table(
                 .collect();
             format!(
                 "{{\"pid\":{},\"ppid\":{},\"state\":\"{safe_state}\",\"slice\":\"{safe_slice}\",\
+                  \"origin\":\"{safe_origin}\",\
                   \"name\":\"{safe_name}\",\"user\":\"{safe_user}\",\
                   \"cpu_pct\":{:.1},\"mem_rss_bytes\":{:.0},\"mem_pss_bytes\":{},\"mem_pct\":{:.2},\
                   \"read_bytes_per_s\":{:.0},\"write_bytes_per_s\":{:.0},\
