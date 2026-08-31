@@ -16,7 +16,12 @@ const MIB = 1048576, GIB = 1073741824;
 
 interface Machine { alias: string; ip?: string; local?: boolean }
 interface RuleRow { rule: string; trigger: string; effect?: string; fires: number | null }
-interface Rule { head: string; rows: RuleRow[] }
+/** `rows` is the table. `lines` is what my-watchdog shipped before the table
+ *  existed, and it still arrives from any PEER running an older build — the
+ *  machines page fetches a snapshot from that machine's own binary, so the
+ *  envelope version is a property of the machine being measured, not of this
+ *  page. Both are rendered; neither is assumed. */
+interface Rule { head: string; rows?: RuleRow[]; lines?: string[] }
 interface Envelope {
   snapshot?: Snap; report?: string; files?: string[]; tui?: string; tui_narrow?: string;
   machines?: Machine[]; exported?: string; measured?: string;
@@ -491,14 +496,20 @@ function show(k: string): void {
       rs.length
         ? rs.map(r =>
             `<div class="rule"><b>${esc(r.head)}</b>`
-            + '<table class="rules"><thead><tr>'
-            + '<th>rule</th><th>triggers at</th><th class="n">fires</th><th>effect</th>'
-            + '</tr></thead><tbody>'
-            + (r.rows || []).map(x =>
-                `<tr><td>${esc(x.rule)}</td><td>${esc(x.trigger)}</td>`
-                + `<td class="n">${cell(x)}</td><td class="e">${esc(x.effect || '')}</td></tr>`
-              ).join('')
-            + '</tbody></table></div>').join('')
+            + (r.rows && r.rows.length
+                ? '<table class="rules"><thead><tr>'
+                  + '<th>rule</th><th>triggers at</th><th class="n">fires</th><th>effect</th>'
+                  + '</tr></thead><tbody>'
+                  + r.rows.map(x =>
+                      `<tr><td>${esc(x.rule)}</td><td>${esc(x.trigger)}</td>`
+                      + `<td class="n">${cell(x)}</td><td class="e">${esc(x.effect || '')}</td></tr>`
+                    ).join('')
+                  + '</tbody></table>'
+                // Older peer: prose, shown as it was written. Rendering it as
+                // an empty table would report "no rules" for a machine that
+                // has them, which is worse than showing the old shape.
+                : `<pre>${(r.lines || []).map(esc).join('\n')}</pre>`)
+            + '</div>').join('')
         : '<pre>this machine declares no disk-protection policy</pre>',
       true);
   }
