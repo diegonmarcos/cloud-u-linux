@@ -38,7 +38,52 @@ pub(crate) const SECTIONS: &[Section] = &[
     // SYSLOG_IDENTIFIER is "sshd" on both, because it is the program's own
     // name rather than the distribution's opinion about it.
     Section { name: "ssh", desc: "who reached this box, and who was refused", args: &["-t", "sshd"] },
-    Section { name: "watchdog", desc: "the sampler's own journal", args: &["--user", "-u", "my-watchdog.service"] },
+    // EVERY WATCHDOG ON THE BOX, not just this one's sampler.
+    //
+    // This read `--user -u my-watchdog.service`: the sampler's own user unit,
+    // which logs almost nothing because its job is to publish a snapshot, not
+    // to narrate. Meanwhile disk-watchdog wrote 2701 lines in a day declaring
+    // a disk emergency every five minutes, and this tab said "No entries" —
+    // the one page a person opens to ask "is something wrong?" was blind to
+    // the only thing that was.
+    //
+    // A --user filter also cannot see them: the protection watchdogs are
+    // SYSTEM units, so mixing the two scopes in one section would drop
+    // whichever half came second. The system ones are named here and the
+    // sampler is reached by its identifier instead, which works in either
+    // manager's journal.
+    //
+    // RAW MATCHES JOINED BY `+`, and that is load-bearing.
+    //
+    // journalctl OR's repeated matches of the SAME field and AND's across
+    // DIFFERENT ones, so `-t disk-emergency -u disk-watchdog-v2.service` asks
+    // for lines that are both — 234 of them, where the identifier alone has
+    // 2848 and the unit alone 5540. The intersection looks like a working
+    // filter and quietly hides almost everything.
+    //
+    // `+` is the disjunction, but it only joins FIELD=VALUE matches: written
+    // with -t/-u it silently returns nothing at all. So both halves are
+    // spelled as raw fields, the way the `system` section above already does
+    // with _PID=1.
+    //
+    // Identifier where the guard sets one (the alert tags are what a person
+    // greps for), unit otherwise.
+    Section {
+        name: "watchdog",
+        desc: "every guard on this box — disk, freeze, thermal, battery, sampler",
+        args: &[
+            "SYSLOG_IDENTIFIER=disk-emergency",
+            "+", "SYSLOG_IDENTIFIER=disk-watchdog",
+            "+", "SYSLOG_IDENTIFIER=freeze-guard",
+            "+", "SYSLOG_IDENTIFIER=my-watchdog",
+            "+", "_SYSTEMD_UNIT=disk-watchdog-v2.service",
+            "+", "_SYSTEMD_UNIT=freeze-guard.service",
+            "+", "_SYSTEMD_UNIT=freeze-guard-selfcheck.service",
+            "+", "_SYSTEMD_UNIT=battery-watchdog.service",
+            "+", "_SYSTEMD_UNIT=prochot-guard.service",
+            "+", "_SYSTEMD_UNIT=journal-flood-guard.service",
+        ],
+    },
 ];
 
 pub(crate) fn section(name: &str) -> Option<&'static Section> {

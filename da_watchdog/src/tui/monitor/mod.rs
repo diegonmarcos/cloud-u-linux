@@ -575,6 +575,35 @@ pub(crate) fn export_headless() -> Result<String, String> {
     export_snapshot(&s, None, &[], &[], false)
 }
 
+/// What the disk guard would do at this fill level, as a badge.
+///
+/// The storage box drew a coloured meter and nothing else, so a pool at 94%
+/// looked like a pool at 40% — a gradient a person has to interpret, on the
+/// one card where the machine already knows the answer. Meanwhile the disk
+/// watchdog was declaring an emergency every five minutes and the panel beside
+/// it said nothing.
+///
+/// The numbers are the guard's own ladder (emergency.alert_ladder_pct 91/93/94,
+/// emergency.pct 95, no_mercy_pct 99), so the badge says what the machine is
+/// about to DO rather than inventing a second opinion about when to worry.
+/// They are compiled in rather than read from the policy: this runs on every
+/// draw, and a panel that needs a readable /etc file to render a colour is a
+/// panel that goes blank on the fleet members that have no such file.
+fn disk_badge(frac: f64) -> Option<(&'static str, Color)> {
+    let pct = frac * 100.0;
+    if pct >= 99.0 {
+        Some(("NO-MERCY", Color::Rgb(255, 90, 90)))
+    } else if pct >= 95.0 {
+        Some(("EMERGENCY", Color::Rgb(255, 120, 90)))
+    } else if pct >= 93.0 {
+        Some(("PRE-EMERG", Color::Rgb(255, 180, 80)))
+    } else if pct >= 91.0 {
+        Some(("WARN", Color::Rgb(240, 220, 90)))
+    } else {
+        None
+    }
+}
+
 impl Monitor {
     pub fn new() -> Self {
         Monitor {
@@ -742,6 +771,14 @@ impl Monitor {
                 format!(" {} / {}", fmt_g(used), fmt_g(size)),
                 Style::default().fg(Color::Gray),
             ));
+            // What the guard does at this level, said in words. A gradient
+            // alone made 94% look like any other colour on a busy screen.
+            if let Some((word, c)) = disk_badge(used / size) {
+                sp.push(Span::styled(
+                    format!("  {word}"),
+                    Style::default().fg(c).add_modifier(Modifier::BOLD | Modifier::REVERSED),
+                ));
+            }
             l.push(Line::from(sp));
             // Allocated-but-unused chunks are the classic btrfs surprise: the
             // pool can report free space that no allocation can reach until a
@@ -786,9 +823,19 @@ impl Monitor {
                     mount
                 };
                 let quota = if limit > 0.0 {
+                    // A qgroup over its own limit is throttled long before the
+                    // pool is full, and the two disagree loudly here: /home
+                    // read 19% of its quota while the pool it sits on read 96%.
+                    // Both are true and only one of them stops a write.
+                    let q = refer / limit;
+                    let mark = match disk_badge(q) {
+                        Some(("WARN", _)) => "!",
+                        Some(_) => "!!",
+                        None => "",
+                    };
                     Span::styled(
-                        format!("  {:>3.0}% of {}", refer / limit * 100.0, fmt_g(limit)),
-                        Style::default().fg(grad(refer / limit)),
+                        format!("  {:>3.0}%{mark} of {}", q * 100.0, fmt_g(limit)),
+                        Style::default().fg(grad(q)),
                     )
                 } else {
                     Span::styled("     —", Style::default().fg(DIM))
