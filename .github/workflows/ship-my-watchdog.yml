@@ -50,6 +50,17 @@ jobs:
           cargo clippy --release --all-targets --features tui -- -D warnings
           cargo test --release --features tui
 
+      # The lock is a BUILD INPUT, not a build output: the nix flake packages
+      # this crate with cargoLock.lockFile, which needs a committed lock to
+      # point at. Uploaded so it can be committed once; after that `--locked`
+      # below keeps it honest and this step is just a way to recover it.
+      - name: Upload Cargo.lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lock
+          path: da_watchdog/Cargo.lock
+          if-no-files-found: error
+
       - name: Build
         # Desktop gets the daemon AND the panel. The fleet leg below builds
         # neither the tray nor the tui — see its own comment for why that
