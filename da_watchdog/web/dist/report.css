@@ -892,3 +892,17 @@ a:focus-visible, button:focus-visible {
   white-space: pre-wrap;
   color: #b8c0cc;
 }
+
+button.measure {
+  margin-left: 0.6em;
+  padding: 0 0.5em;
+  border: 1px solid #2a3a52;
+  border-radius: 3px;
+  background: transparent;
+  color: #78c8ff;
+  font: inherit;
+  cursor: pointer;
+}
+button.measure:active {
+  background: #16202e;
+}

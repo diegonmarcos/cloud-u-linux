@@ -326,7 +326,27 @@
   }
   function show(k) {
     if (k === "__overview") out.innerHTML = overview();
-    else if (k === "__rules") {
+    else if (k === "__machines") {
+      const ms = E.machines || [];
+      const host = window.AndroidWatchdog;
+      const can = !!(host && host.refresh);
+      let b = `<div class="r hd"><span class="lb">machine</span><span class="v a">addr</span><span class="v t">role</span></div>`;
+      ms.forEach((m) => {
+        const here = !!m.local;
+        const target = m.alias || m.name;
+        const measured = (E.measured || "") === target || here && (E.measured || "local") === "local";
+        b += `<div class="r${measured ? " here" : ""}"><span class="dot">${measured ? "\u25CF" : "\xB7"}</span><span class="lb">${esc(m.name)}</span><span class="v a">${esc(m.ip || m.public || "-")}</span><span class="v t">${esc(here ? "this host" : m.role || m.kind || "")}</span>` + (can && !here ? `<button class="measure" data-alias="${esc(target)}">measure</button>` : "") + `</div>`;
+      });
+      out.innerHTML = panel("machines", ms.length + (can ? " \u2014 tap to measure" : ""), b, true);
+      if (can) {
+        out.querySelectorAll("button.measure").forEach((btn) => {
+          btn.onclick = () => {
+            btn.textContent = "measuring\u2026";
+            host.refresh(btn.dataset.alias);
+          };
+        });
+      }
+    } else if (k === "__rules") {
       const rs = E.rules || [];
       out.innerHTML = panel(
         "rules",

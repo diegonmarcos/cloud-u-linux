@@ -619,3 +619,18 @@ a:focus-visible, button:focus-visible {
     color: #b8c0cc;
   }
 }
+
+// The measure button on the machines page. Deliberately quiet: the row is the
+// information and the verb is an offer, not the point of the line.
+button.measure {
+  margin-left: .6em;
+  padding: 0 .5em;
+  border: 1px solid #2a3a52;
+  border-radius: 3px;
+  background: transparent;
+  color: #78c8ff;
+  font: inherit;
+  cursor: pointer;
+
+  &:active { background: #16202e; }
+}

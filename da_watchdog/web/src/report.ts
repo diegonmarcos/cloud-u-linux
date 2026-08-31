@@ -430,6 +430,46 @@ function table(rows: Dict[]): string {
 
 function show(k: string): void {
   if (k === '__overview') out.innerHTML = overview();
+  else if (k === '__machines') {
+    // EVERY machine, and a way to measure each one.
+    //
+    // The mesh box existed only inside legacyOverview(), which nothing renders
+    // any more now that the overview is the panel's own transcript — so the
+    // fleet was in the envelope and on no page at all.
+    //
+    // "Measure" asks the HOST to do it, because the phone cannot: it reaches
+    // exactly one machine, and every other peer is behind an ssh hop only that
+    // host can make. Where there is no host — the exported report is a static
+    // file — the rows still list the fleet and simply do not offer the verb.
+    const ms: Machine[] = E.machines || [];
+    const host = (window as unknown as Dict).AndroidWatchdog;
+    const can = !!(host && host.refresh);
+    let b = `<div class="r hd"><span class="lb">machine</span>`
+          + `<span class="v a">addr</span><span class="v t">role</span></div>`;
+    ms.forEach(m => {
+      const here = !!m.local;
+      const target = m.alias || m.name;
+      const measured = (E.measured || '') === target || (here && (E.measured || 'local') === 'local');
+      b += `<div class="r${measured ? ' here' : ''}">`
+         + `<span class="dot">${measured ? '●' : '·'}</span>`
+         + `<span class="lb">${esc(m.name)}</span>`
+         + `<span class="v a">${esc(m.ip || m.public || '-')}</span>`
+         + `<span class="v t">${esc(here ? 'this host' : (m.role || m.kind || ''))}</span>`
+         + (can && !here
+             ? `<button class="measure" data-alias="${esc(target)}">measure</button>`
+             : '')
+         + `</div>`;
+    });
+    out.innerHTML = panel('machines', ms.length + (can ? ' — tap to measure' : ''), b, true);
+    if (can) {
+      out.querySelectorAll<HTMLElement>('button.measure').forEach(btn => {
+        btn.onclick = () => {
+          btn.textContent = 'measuring…';
+          host.refresh(btn.dataset.alias);
+        };
+      });
+    }
+  }
   else if (k === '__rules') {
     // The guards freeze and SIGTERM whole slices on thresholds that live in a
     // file only the measured machine can read. It travels in the envelope, so

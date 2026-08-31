@@ -218,7 +218,7 @@ fn fetch_http(ip: &str) -> Option<String> {
 /// The script goes in on STDIN, not as an argument: it is 100 lines of shell
 /// and awk containing every quoting character there is, and threading that
 /// through `ssh <host> '<script>'` is a quoting problem with no good end.
-fn fetch_remote(alias: &str) -> (String, String) {
+pub fn fetch_remote(alias: &str) -> (String, String) {
     fetch_remote_at(alias, None)
 }
 

@@ -543,6 +543,43 @@ pub(crate) fn app_shell() -> String {
 /// it does not draw were most of the bytes. `machines` stays — the app's
 /// machine switcher is built from it.
 pub(crate) fn envelope_json() -> Result<String, String> {
+    envelope_json_for(None)
+}
+
+/// The envelope for one machine — this one, or a mesh peer by alias.
+///
+/// The phone can reach exactly one host: the one it is bound to. Every other
+/// machine in the fleet is behind an ssh hop that only the bound host can
+/// make, so "measure gcp-proxy from my phone" has to mean "ask this host to
+/// measure gcp-proxy" — which is precisely what the panel's own mesh does, and
+/// this is that path with no terminal around it.
+pub(crate) fn envelope_json_for(alias: Option<&str>) -> Result<String, String> {
+    if let Some(a) = alias {
+        // One ssh, synchronously. The panel's mesh sweeps in the background
+        // because it watches every peer at once; a caller asking for ONE
+        // machine wants the answer, not a subscription.
+        let (body, err) = crate::tui::mesh::fetch_remote(a);
+        if !err.is_empty() {
+            return Err(format!("{a}: {err}"));
+        }
+        let s: Value = serde_json::from_str(&body)
+            .map_err(|e| format!("{a}: unparseable snapshot — {e}"))?;
+        if text(&s, "host_info.host").is_empty() {
+            return Err(format!("{a}: answered, but with no usable snapshot"));
+        }
+        // No transcript for a peer: rendering one means driving a Monitor
+        // against a snapshot that is not this machine's, and the panel's own
+        // remote view already does that with the mesh target set. The phone
+        // gets the numbers and draws its own tables from them.
+        let env = serde_json::json!({
+            "snapshot": s,
+            "files": [],
+            "machines": export::fleet_machines(),
+            "exported": "",
+            "measured": a,
+        });
+        return serde_json::to_string(&env).map_err(|e| e.to_string());
+    }
     let p = snapshot_path();
     let mut s = read_json(&p);
     // The panel reads a snapshot it does not collect, so with no sampler

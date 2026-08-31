@@ -57,7 +57,11 @@ pub fn run(args: Vec<String>) -> std::io::Result<()> {
     // other half of `app-shell`: the app ships the interface and asks the
     // machine only for what changes.
     if cmd == "snapshot" {
-        match monitor::envelope_json() {
+        // `snapshot [alias]` — this machine, or a mesh peer. The phone can
+        // reach exactly one host, so measuring any other machine means asking
+        // the bound host to do it.
+        let alias = args.get(1).map(String::as_str).filter(|a| !a.starts_with('-'));
+        match monitor::envelope_json_for(alias) {
             Ok(json) => println!("{json}"),
             Err(e) => {
                 eprintln!("my-watchdog-tui snapshot: {e}");

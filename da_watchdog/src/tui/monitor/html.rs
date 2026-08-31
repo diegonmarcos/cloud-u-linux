@@ -179,6 +179,10 @@ pub(crate) fn page(
     // a nav row that appears only when there is a policy would be missing from
     // the APK's own interface and could never come back: the shell ships in
     // the APK and only the data arrives later.
+    // Unconditional for the same reason rules is: the app shell is generated
+    // against an empty machine, so a row gated on the fleet being present
+    // would be missing from the APK's interface and could never appear.
+    nav.push_str(&row(None, "machines", Some("__machines"), None));
     nav.push_str(&row(None, "rules", Some("__rules"), None));
     nav.push_str(&row(None, "raw envelope", Some("__raw"), None));
     nav.push_str("</ul></div>");

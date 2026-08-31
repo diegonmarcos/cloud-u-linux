@@ -14,6 +14,8 @@
 //   my-watchdog-tui export             the HTML report, no terminal needed
 //   my-watchdog-tui tui [cols] [rows]  one screen as HTML, to stdout
 //   my-watchdog-tui tui --serve        keys on stdin, frames on stdout
+//   my-watchdog-tui snapshot [alias]   the numbers, no UI — this box or a peer
+//   my-watchdog-tui app-shell          the UI, no machine in it
 fn main() -> std::io::Result<()> {
     my_watchdog::tui::run(std::env::args().skip(1).collect())
 }
