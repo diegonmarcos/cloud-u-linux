@@ -15,7 +15,8 @@
 const MIB = 1048576, GIB = 1073741824;
 
 interface Machine { alias: string; ip?: string; local?: boolean }
-interface Rule { head: string; lines: string[] }
+interface RuleRow { rule: string; trigger: string; effect?: string; fires: number | null }
+interface Rule { head: string; rows: RuleRow[] }
 interface Envelope {
   snapshot?: Snap; report?: string; files?: string[]; tui?: string; tui_narrow?: string;
   machines?: Machine[]; exported?: string; measured?: string;
@@ -475,11 +476,29 @@ function show(k: string): void {
     // file only the measured machine can read. It travels in the envelope, so
     // this page shows the same rules the panel does without a second reader.
     const rs = E.rules || [];
-    out.innerHTML = panel('rules', rs.length ? null : 'no disk guard on this machine',
+    // A TABLE, because a threshold with no fire count is a claim and the count
+    // is what the machine actually did. The guard froze workload.slice 986
+    // times in a day while the page it was described on said only "frozen
+    // first".
+    const cell = (r: RuleRow) => {
+      // null is "the journal could not answer", which is not zero — showing 0
+      // would claim a rule never fired on a machine we cannot read.
+      if (r.fires === null || r.fires === undefined) return '<span class="f none">—</span>';
+      if (r.fires === 0) return '<span class="f zero">0</span>';
+      return `<span class="f ${r.fires >= 100 ? 'hot' : 'warm'}">${r.fires}</span>`;
+    };
+    out.innerHTML = panel('rules', rs.length ? 'fires: last 24h' : 'no disk guard on this machine',
       rs.length
         ? rs.map(r =>
             `<div class="rule"><b>${esc(r.head)}</b>`
-            + `<pre>${r.lines.map(esc).join('\n')}</pre></div>`).join('')
+            + '<table class="rules"><thead><tr>'
+            + '<th>rule</th><th>triggers at</th><th class="n">fires</th><th>effect</th>'
+            + '</tr></thead><tbody>'
+            + (r.rows || []).map(x =>
+                `<tr><td>${esc(x.rule)}</td><td>${esc(x.trigger)}</td>`
+                + `<td class="n">${cell(x)}</td><td class="e">${esc(x.effect || '')}</td></tr>`
+              ).join('')
+            + '</tbody></table></div>').join('')
         : '<pre>this machine declares no disk-protection policy</pre>',
       true);
   }

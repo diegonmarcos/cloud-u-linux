@@ -529,7 +529,15 @@ pub(crate) fn export_snapshot(
             super::data::rules::rules()
                 .unwrap_or_default()
                 .into_iter()
-                .map(|r| serde_json::json!({ "head": r.head, "lines": r.lines }))
+                .map(|t| serde_json::json!({
+                    "head": t.head,
+                    "rows": t.rows.iter().map(|r| serde_json::json!({
+                        "rule": r.rule,
+                        "trigger": r.trigger,
+                        "effect": r.effect,
+                        "fires": r.fires,
+                    })).collect::<Vec<_>>(),
+                }))
                 .collect(),
         ),
     );

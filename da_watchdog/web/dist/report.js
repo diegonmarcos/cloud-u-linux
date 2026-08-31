@@ -348,10 +348,17 @@
       }
     } else if (k === "__rules") {
       const rs = E.rules || [];
+      const cell2 = (r) => {
+        if (r.fires === null || r.fires === void 0) return '<span class="f none">\u2014</span>';
+        if (r.fires === 0) return '<span class="f zero">0</span>';
+        return `<span class="f ${r.fires >= 100 ? "hot" : "warm"}">${r.fires}</span>`;
+      };
       out.innerHTML = panel(
         "rules",
-        rs.length ? null : "no disk guard on this machine",
-        rs.length ? rs.map((r) => `<div class="rule"><b>${esc(r.head)}</b><pre>${r.lines.map(esc).join("\n")}</pre></div>`).join("") : "<pre>this machine declares no disk-protection policy</pre>",
+        rs.length ? "fires: last 24h" : "no disk guard on this machine",
+        rs.length ? rs.map((r) => `<div class="rule"><b>${esc(r.head)}</b><table class="rules"><thead><tr><th>rule</th><th>triggers at</th><th class="n">fires</th><th>effect</th></tr></thead><tbody>` + (r.rows || []).map(
+          (x) => `<tr><td>${esc(x.rule)}</td><td>${esc(x.trigger)}</td><td class="n">${cell2(x)}</td><td class="e">${esc(x.effect || "")}</td></tr>`
+        ).join("") + "</tbody></table></div>").join("") : "<pre>this machine declares no disk-protection policy</pre>",
         true
       );
     } else if (k === "__report")

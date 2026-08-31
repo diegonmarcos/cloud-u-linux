@@ -612,12 +612,46 @@ a:focus-visible, button:focus-visible {
 
   pre {
     margin: 0;
-    // The lines are pre-aligned by the machine that wrote them, so they are
-    // shown as written rather than re-laid-out into a table here — two
-    // renderers formatting one policy is how they start disagreeing.
     white-space: pre-wrap;
     color: #b8c0cc;
   }
+}
+
+// The rulebook proper. Columns, because the question a reader has is
+// comparative — which rule fires most, which has never fired — and prose
+// cannot be scanned that way.
+table.rules {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .92em;
+
+  th {
+    text-align: left;
+    color: #6b7686;
+    font-weight: 500;
+    border-bottom: 1px solid #222c3a;
+    padding: .2em .5em .3em 0;
+  }
+
+  td {
+    padding: .18em .5em .18em 0;
+    color: #b8c0cc;
+    vertical-align: top;
+  }
+
+  td.e { color: #6b7686; }
+  th.n, td.n { text-align: right; width: 5em; padding-right: 1em; }
+}
+
+// The count carries the alarm. A rule that fired a thousand times is not the
+// same fact as one that fired twice, and grey-on-grey hides exactly that.
+.f {
+  font-weight: 700;
+
+  &.hot  { color: #ff785a; }
+  &.warm { color: #ffc850; }
+  &.zero { color: #4a5262; font-weight: 400; }
+  &.none { color: #3a4250; font-weight: 400; }
 }
 
 // The measure button on the machines page. Deliberately quiet: the row is the

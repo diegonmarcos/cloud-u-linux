@@ -620,7 +620,20 @@ pub(crate) fn envelope_json_for(alias: Option<&str>) -> Result<String, String> {
     let rules: Vec<serde_json::Value> = data::rules::rules()
         .unwrap_or_default()
         .into_iter()
-        .map(|r| serde_json::json!({ "head": r.head, "lines": r.lines }))
+        .map(|t| {
+            serde_json::json!({
+                "head": t.head,
+                "rows": t.rows.iter().map(|r| serde_json::json!({
+                    "rule": r.rule,
+                    "trigger": r.trigger,
+                    "effect": r.effect,
+                    // null, not 0, where the journal could not answer — the
+                    // renderer must be able to tell "never fired" from
+                    // "cannot know".
+                    "fires": r.fires,
+                })).collect::<Vec<_>>(),
+            })
+        })
         .collect();
 
     let env = serde_json::json!({
@@ -5218,19 +5231,70 @@ impl Dashboard for Monitor {
             } else if self.sub[self.tab] == 1 {
                 let mut rl: Vec<Line> = vec![];
                 match data::rules::rules() {
-                    Ok(sections) => {
-                        for r in sections {
+                    Ok(tables) => {
+                        // Widths from the DATA, not guessed: the mount column
+                        // is a path and the trigger a sentence, and a fixed
+                        // width truncates one machine's policy while padding
+                        // another's.
+                        let rw = tables
+                            .iter()
+                            .flat_map(|t| t.rows.iter())
+                            .map(|r| r.rule.chars().count())
+                            .max()
+                            .unwrap_or(10)
+                            .clamp(10, 30);
+                        let tw = tables
+                            .iter()
+                            .flat_map(|t| t.rows.iter())
+                            .map(|r| r.trigger.chars().count())
+                            .max()
+                            .unwrap_or(20)
+                            .clamp(14, 40);
+                        for t in tables {
                             rl.push(Line::from(Span::styled(
-                                r.head,
+                                t.head,
                                 Style::default()
                                     .fg(Color::Rgb(120, 200, 255))
                                     .add_modifier(Modifier::BOLD),
                             )));
-                            for line in r.lines {
-                                rl.push(Line::from(Span::styled(
-                                    format!("  {line}"),
-                                    Style::default().fg(Color::Gray),
-                                )));
+                            rl.push(Line::from(Span::styled(
+                                format!(
+                                    "  {:<rw$}  {:<tw$}  {:>7}  {}",
+                                    "rule", "triggers at", "fires", "effect"
+                                ),
+                                Style::default().fg(DIM),
+                            )));
+                            for r in t.rows {
+                                // A count with no journal behind it is NOT
+                                // zero, and showing 0 would claim the rule has
+                                // never fired on a machine we simply cannot
+                                // read.
+                                let (n, c) = match r.fires {
+                                    None => ("  —".to_string(), DIM),
+                                    Some(0) => ("0".to_string(), DIM),
+                                    Some(k) if k >= 100 => {
+                                        (k.to_string(), Color::Rgb(255, 120, 90))
+                                    }
+                                    Some(k) => (k.to_string(), Color::Rgb(255, 200, 90)),
+                                };
+                                rl.push(Line::from(vec![
+                                    Span::styled(
+                                        format!("  {:<rw$}", r.rule),
+                                        Style::default().fg(Color::Gray),
+                                    ),
+                                    Span::styled(
+                                        format!("  {:<tw$}", r.trigger),
+                                        Style::default().fg(LABEL),
+                                    ),
+                                    Span::styled(
+                                        format!("  {n:>7}"),
+                                        Style::default().fg(c).add_modifier(Modifier::BOLD),
+                                    ),
+                                    Span::styled(
+                                        format!("  {}", r.effect),
+                                        Style::default().fg(DIM),
+                                    ),
+                                ]));
                             }
                             rl.push(Line::from(""));
                         }
