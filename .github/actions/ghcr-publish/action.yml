@@ -1,0 +1,163 @@
+name: Publish a container to GHCR
+description: >
+  Build and push a multi-arch image, with the visibility trap closed on both
+  sides of the push. Use this instead of docker/login-action + build-push-action
+  directly — the guard is the point, and a guard you have to remember to add is
+  one that will be forgotten.
+
+# THE TRAP THIS EXISTS TO CLOSE
+#
+# A GHCR package's visibility is decided ONCE, when the package is first
+# created, and silently inherited by every push afterwards. Nothing warns you.
+# A private image in a public repo looks completely healthy from the inside:
+# the build is green, the digest is right, the push succeeded. It is only wrong
+# from the outside, where someone tries to pull it and cannot.
+#
+# Two ways to get it wrong, and they fail differently:
+#
+#   created by a PERSONAL ACCESS TOKEN  -> owned by the ACCOUNT, born private,
+#     and PATCH /user/packages returns 404 even with write:packages. There is
+#     no API that fixes it. cloud-u-android hit this with its APK blobs and the
+#     only way out was to stop publishing to GHCR entirely.
+#
+#   created by GITHUB_TOKEN             -> created FOR THE REPOSITORY and takes
+#     the repository's visibility at creation. A public repo gives a public
+#     package. This is the one you want, and it only works on the FIRST push.
+#
+# So this action takes a token it expects to be GITHUB_TOKEN, checks before the
+# push whether an existing package is already publicly pullable, and checks
+# again afterwards. It fails on a private package in a public repo, because the
+# remediation is destructive (delete the package so the next push recreates it)
+# and that is a decision a person must make knowingly rather than discover
+# months later.
+
+inputs:
+  image:
+    description: Image name under the namespace, e.g. my-watchdog
+    required: true
+  namespace:
+    description: GHCR namespace (the account or org)
+    required: true
+  context:
+    description: Build context directory
+    required: true
+  file:
+    description: Path to the Dockerfile
+    required: true
+  platforms:
+    description: Comma-separated build platforms
+    required: false
+    default: linux/amd64,linux/arm64
+  tags:
+    description: Newline-separated full tags to push
+    required: true
+  labels:
+    description: Newline-separated OCI labels
+    required: false
+    default: ""
+  token:
+    description: >
+      MUST be secrets.GITHUB_TOKEN. A PAT creates an account-owned package that
+      is private forever — see the note above.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # ── before the push ──────────────────────────────────────────────────
+    # Anonymously, on purpose. "Can a stranger pull this" is the actual
+    # question, and it is the one an authenticated check cannot answer: with a
+    # token that can read the package, a private image looks exactly like a
+    # public one. GHCR hands out an anonymous pull token for public packages
+    # and refuses for private ones, so the token request IS the visibility
+    # test — no API scope needed, and it works the same for a user or an org.
+    - name: Visibility before the push
+      id: before
+      shell: bash
+      run: |
+        ns='${{ inputs.namespace }}'; img='${{ inputs.image }}'
+        tok="$(curl -fsS "https://ghcr.io/token?scope=repository:${ns}/${img}:pull" 2>/dev/null \
+               | sed -n 's/.*"token":"\([^"]*\)".*/\1/p' || true)"
+        state=absent
+        if [ -n "$tok" ]; then
+          code="$(curl -s -o /dev/null -w '%{http_code}' \
+                   -H "Authorization: Bearer $tok" \
+                   -H 'Accept: application/vnd.oci.image.index.v1+json' \
+                   "https://ghcr.io/v2/${ns}/${img}/manifests/latest" || true)"
+          case "$code" in
+            200) state=public ;;
+            401|403) state=private ;;
+            404) state=absent ;;
+            *) state="unknown($code)" ;;
+          esac
+        else
+          state=private-or-absent
+        fi
+        echo "state=$state" >> "$GITHUB_OUTPUT"
+        echo "before the push, ghcr.io/${ns}/${img} is: $state"
+
+    # A package that already exists and is not publicly pullable cannot be
+    # repaired by this push, so stopping here is the honest thing: the build
+    # would otherwise go green and change nothing about the problem.
+    - name: Refuse to push into a private package
+      if: steps.before.outputs.state == 'private'
+      shell: bash
+      run: |
+        cat >&2 <<'MSG'
+        ghcr.io/${{ inputs.namespace }}/${{ inputs.image }} already exists and is PRIVATE.
+
+        Visibility is set when a package is CREATED and cannot be patched — the
+        API returns 404 for it. Pushing again inherits the private setting, so
+        this build would succeed and fix nothing.
+
+        To fix, once, deliberately:
+          gh api -X DELETE user/packages/container/${{ inputs.image }}
+        then re-run this workflow. The next GITHUB_TOKEN push recreates the
+        package for this repository and it inherits the repository's visibility.
+        MSG
+        exit 1
+
+    - uses: docker/setup-qemu-action@v3
+    - uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.token }}
+
+    - name: Build and push
+      uses: docker/build-push-action@v6
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        platforms: ${{ inputs.platforms }}
+        push: true
+        tags: ${{ inputs.tags }}
+        labels: ${{ inputs.labels }}
+
+    # ── after the push ───────────────────────────────────────────────────
+    # The first push is the one that decides, so this is the only moment the
+    # answer is both new and cheap to read.
+    - name: Visibility after the push
+      shell: bash
+      run: |
+        ns='${{ inputs.namespace }}'; img='${{ inputs.image }}'
+        tok="$(curl -fsS "https://ghcr.io/token?scope=repository:${ns}/${img}:pull" 2>/dev/null \
+               | sed -n 's/.*"token":"\([^"]*\)".*/\1/p' || true)"
+        code=000
+        [ -n "$tok" ] && code="$(curl -s -o /dev/null -w '%{http_code}' \
+             -H "Authorization: Bearer $tok" \
+             -H 'Accept: application/vnd.oci.image.index.v1+json' \
+             "https://ghcr.io/v2/${ns}/${img}/manifests/latest" || true)"
+        if [ "$code" = "200" ]; then
+          echo "::notice::ghcr.io/${ns}/${img} is PUBLIC — anyone can docker pull it"
+          exit 0
+        fi
+        # Public repo + package nobody can pull = the exact failure this action
+        # exists for, and it is worth a red build the first time rather than a
+        # silent one forever.
+        echo "::error::ghcr.io/${ns}/${img} is NOT publicly pullable (HTTP ${code}) after a GITHUB_TOKEN push."
+        echo "::error::Delete it — gh api -X DELETE user/packages/container/${img} — and re-run, so the package is recreated for this repository."
+        exit 1
