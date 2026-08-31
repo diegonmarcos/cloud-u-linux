@@ -7,8 +7,20 @@ edition = "2021"
 name = "my_watchdog"
 path = "src/lib.rs"
 
+# NAMED FOR WHAT SHOWS UP IN ps.
+#
+# The panel builds its process table from /proc/<pid>/cmdline, so a process is
+# called whatever its FILE is called — argv is the truth and comm is only right
+# for kernel threads. Both halves were "my-watchdog" and "my-watchdog-tui",
+# which share a prefix, truncate alike, and read as one thing running twice.
+# Worse on Android, where they ship as libmywatchdog.so and libmywatchdogtui.so
+# and comm cuts both at 15 characters.
+#
+# -d for the daemon, the convention every other resident process on the box
+# already follows. Distinct at a glance from the KERNEL's own watchdogd thread,
+# which is also in that table and is not ours.
 [[bin]]
-name = "my-watchdog"
+name = "watchdog-d"
 path = "src/main.rs"
 
 # The panel, as its own binary and only when asked for. Two binaries rather
@@ -16,7 +28,7 @@ path = "src/main.rs"
 # fleet and most of them are headless: linking ratatui into the thing that has
 # to stay small, to carry a UI no server will draw, is the wrong trade.
 [[bin]]
-name = "my-watchdog-tui"
+name = "watchdog-tui"
 path = "src/bin/my-watchdog-tui.rs"
 required-features = ["tui"]
 

@@ -81,11 +81,22 @@ jobs:
           # report and carried inside the APK. Emitted here rather than
           # fetched at runtime: an app that downloads its own interface
           # before it can draw shows nothing on a train.
-          ./target/release/my-watchdog-tui app-shell > watchdog-app.html
+          ./target/release/watchdog-tui app-shell > watchdog-app.html
           gh release upload my-watchdog-latest \
-            target/release/my-watchdog \
-            target/release/my-watchdog-tui \
+            target/release/watchdog-d \
+            target/release/watchdog-tui \
             watchdog-app.html \
+            --repo "$GITHUB_REPOSITORY" --clobber
+          # THE OLD NAMES, FOR ONE CYCLE. Renaming the binaries renames the
+          # assets, and installers already deployed on the fleet ask for
+          # my-watchdog / my-watchdog-tui by name — they would fetch a 404 and
+          # report it as "no release", which is indistinguishable from CI being
+          # down. Publishing both means the rename lands on a machine when that
+          # machine next updates, in either order, instead of all at once.
+          # Delete these two lines once nothing asks for them.
+          cp target/release/watchdog-d my-watchdog
+          cp target/release/watchdog-tui my-watchdog-tui
+          gh release upload my-watchdog-latest my-watchdog my-watchdog-tui \
             --repo "$GITHUB_REPOSITORY" --clobber
 
   # The fleet build. Static musl, no tray: a headless VM has no tray to put an
@@ -140,17 +151,17 @@ jobs:
       - name: Build the panel
         run: |
           cargo build --release --no-default-features --features tui \
-            --bin my-watchdog-tui --target ${{ matrix.target }}
+            --bin watchdog-tui --target ${{ matrix.target }}
           # Named off matrix.asset so the pair always agrees: my-watchdog-X and
           # my-watchdog-tui-X are the same build for the same architecture.
-          cp "target/${{ matrix.target }}/release/my-watchdog-tui" \
+          cp "target/${{ matrix.target }}/release/watchdog-tui" \
              "$(echo '${{ matrix.asset }}' | sed 's/^my-watchdog-/my-watchdog-tui-/')"
 
       - name: Confirm it is actually static
         # A dynamically linked "static" build fails on the first peer with a
         # different libc, and it fails there rather than here — so check here.
         run: |
-          f="target/${{ matrix.target }}/release/my-watchdog"
+          f="target/${{ matrix.target }}/release/watchdog-d"
           file "$f"
           file "$f" | grep -q 'static' || { echo "NOT static — it would not run on the fleet" >&2; exit 1; }
 

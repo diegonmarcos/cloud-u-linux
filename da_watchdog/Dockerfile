@@ -25,16 +25,16 @@ RUN set -eux; \
       arm64) asset=my-watchdog-aarch64 ;; \
       *) echo "no static build published for $TARGETARCH" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL -o /my-watchdog \
+    curl -fsSL -o /watchdog-d \
       "https://github.com/diegonmarcos/cloud-u-linux/releases/download/${RELEASE}/${asset}"; \
-    chmod +x /my-watchdog; \
-    /my-watchdog --help >/dev/null 2>&1 || true
+    chmod +x /watchdog-d; \
+    /watchdog-d --help >/dev/null 2>&1 || true
 
 FROM scratch
-COPY --from=fetch /my-watchdog /my-watchdog
+COPY --from=fetch /watchdog-d /watchdog-d
 
 # The sampler, not the panel: a container has no terminal to draw in, and what
 # a container is FOR here is publishing a snapshot the panel elsewhere reads.
 # --no-tray because there is no session bus in here to put an icon on.
-ENTRYPOINT ["/my-watchdog"]
+ENTRYPOINT ["/watchdog-d"]
 CMD ["--no-tray"]

@@ -101,8 +101,8 @@ pub(crate) fn steps(way: Way) -> Vec<Step> {
                 argv: vec![
                     "gh".into(), "release".into(), "download".into(), "my-watchdog-latest".into(),
                     "--repo".into(), "diegonmarcos/cloud-u-linux".into(),
-                    "--pattern".into(), "my-watchdog".into(),
-                    "--pattern".into(), "my-watchdog-tui".into(),
+                    "--pattern".into(), "watchdog-d".into(),
+                    "--pattern".into(), "watchdog-tui".into(),
                     "--dir".into(), format!("{h}/.cache/my-watchdog-update"),
                     "--clobber".into(),
                 ],
@@ -114,10 +114,14 @@ pub(crate) fn steps(way: Way) -> Vec<Step> {
                 argv: vec![
                     "sh".into(), "-c".into(),
                     format!(
+                        // mv, not cp: the daemon is RUNNING from that path and
+                        // writing to a running binary is ETXTBSY. A rename
+                        // swaps the directory entry and leaves the live process
+                        // on the old inode until it is restarted below.
                         "set -e; d={h}/.cache/my-watchdog-update; \
-                         install -m755 $d/my-watchdog {h}/.local/bin/.my-watchdog.new; \
-                         mv -f {h}/.local/bin/.my-watchdog.new {h}/.local/bin/my-watchdog; \
-                         install -m755 $d/my-watchdog-tui {h}/.local/bin/my-watchdog-tui"
+                         install -m755 $d/watchdog-d {h}/.local/bin/.watchdog-d.new; \
+                         mv -f {h}/.local/bin/.watchdog-d.new {h}/.local/bin/watchdog-d; \
+                         install -m755 $d/watchdog-tui {h}/.local/bin/watchdog-tui"
                     ),
                 ],
                 cwd: None,

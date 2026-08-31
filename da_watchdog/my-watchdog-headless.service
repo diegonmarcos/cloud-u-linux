@@ -8,7 +8,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/my-watchdog --no-tray
+ExecStart=%h/.local/bin/watchdog-d --no-tray
 Restart=always
 RestartSec=3
 Nice=5

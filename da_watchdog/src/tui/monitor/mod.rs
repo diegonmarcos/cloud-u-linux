@@ -488,7 +488,7 @@ pub(crate) fn overview_html() -> Result<(String, String), String> {
 /// ignored once it is older than the sampler's own interval by a wide margin.
 ///
 /// The binary is looked for beside this one under both names it ships as:
-/// `my-watchdog` everywhere, and `libmywatchdog.so` inside an APK, where
+/// `watchdog-d` everywhere, and `libmywatchdog.so` inside an APK, where
 /// nativeLibraryDir is the only directory Android will execute from and the
 /// `.so` suffix is the price of admission.
 fn start_sampler() {
@@ -511,7 +511,11 @@ fn start_sampler() {
 
     let Ok(exe) = std::env::current_exe() else { return };
     let Some(dir) = exe.parent() else { return };
-    for name in ["my-watchdog", "libmywatchdog.so"] {
+    // The old name stays in the list on purpose: a machine that has not
+    // updated yet still has my-watchdog beside the panel, and a panel that
+    // refuses to start the sampler it can see is worse than one that starts a
+    // slightly older sampler.
+    for name in ["watchdog-d", "my-watchdog", "libmywatchdog.so"] {
         let bin = dir.join(name);
         if !bin.is_file() {
             continue;

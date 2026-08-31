@@ -46,7 +46,7 @@
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
 
-          # `tui` is what builds the panel binary at all: my-watchdog-tui
+          # `tui` is what builds the panel binary at all: watchdog-tui
           # declares required-features = ["tui"], so a default build silently
           # produces the daemon alone. The tray is left OUT — ksni links
           # libdbus, and this package must build on a headless fleet member
@@ -65,7 +65,7 @@
             homepage = "https://github.com/diegonmarcos/cloud-u-linux";
             license = licenses.mit;
             platforms = platforms.linux;
-            mainProgram = "my-watchdog-tui";
+            mainProgram = "watchdog-tui";
           };
         };
       in
@@ -79,11 +79,11 @@
         # service unit starts.
         apps.default = {
           type = "app";
-          program = "${crate}/bin/my-watchdog-tui";
+          program = "${crate}/bin/watchdog-tui";
         };
         apps.my-watchdog = {
           type = "app";
-          program = "${crate}/bin/my-watchdog";
+          program = "${crate}/bin/watchdog-d";
         };
 
         devShells.default = pkgs.mkShell {
