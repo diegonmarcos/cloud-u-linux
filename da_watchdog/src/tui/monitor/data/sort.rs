@@ -35,7 +35,7 @@ pub(crate) enum Sort {
 
 /// Left-to-right order of the sortable columns, so ←/→ walks the header the
 /// way glances does rather than jumping around an enum's declaration order.
-pub(crate) const SORT_ORDER: [Sort; 16] = [
+pub(crate) const SORT_ORDER: [Sort; 17] = [
     Sort::Pid,
     Sort::Slice,
     Sort::Origin,
