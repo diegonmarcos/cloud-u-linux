@@ -135,5 +135,12 @@ pub(crate) const TABS: &[Tab] = &[
     Tab { name: "files", key: 'F', desc: "home as four panes, one per level", subs: &[] },
     // 'b', not 'a': the frame owns r and a for refresh/auto and advertises
     // them in its own header, so a view key named 'a' silently never arrives.
-    Tab { name: "about", key: 'b', desc: "what this machine is, not what it is doing", subs: &[] },
+    // Two modes, because "what this machine is" and "what will be done to it"
+    // are different questions and only one of them was answerable here. The
+    // guards freeze and kill whole slices on thresholds nobody could read
+    // without going to /etc — so the rules are a page now, beside the identity.
+    Tab { name: "about", key: 'b', desc: "what this machine is, and the rules it is governed by", subs: &[
+        Sub { name: "about", key: None, desc: "hardware, kernel, uptime — what this machine IS", net: None },
+        Sub { name: "rules", key: None, desc: "the guards: thresholds, protected slices, what gets frozen or killed", net: None },
+    ] },
 ];

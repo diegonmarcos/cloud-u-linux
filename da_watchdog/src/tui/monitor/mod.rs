@@ -5076,6 +5076,47 @@ impl Dashboard for Monitor {
             let ab = self.tabs_box("b back to processes");
             let ain = ab.inner(rows[5]);
             f.render_widget(ab, rows[5]);
+
+            // ── about/rules ───────────────────────────────────────────────
+            // The guards freeze and SIGTERM whole slices on thresholds that
+            // lived only in a 500-line JSON file under /etc. Read from that
+            // same file rather than restated here: a rulebook that can
+            // disagree with the rules is worse than no rulebook.
+            if self.sub[self.tab] == 1 {
+                let mut rl: Vec<Line> = vec![];
+                match data::rules::rules() {
+                    Ok(sections) => {
+                        for r in sections {
+                            rl.push(Line::from(Span::styled(
+                                r.head,
+                                Style::default()
+                                    .fg(Color::Rgb(120, 200, 255))
+                                    .add_modifier(Modifier::BOLD),
+                            )));
+                            for line in r.lines {
+                                rl.push(Line::from(Span::styled(
+                                    format!("  {line}"),
+                                    Style::default().fg(Color::Gray),
+                                )));
+                            }
+                            rl.push(Line::from(""));
+                        }
+                    }
+                    Err(e) => {
+                        // A machine with no disk guard is normal, not broken.
+                        rl.push(Line::from(Span::styled(
+                            "no disk guard on this machine",
+                            Style::default().fg(Color::Rgb(120, 200, 255)).add_modifier(Modifier::BOLD),
+                        )));
+                        rl.push(Line::from(Span::styled(
+                            format!("  {e}"),
+                            Style::default().fg(DIM),
+                        )));
+                    }
+                }
+                f.render_widget(Paragraph::new(rl), ain);
+            } else {
+
             let hi2 = |k: &str| text(&s, &format!("host_info.{k}"));
             let sect = |t: &str| -> Line<'static> {
                 Line::from(Span::styled(
@@ -5237,10 +5278,20 @@ impl Dashboard for Monitor {
                 Paragraph::new(al).scroll((self.detail_scroll.min(max), 0)),
                 ain,
             );
+            }
+
+            // Shared by both sub-tabs. It used to sit inside the identity
+            // branch, so the rules page rendered and then fell straight
+            // through to the generic path below, which drew another tab over
+            // the top of it.
             let status = Line::from(Span::styled(
                 match &self.msg {
                     Some((m, _)) => format!(" {m}"),
-                    None => " about · ↑↓ scroll · h keys · esc menu · ^c quits".to_string(),
+                    None => if self.sub[self.tab] == 1 {
+                        " rules · read from /etc/cloud-data/disk-protection.json · h keys · esc menu".to_string()
+                    } else {
+                        " about · ↑↓ scroll · h keys · esc menu · ^c quits".to_string()
+                    },
                 },
                 Style::default().fg(LABEL),
             ));
