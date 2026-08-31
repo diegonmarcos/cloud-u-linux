@@ -3934,16 +3934,20 @@ impl Dashboard for Monitor {
         // view that binds it for something else. Everywhere else `u` keeps
         // whatever meaning it already had — this is the narrowest condition
         // that makes the key exist at all.
-        if self.about
-            && self.sub[self.tab] == 2
-            && matches!(k, KeyCode::Char('u'))
-        {
-            self.msg = Some(if self.updater.start() {
-                ("update started — sync, fetch, switch".into(), false)
-            } else {
-                ("an update is already running".into(), true)
-            });
-            return;
+        if self.about && self.sub[self.tab] == 2 {
+            let way = match k {
+                KeyCode::Char('u') => Some(data::update::Way::Install),
+                KeyCode::Char('d') => Some(data::update::Way::Dev),
+                _ => None,
+            };
+            if let Some(w) = way {
+                self.msg = Some(if self.updater.start(w) {
+                    (format!("started: {}", w.title()), false)
+                } else {
+                    ("an update is already running".into(), true)
+                });
+                return;
+            }
         }
 
         match k {
@@ -5232,22 +5236,46 @@ impl Dashboard for Monitor {
             if self.sub[self.tab] == 2 {
                 let mut ul: Vec<Line> = vec![];
                 let running = self.updater.is_running();
-                ul.push(Line::from(Span::styled(
-                    if running { "updating — running now" } else { "update this machine — press u to run" },
-                    Style::default()
-                        .fg(if running { Color::Rgb(255, 200, 90) } else { Color::Rgb(120, 200, 255) })
-                        .add_modifier(Modifier::BOLD),
-                )));
-                ul.push(Line::from(""));
-                for (i, st) in data::update::steps().iter().enumerate() {
-                    ul.push(Line::from(vec![
-                        Span::styled(format!("  {}. {:<7}", i + 1, st.name), Style::default().fg(LABEL)),
-                        Span::styled(st.why.to_string(), Style::default().fg(Color::Gray)),
-                    ]));
+                if running {
                     ul.push(Line::from(Span::styled(
-                        format!("     $ {}", st.argv.join(" ")),
-                        Style::default().fg(DIM),
+                        "running now",
+                        Style::default().fg(Color::Rgb(255, 200, 90)).add_modifier(Modifier::BOLD),
                     )));
+                    ul.push(Line::from(""));
+                }
+                // TWO WAYS, listed side by side, because installing an app and
+                // developing one are not the same act. The first touches only
+                // this app — no system rebuild, which is what the old single
+                // sequence ended in and why a dashboard fix was a generation.
+                for way in [data::update::Way::Install, data::update::Way::Dev] {
+                    ul.push(Line::from(vec![
+                        Span::styled(
+                            format!("{}  ", way.key()),
+                            Style::default()
+                                .fg(Color::Rgb(255, 200, 90))
+                                .add_modifier(Modifier::BOLD | Modifier::REVERSED),
+                        ),
+                        Span::styled(
+                            way.title().to_string(),
+                            Style::default()
+                                .fg(Color::Rgb(120, 200, 255))
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                    ]));
+                    for (i, st) in data::update::steps(way).iter().enumerate() {
+                        ul.push(Line::from(vec![
+                            Span::styled(
+                                format!("  {}. {:<8}", i + 1, st.name),
+                                Style::default().fg(LABEL),
+                            ),
+                            Span::styled(st.why.to_string(), Style::default().fg(Color::Gray)),
+                        ]));
+                        ul.push(Line::from(Span::styled(
+                            format!("     $ {}", st.argv.join(" ")),
+                            Style::default().fg(DIM),
+                        )));
+                    }
+                    ul.push(Line::from(""));
                 }
                 let transcript = self.updater.lines();
                 if !transcript.is_empty() {
@@ -5527,7 +5555,7 @@ impl Dashboard for Monitor {
                     None => if self.sub[self.tab] == 3 {
                         " app-map · ↑↓ scroll · generated from the tab table · h keys".to_string()
                     } else if self.sub[self.tab] == 2 {
-                        " update · u runs sync → fetch → switch · h keys · esc menu".to_string()
+                        " update · u installs the app · d moves the source · h keys · esc menu".to_string()
                     } else if self.sub[self.tab] == 1 {
                         " rules · read from /etc/cloud-data/disk-protection.json · h keys · esc menu".to_string()
                     } else {

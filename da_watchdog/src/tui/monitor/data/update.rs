@@ -32,56 +32,142 @@ pub(crate) struct Step {
     pub(crate) cwd: Option<String>,
 }
 
+/// Which sequence. Two, because installing an app and developing one are not
+/// the same act and never were.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Way {
+    /// Pull the published artifact and run it. Touches nothing but this app.
+    Install,
+    /// Move the source: sync the repos, push, let CI build.
+    Dev,
+}
+
+impl Way {
+    pub(crate) fn title(self) -> &'static str {
+        match self {
+            Way::Install => "install / update — the app only",
+            Way::Dev => "dev — move the source and let CI build",
+        }
+    }
+
+    pub(crate) fn key(self) -> char {
+        match self {
+            Way::Install => 'u',
+            Way::Dev => 'd',
+        }
+    }
+}
+
 fn home() -> String {
     std::env::var("HOME").unwrap_or_else(|_| "/home/diego".into())
 }
 
-/// The three steps, in order, as the machine will run them.
-pub(crate) fn steps() -> Vec<Step> {
+/// Is this a Nix machine? Decides which install route the page offers.
+///
+/// /etc/NIXOS is the file NixOS itself writes and every installer in this repo
+/// already tests for. `nix` being on PATH is not the same question — a Debian
+/// box with the package manager installed still wants the plain binary, since
+/// its systemd unit and its PATH are not managed by a generation.
+fn is_nixos() -> bool {
+    std::path::Path::new("/etc/NIXOS").exists()
+}
+
+/// The steps for one way.
+///
+/// THE INSTALL WAY NEVER TOUCHES THE SYSTEM. It used to end in
+/// `build.sh switch`, which rebuilt NixOS to move a dashboard — so every fix
+/// to this panel was a system generation, and on an 8GB laptop six local
+/// evaluations OOM-froze the desktop. The app is its own artifact now: a flake
+/// to run, or a binary to place. Neither evaluates the machine it lands on.
+pub(crate) fn steps(way: Way) -> Vec<Step> {
     let h = home();
-    let mut v = vec![];
-
-    // 1. The declarations. Both repos, because the switch reads one and this
-    //    panel is built from the other, and updating half of a pair is how a
-    //    box ends up running a config that describes a different machine.
-    for repo in ["cloud", "cloud-u-linux"] {
-        v.push(Step {
-            name: "sync",
-            why: "fast-forward the declarations this machine is built from",
-            argv: vec!["git".into(), "pull".into(), "--ff-only".into()],
-            cwd: Some(format!("{h}/git/{repo}")),
-        });
+    match way {
+        Way::Install if is_nixos() => vec![
+            Step {
+                name: "nix",
+                why: "run the app's own flake — no system eval, no generation",
+                argv: vec![
+                    "nix".into(), "profile".into(), "install".into(),
+                    "--refresh".into(),
+                    "github:diegonmarcos/cloud-u-linux?dir=da_watchdog".into(),
+                ],
+                cwd: None,
+            },
+        ],
+        Way::Install => vec![
+            Step {
+                name: "fetch",
+                why: "the binaries CI built, from the rolling release",
+                argv: vec![
+                    "gh".into(), "release".into(), "download".into(), "my-watchdog-latest".into(),
+                    "--repo".into(), "diegonmarcos/cloud-u-linux".into(),
+                    "--pattern".into(), "my-watchdog".into(),
+                    "--pattern".into(), "my-watchdog-tui".into(),
+                    "--dir".into(), format!("{h}/.cache/my-watchdog-update"),
+                    "--clobber".into(),
+                ],
+                cwd: None,
+            },
+            Step {
+                name: "install",
+                why: "place them on PATH — mv, because a running binary cannot be written to",
+                argv: vec![
+                    "sh".into(), "-c".into(),
+                    format!(
+                        "set -e; d={h}/.cache/my-watchdog-update; \
+                         install -m755 $d/my-watchdog {h}/.local/bin/.my-watchdog.new; \
+                         mv -f {h}/.local/bin/.my-watchdog.new {h}/.local/bin/my-watchdog; \
+                         install -m755 $d/my-watchdog-tui {h}/.local/bin/my-watchdog-tui"
+                    ),
+                ],
+                cwd: None,
+            },
+            Step {
+                name: "restart",
+                why: "the sampler, so it runs the code just installed",
+                argv: vec![
+                    "systemctl".into(), "--user".into(), "restart".into(), "my-watchdog.service".into(),
+                ],
+                cwd: None,
+            },
+        ],
+        Way::Dev => {
+            let mut v = vec![];
+            // Both repos: the declarations and the app are different trees and
+            // updating half a pair is its own class of drift.
+            for repo in ["cloud", "cloud-u-linux"] {
+                v.push(Step {
+                    name: "sync",
+                    why: "fast-forward this checkout",
+                    argv: vec![
+                        "git".into(), "-C".into(), format!("{h}/git/{repo}"),
+                        "pull".into(), "--ff-only".into(),
+                    ],
+                    cwd: None,
+                });
+            }
+            v.push(Step {
+                name: "push",
+                why: "publish local commits so CI can build them",
+                argv: vec![
+                    "git".into(), "-C".into(), format!("{h}/git/cloud-u-linux"),
+                    "push".into(), "origin".into(), "main".into(),
+                ],
+                cwd: None,
+            });
+            v.push(Step {
+                name: "build",
+                why: "wait for CI — the binaries are never compiled on this machine",
+                argv: vec![
+                    "gh".into(), "run".into(), "watch".into(),
+                    "--repo".into(), "diegonmarcos/cloud-u-linux".into(),
+                    "--exit-status".into(),
+                ],
+                cwd: Some(format!("{h}/git/cloud-u-linux")),
+            });
+            v
+        }
     }
-
-    // 2. The binaries, from the release GHA built. Never compiled here: this
-    //    is an 8GB machine and a local build is what OOM-froze it before.
-    v.push(Step {
-        name: "fetch",
-        why: "the sampler and panel GHA built, from the rolling release",
-        argv: vec![
-            "gh".into(), "release".into(), "download".into(), "my-watchdog-latest".into(),
-            "--repo".into(), "diegonmarcos/cloud-u-linux".into(),
-            "--pattern".into(), "my-watchdog".into(),
-            "--pattern".into(), "my-watchdog-tui".into(),
-            "--dir".into(), format!("{h}/.cache/my-watchdog-update"),
-            "--clobber".into(),
-        ],
-        cwd: None,
-    });
-
-    // 3. The switch. `pull` is build.sh's own default and the whole point:
-    //    it imports the closure GHA built rather than evaluating here.
-    v.push(Step {
-        name: "switch",
-        why: "import the GHA-built closure and activate it — no local eval",
-        argv: vec![
-            format!("{h}/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos/build.sh"),
-            "switch".into(),
-            "pull".into(),
-        ],
-        cwd: None,
-    });
-    v
 }
 
 /// A run in progress, or the transcript of the last one.
@@ -105,7 +191,7 @@ impl Runner {
     /// Returns false if one is already going. Guarded rather than queued: two
     /// switches at once is not a thing anyone wants, and the honest answer to
     /// a second press is "it is already running".
-    pub(crate) fn start(&self) -> bool {
+    pub(crate) fn start(&self, way: Way) -> bool {
         if self.running.swap(true, Ordering::SeqCst) {
             return false;
         }
@@ -125,7 +211,7 @@ impl Runner {
                     v.push(s);
                 }
             };
-            for st in steps() {
+            for st in steps(way) {
                 push(&log, format!("── {} · {}", st.name, st.why));
                 push(&log, format!("   $ {}", st.argv.join(" ")));
                 let mut c = Command::new(&st.argv[0]);
