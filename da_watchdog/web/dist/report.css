@@ -868,3 +868,27 @@ a:focus-visible, button:focus-visible {
   transform: none !important;
   font-size: 11px;
 }
+
+.badge {
+  display: inline-block;
+  padding: 0 0.45em;
+  margin-left: 0.5em;
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: 0.82em;
+  letter-spacing: 0.03em;
+}
+
+.rule {
+  margin-bottom: 1.1em;
+}
+.rule b {
+  display: block;
+  color: #78c8ff;
+  margin-bottom: 0.25em;
+}
+.rule pre {
+  margin: 0;
+  white-space: pre-wrap;
+  color: #b8c0cc;
+}

@@ -15,9 +15,14 @@
 const MIB = 1048576, GIB = 1073741824;
 
 interface Machine { alias: string; ip?: string; local?: boolean }
+interface Rule { head: string; lines: string[] }
 interface Envelope {
   snapshot?: Snap; report?: string; files?: string[]; tui?: string; tui_narrow?: string;
   machines?: Machine[]; exported?: string; measured?: string;
+  /** The disk guard's own policy, serialised by the machine that has the file.
+   *  Read there rather than here: a second reader is a second thing that can
+   *  disagree with the guard about what it will freeze. */
+  rules?: Rule[];
 }
 type Dict = Record<string, any>;
 interface Snap extends Dict {
@@ -206,6 +211,20 @@ function boxMem(): string {
   return panel('mem', null, b, true);
 }
 
+// The disk guard's ladder, the same numbers the panel's storage box badges
+// with (emergency.alert_ladder_pct 91/93/94, emergency.pct 95, no_mercy 99).
+// A percentage in a bar is a number to interpret; this says what the machine
+// will DO at that level.
+function diskBadge(pct: number): string {
+  const b = (t: string, c: string) =>
+    `<b class="badge" style="background:${c};color:#0b0e14">${t}</b>`;
+  if (pct >= 99) return b('NO-MERCY', '#ff5a5a');
+  if (pct >= 95) return b('EMERGENCY', '#ff785a');
+  if (pct >= 93) return b('PRE-EMERG', '#ffb450');
+  if (pct >= 91) return b('WARN', '#f0dc5a');
+  return '';
+}
+
 function boxStorage(): string {
   let b = '';
   (S.disks || []).forEach((d: Dict) => {
@@ -218,7 +237,10 @@ function boxStorage(): string {
                      `${gb(num(s,'data_used') / GIB)}/${gb(dt / GIB)}`);
     if (mt) b += bar('meta', num(s,'meta_used') / mt * 100,
                      `${gb(num(s,'meta_used') / GIB)}/${gb(mt / GIB)}`);
-    if (num(s,'dev_size')) b += kv('device', gb(num(s,'dev_size') / GIB));
+    if (num(s,'dev_size')) {
+      const fill = num(s,'alloc_used') / Math.max(1, num(s,'dev_size')) * 100;
+      b += kv('device', gb(num(s,'dev_size') / GIB) + ' ' + diskBadge(fill));
+    }
   });
   b += kv('read', bytes(num(S,'disk_r')) + '/s', 'write', bytes(num(S,'disk_w')) + '/s');
   return panel('storage', null, b, true);
@@ -408,6 +430,19 @@ function table(rows: Dict[]): string {
 
 function show(k: string): void {
   if (k === '__overview') out.innerHTML = overview();
+  else if (k === '__rules') {
+    // The guards freeze and SIGTERM whole slices on thresholds that live in a
+    // file only the measured machine can read. It travels in the envelope, so
+    // this page shows the same rules the panel does without a second reader.
+    const rs = E.rules || [];
+    out.innerHTML = panel('rules', rs.length ? null : 'no disk guard on this machine',
+      rs.length
+        ? rs.map(r =>
+            `<div class="rule"><b>${esc(r.head)}</b>`
+            + `<pre>${r.lines.map(esc).join('\n')}</pre></div>`).join('')
+        : '<pre>this machine declares no disk-protection policy</pre>',
+      true);
+  }
   else if (k === '__report')
     out.innerHTML = panel('report', null, `<pre>${esc(E.report || '')}</pre>`, true);
   else if (k === '__files') {

@@ -519,6 +519,20 @@ pub(crate) fn export_snapshot(
     envelope.insert("snapshot".into(), trim_units(s));
     envelope.insert("files".into(), serde_json::json!(files));
     envelope.insert("machines".into(), Value::Array(fleet_machines()));
+    // The same rulebook the panel's about/rules page shows, carried in the
+    // export so the HTML report and the phone show it too. Read here rather
+    // than by each renderer: this is the machine that HAS the policy file, and
+    // a second reader is a second thing that can disagree with the guard.
+    envelope.insert(
+        "rules".into(),
+        Value::Array(
+            super::data::rules::rules()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|r| serde_json::json!({ "head": r.head, "lines": r.lines }))
+                .collect(),
+        ),
+    );
     envelope.insert("exported".into(), serde_json::json!(stamp));
     envelope.insert(
         "measured".into(),

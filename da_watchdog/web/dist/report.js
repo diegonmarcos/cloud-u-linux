@@ -153,6 +153,14 @@
     });
     return panel("mem", null, b, true);
   }
+  function diskBadge(pct) {
+    const b = (t, c) => `<b class="badge" style="background:${c};color:#0b0e14">${t}</b>`;
+    if (pct >= 99) return b("NO-MERCY", "#ff5a5a");
+    if (pct >= 95) return b("EMERGENCY", "#ff785a");
+    if (pct >= 93) return b("PRE-EMERG", "#ffb450");
+    if (pct >= 91) return b("WARN", "#f0dc5a");
+    return "";
+  }
   function boxStorage() {
     let b = "";
     (S.disks || []).forEach((d) => {
@@ -171,7 +179,10 @@
         num(s, "meta_used") / mt * 100,
         `${gb(num(s, "meta_used") / GIB)}/${gb(mt / GIB)}`
       );
-      if (num(s, "dev_size")) b += kv("device", gb(num(s, "dev_size") / GIB));
+      if (num(s, "dev_size")) {
+        const fill = num(s, "alloc_used") / Math.max(1, num(s, "dev_size")) * 100;
+        b += kv("device", gb(num(s, "dev_size") / GIB) + " " + diskBadge(fill));
+      }
     });
     b += kv("read", bytes(num(S, "disk_r")) + "/s", "write", bytes(num(S, "disk_w")) + "/s");
     return panel("storage", null, b, true);
@@ -315,7 +326,15 @@
   }
   function show(k) {
     if (k === "__overview") out.innerHTML = overview();
-    else if (k === "__report")
+    else if (k === "__rules") {
+      const rs = E.rules || [];
+      out.innerHTML = panel(
+        "rules",
+        rs.length ? null : "no disk guard on this machine",
+        rs.length ? rs.map((r) => `<div class="rule"><b>${esc(r.head)}</b><pre>${r.lines.map(esc).join("\n")}</pre></div>`).join("") : "<pre>this machine declares no disk-protection policy</pre>",
+        true
+      );
+    } else if (k === "__report")
       out.innerHTML = panel("report", null, `<pre>${esc(E.report || "")}</pre>`, true);
     else if (k === "__files") {
       const f = E.files || [];

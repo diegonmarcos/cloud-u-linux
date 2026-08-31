@@ -563,12 +563,38 @@ pub(crate) fn envelope_json() -> Result<String, String> {
     if text(&s, "host_info.host").is_empty() {
         return Err(format!("no usable snapshot at {p} — the sampler did not publish"));
     }
+    // THE TRANSCRIPT, and it is not optional.
+    //
+    // report.ts draws the overview from E.tui / E.tui_narrow and falls back to
+    // legacyOverview() when neither is there — the hand-drawn boxes that
+    // diverged from the panel on frames, alignment and palette, and that the
+    // whole transcription approach exists to have deleted. Shipping a snapshot
+    // without a transcript silently reinstates them on the phone, which is
+    // exactly the failure this was built to end.
+    //
+    // Both widths, because the phone is not a narrowed desktop: 200 columns
+    // across a 390pt screen is about three pixels a character.
+    let (wide, narrow) = overview_html().unwrap_or_default();
+
+    // The rulebook travels with the numbers. The panel reads the policy off
+    // local disk, which a phone three metres away cannot do — so the machine
+    // that HAS the file is the one that serialises it, and every renderer
+    // shows the same rules rather than growing a second reader.
+    let rules: Vec<serde_json::Value> = data::rules::rules()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| serde_json::json!({ "head": r.head, "lines": r.lines }))
+        .collect();
+
     let env = serde_json::json!({
         "snapshot": s,
         "files": [],
         "machines": export::fleet_machines(),
         "exported": "",
         "measured": "local",
+        "tui": wide,
+        "tui_narrow": narrow,
+        "rules": rules,
     });
     serde_json::to_string(&env).map_err(|e| e.to_string())
 }

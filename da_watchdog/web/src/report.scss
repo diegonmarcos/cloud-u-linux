@@ -585,3 +585,37 @@ a:focus-visible, button:focus-visible {
     .tui { transform: none !important; font-size: 11px; }
   }
 }
+
+// ── the guard's rulebook, and the badge that says what it will do ──────────
+// Both exist because a percentage in a bar is a number to interpret and the
+// machine already knows the answer. The badge is deliberately loud: it is the
+// difference between "the disk is fairly full" and "workload.slice is about to
+// be frozen".
+.badge {
+  display: inline-block;
+  padding: 0 .45em;
+  margin-left: .5em;
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: .82em;
+  letter-spacing: .03em;
+}
+
+.rule {
+  margin-bottom: 1.1em;
+
+  b {
+    display: block;
+    color: #78c8ff;
+    margin-bottom: .25em;
+  }
+
+  pre {
+    margin: 0;
+    // The lines are pre-aligned by the machine that wrote them, so they are
+    // shown as written rather than re-laid-out into a table here — two
+    // renderers formatting one policy is how they start disagreeing.
+    white-space: pre-wrap;
+    color: #b8c0cc;
+  }
+}

@@ -174,6 +174,12 @@ pub(crate) fn page(
     let mut nav = head("overview", "");
     nav.push_str("<li><a class=\"t on\" data-k=\"__overview\">overview</a></li>");
     nav.push_str("<li><a class=\"t\" data-k=\"__report\">report</a></li>");
+    // ALWAYS PRESENT, like report and raw — never gated on the envelope
+    // carrying rules. The app shell is generated against an EMPTY machine, so
+    // a nav row that appears only when there is a policy would be missing from
+    // the APK's own interface and could never come back: the shell ships in
+    // the APK and only the data arrives later.
+    nav.push_str(&row(None, "rules", Some("__rules"), None));
     nav.push_str(&row(None, "raw envelope", Some("__raw"), None));
     nav.push_str("</ul></div>");
 
