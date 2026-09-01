@@ -216,25 +216,9 @@ pub(crate) fn derive(
         .collect();
     snap.insert("firewall_published".into(), Value::Array(published));
 
-    // ── logs: eight sections and the 24h alert counts, one round trip ───────
-    snap.insert(
-        "logs_summary".into(),
-        Value::Array(
-            super::logs::counts_now(target)
-                .into_iter()
-                .map(|(name, n)| {
-                    let desc = super::logs::section(&name).map(|s| s.desc).unwrap_or("");
-                    row(vec![
-                        ("section", Value::String(name)),
-                        ("alerts_24h", Value::from(n)),
-                        ("desc", Value::String(desc.into())),
-                    ])
-                })
-                .collect(),
-        ),
-    );
-    for (name, lines) in super::logs::tail_all(target) {
-        snap.insert(format!("logs_{name}"), Value::Array(lines.iter().map(|l| parse_log(l)).collect()));
+    // ── logs: eight sections and the 24h alert counts, CACHED ───────────────
+    for (k, v) in journal(target) {
+        snap.insert(k, v);
     }
 
     // ── history: the per-day rollup the sampler already keeps ───────────────
@@ -253,6 +237,70 @@ pub(crate) fn derive(
         }
     }
     snap.insert("update_steps".into(), Value::Array(steps));
+}
+
+/// The journal pages, at most once every thirty seconds per machine.
+///
+/// THE CACHE IS THE POINT, not an optimisation. `derive` runs on every
+/// envelope, and the phone asks for an envelope every few seconds — so an
+/// uncached read would be sixteen journalctl invocations a tick, forever, on a
+/// box the whole app exists to keep from thrashing. Thirty seconds is the same
+/// window data::rules uses for the same reason and against the same journal.
+///
+/// Keyed by target: measuring a peer must not serve this machine's journal
+/// back, which is a wrong answer rather than a stale one.
+fn journal(target: Option<&str>) -> Vec<(String, Value)> {
+    use std::sync::{Mutex, OnceLock};
+    use std::time::{Duration, Instant};
+
+    type Cached = (String, Instant, Vec<(String, Value)>);
+    static CACHE: OnceLock<Mutex<Option<Cached>>> = OnceLock::new();
+    let cell = CACHE.get_or_init(|| Mutex::new(None));
+    let key = target.unwrap_or("local").to_string();
+    if let Ok(g) = cell.lock() {
+        if let Some((k, at, v)) = g.as_ref() {
+            if *k == key && at.elapsed() < Duration::from_secs(30) {
+                return v.clone();
+            }
+        }
+    }
+
+    let mut out: Vec<(String, Value)> = vec![(
+        "logs_summary".to_string(),
+        Value::Array(
+            super::logs::counts_now(target)
+                .into_iter()
+                .map(|(name, n)| {
+                    let desc = super::logs::section(&name).map(|s| s.desc).unwrap_or("");
+                    row(vec![
+                        ("section", Value::String(name)),
+                        ("alerts_24h", Value::from(n)),
+                        ("desc", Value::String(desc.into())),
+                    ])
+                })
+                .collect(),
+        ),
+    )];
+    for (name, lines) in super::logs::tail_all(target) {
+        out.push((
+            format!("logs_{name}"),
+            Value::Array(lines.iter().map(|l| parse_log(l)).collect()),
+        ));
+    }
+    // Every section always present, empty or not: a page that disappears when
+    // its journal is quiet is the absence/emptiness confusion this commit
+    // exists to end, one layer down.
+    for sec in super::logs::SECTIONS {
+        let k = format!("logs_{}", sec.name);
+        if !out.iter().any(|(n, _)| *n == k) {
+            out.push((k, Value::Array(vec![])));
+        }
+    }
+
+    if let Ok(mut g) = cell.lock() {
+        *g = Some((key, Instant::now(), out.clone()));
+    }
+    out
 }
 
 /// `2026-09-01T12:34:56+0200 host unit[pid]: message`, as columns.

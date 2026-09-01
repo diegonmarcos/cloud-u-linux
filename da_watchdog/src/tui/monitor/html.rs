@@ -122,12 +122,16 @@ pub(crate) fn page(
     let measured = envelope.get("measured").and_then(|v| v.as_str()).unwrap_or("local").to_string();
 
     let count = |k: &str| snap.get(k).and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
-    let has = |k: &str| tabs.iter().any(|t| t == k);
     // A DECLARED page is present when the envelope carries its key, empty or
     // not — `has` asks whether there are rows, and "zero zombies" is an answer
     // rather than an absence. Gating the tree on `has` meant a page appeared
     // and disappeared with the weather, and vanished entirely from the shell.
-    let backed = |k: &str| snap.get(k).map(|v| v.is_array()).unwrap_or(false);
+    // A `__` key is an ENVELOPE page — rules, the app map, the file tree — not
+    // a snapshot array, and it is always drawable: the renderer has a branch
+    // for it and shows "no policy on this machine" itself. Asking the snapshot
+    // about it always said no, so about/rules and about/app-map sat dead in
+    // the tree while the very same pages worked from the top of the drawer.
+    let backed = |k: &str| k.starts_with("__") || snap.get(k).map(|v| v.is_array()).unwrap_or(false);
 
     // One row of the tree. `num` is the number the panel addresses the sub-tab
     // by, kept visible for the same reason the panel prints it.
@@ -201,12 +205,11 @@ pub(crate) fn page(
                 match k {
                     Some(k) if backed(k) => {
                         claimed.push(k);
-                        nav.push_str(&row(
-                            Some(i + 1),
-                            sb.name,
-                            Some(k),
-                            Some(count(k).to_string()),
-                        ));
+                        // No badge on an envelope page: the number would be a
+                        // count of rows in an array that does not exist.
+                        let badge =
+                            if k.starts_with("__") { None } else { Some(count(k).to_string()) };
+                        nav.push_str(&row(Some(i + 1), sb.name, Some(k), badge));
                     }
                     _ => nav.push_str(&row(Some(i + 1), sb.name, None, None)),
                 }

@@ -174,15 +174,18 @@ fn read_counts(target: Option<&str>) -> Vec<(String, usize)> {
 /// seven too many. Same journalctl invocations as [`read_section`], joined by
 /// a sentinel the peer's shell cannot produce by accident.
 ///
-/// 200 rather than the panel's 500: this crosses a wire to a phone, and eight
-/// sections at 500 lines is most of a megabyte of envelope to show a tail.
+/// 100 rather than the panel's 500, and the number is a bandwidth decision:
+/// the phone asks for the whole envelope every few seconds over whatever link
+/// it has, and eight sections at 500 lines is most of a megabyte per poll to
+/// show a tail. A hundred lines is still a screenful of journal; the panel,
+/// which reads from local disk, keeps its five hundred.
 pub(crate) fn tail_all(target: Option<&str>) -> Vec<(String, Vec<String>)> {
     const MARK: &str = "@@wd-section@@";
     let body: String = SECTIONS
         .iter()
         .map(|s| {
             format!(
-                "printf '{MARK}%s\\n' '{}'; journalctl {}-n 200 --no-pager -o short-iso 2>&1; ",
+                "printf '{MARK}%s\\n' '{}'; journalctl {}-n 100 --no-pager -o short-iso 2>&1; ",
                 s.name,
                 argv(s)
             )
