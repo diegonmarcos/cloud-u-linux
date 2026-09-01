@@ -76,12 +76,18 @@ pub(crate) const TABS: &[Tab] = &[
         desc: "every mesh peer's totals side by side",
         subs: &[
             Sub { name: "wg0-ipv4", key: None, desc: "the private mesh, 10.0.0.0/24", net: Some("10.0.0.") },
-            // wg0 is v4-only on this mesh. The tab exists so that is VISIBLE
-            // rather than implied by an absence; the day wg0 gets a v6
-            // address this is one `Some` and nothing else changes.
-            Sub { name: "wg0-ipv6", key: None, desc: "wg0 carries no v6 address on this mesh", net: None },
+            // WRONG FOR AS LONG AS IT EXISTED: this said "wg0 carries no v6
+            // address on this mesh" and declared no prefix, so the page was
+            // permanently empty and said so as if it were a fact about the
+            // network. cloud-infra's own config declares subnet_v6
+            // fd0c:1d00::/64 and a wg_ipv6 for every VM and every client.
+            Sub { name: "wg0-ipv6", key: None, desc: "the private mesh, fd0c:1d00::/64", net: Some("fd0c:1d00:") },
             Sub { name: "wg-public-ipv4", key: None, desc: "the public-facing tunnel, 10.1.0.0/24", net: Some("10.1.0.") },
-            Sub { name: "wg-public-ipv6", key: None, desc: "the public-facing tunnel, fd0c::/64", net: Some("fd0c:") },
+            // `fd0c:` matched BOTH networks — the two differ in the fourth
+            // group, 1d00 for wg0 and 1d01 for the public tunnel — so this
+            // page would have claimed every private address as a public one
+            // the moment anything recorded a v6 at all.
+            Sub { name: "wg-public-ipv6", key: None, desc: "the public-facing tunnel, fd0c:1d01::/64", net: Some("fd0c:1d01:") },
             // Not a network — the things the fleet KEEPS rather than the roads
             // to it. It sits here because "where does this live" and "how do I
             // reach it" are the same question asked twice.

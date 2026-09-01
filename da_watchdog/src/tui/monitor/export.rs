@@ -393,10 +393,28 @@ pub(super) fn fleet_machines() -> Vec<Value> {
     let mut out: Vec<Value> = vec![];
     let mut seen: Vec<String> = vec![];
 
+    // EVERY address a machine answers on, not just the one it is keyed by.
+    //
+    // A machine is on up to four mesh networks — wg0 v4 and v6, the public
+    // tunnel's v4 and v6 — and the fleet tab has a page per network. Recording
+    // one address meant three of those four pages could never have a row on
+    // them, whatever the mesh was actually doing.
+    //
+    // A list rather than four named fields, because the page decides what it
+    // wants by the PREFIX its Sub declares in TABS. That table is where "which
+    // network is this" is written down, and a second answer here would be a
+    // second thing to keep in step with it.
+    let addrs = |v: &[&str]| -> Value {
+        Value::Array(
+            v.iter().filter(|a| !a.is_empty()).map(|a| Value::String((*a).into())).collect(),
+        )
+    };
+
     // The declaration first, so a declared VM keeps its real name and its
     // provider/shape rather than whatever alias ssh happens to call it.
     for (name, v) in declared_fleet() {
         let wg = text(&v, "wg_ip");
+        let wg6 = text(&v, "wg_ipv6");
         let key = if wg.is_empty() { text(&v, "ip") } else { wg.clone() };
         if !key.is_empty() {
             seen.push(key);
@@ -408,8 +426,9 @@ pub(super) fn fleet_machines() -> Vec<Value> {
         out.push(serde_json::json!({
             "name": name,
             "alias": text(&v, "ssh_alias"),
-            "ip": if wg.is_empty() { text(&v, "ip") } else { wg },
+            "ip": if wg.is_empty() { text(&v, "ip") } else { wg.clone() },
             "public": text(&v, "ip"),
+            "addrs": addrs(&[wg.as_str(), wg6.as_str()]),
             "role": text(&v, "wg_role"),
             "user": text(&v, "user"),
             "kind": "vm",
@@ -430,6 +449,21 @@ pub(super) fn fleet_machines() -> Vec<Value> {
             .fold(p.alias.as_str(), |a, sfx| a.strip_suffix(sfx).unwrap_or(a))
             .to_string();
         if seen.contains(&p.ip) || seen.contains(&base) {
+            // KEPT, not dropped. The alternate route was skipped outright, so
+            // the only record of oci-analytics-pub's 10.1.0.1 and its
+            // fd0c:1d01::1 was the ssh config itself — which is why the two
+            // public-tunnel pages were empty on a fleet that plainly has one.
+            // Deduping the ROW was right; discarding the address was not.
+            let hit = out
+                .iter()
+                .position(|m| text(m, "name") == base || text(m, "alias") == base);
+            if let Some(i) = hit {
+                if let Some(list) = out[i].get_mut("addrs").and_then(|a| a.as_array_mut()) {
+                    if !list.iter().any(|a| a.as_str() == Some(p.ip.as_str())) {
+                        list.push(Value::String(p.ip.clone()));
+                    }
+                }
+            }
             continue;
         }
         seen.push(p.ip.clone());
@@ -437,15 +471,86 @@ pub(super) fn fleet_machines() -> Vec<Value> {
         out.push(serde_json::json!({
             "name": p.alias,
             "alias": p.alias,
-            "ip": p.ip,
+            "ip": p.ip.clone(),
             "public": "",
+            "addrs": addrs(&[p.ip.as_str()]),
             "role": "",
             "user": "",
             "kind": if p.local { "this machine" } else { "peer" },
             "local": p.local,
         }));
     }
+
+    // THE CLIENTS ARE FLEET TOO — and they come LAST.
+    //
+    // config.json declares five wireguard clients beside the VMs: this laptop,
+    // the phone, and three CI runners. This function read only `vms`. The
+    // laptop and the phone appeared anyway, by the accident of having a Host
+    // entry in ~/.ssh/config; gha-runner, health-runner and vault-backup have
+    // no ssh alias and so appeared on no page at all, while holding mesh
+    // addresses .200 to .202. "Every mesh peer side by side" was missing three
+    // of them.
+    //
+    // After the ssh pass rather than before it, because the two overlap and
+    // ssh knows things the declaration does not: it is ssh that reports which
+    // row is THIS machine, and the declaration calls this laptop `surface` and
+    // the phone `termux` where the names anyone types are `surface-nixos` and
+    // `phone`. Running first, it would have renamed both and dropped the
+    // `local` flag the page uses to mark the host you are on.
+    //
+    // So a client already present only donates its v6, which the declaration
+    // has and ssh does not.
+    for (name, v) in declared_clients() {
+        let wg = text(&v, "wg_ip");
+        let wg6 = text(&v, "wg_ipv6");
+        if wg.is_empty() {
+            continue;
+        }
+        if let Some(i) = out.iter().position(|m| text(m, "ip") == wg) {
+            if !wg6.is_empty() {
+                if let Some(list) = out[i].get_mut("addrs").and_then(|a| a.as_array_mut()) {
+                    if !list.iter().any(|a| a.as_str() == Some(wg6.as_str())) {
+                        list.push(Value::String(wg6.clone()));
+                    }
+                }
+            }
+            continue;
+        }
+        seen.push(wg.clone());
+        seen.push(name.clone());
+        out.push(serde_json::json!({
+            "name": name,
+            "alias": "",
+            "ip": wg.clone(),
+            "public": "",
+            "addrs": addrs(&[wg.as_str(), wg6.as_str()]),
+            "role": text(&v, "role"),
+            "user": "",
+            "kind": "client",
+            "local": false,
+        }));
+    }
+
     out
+}
+
+/// The declared wireguard clients — machines with a mesh address and no VM.
+///
+/// Beside [`declared_fleet`] rather than folded into it: a client has no
+/// provider, no public IP and no ssh alias, and pretending it is a VM would
+/// put empty columns on the machines page to save a function.
+fn declared_clients() -> Vec<(String, Value)> {
+    let path = std::env::var("CLOUD_INFRA_CONFIG").unwrap_or_else(|_| {
+        format!("{}/git/cloud-infra/config.json", std::env::var("HOME").unwrap_or_default())
+    });
+    let Ok(raw) = fs::read_to_string(&path) else { return vec![] };
+    let Ok(v) = serde_json::from_str::<Value>(&raw) else { return vec![] };
+    v.get("native")
+        .and_then(|n| n.get("wireguard"))
+        .and_then(|w| w.get("clients"))
+        .and_then(|c| c.as_object())
+        .map(|m| m.iter().map(|(k, x)| (k.clone(), x.clone())).collect())
+        .unwrap_or_default()
 }
 
 /// The declared fleet, if this machine happens to have the infra repo checked

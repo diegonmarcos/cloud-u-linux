@@ -116,8 +116,9 @@ pub(crate) fn derive(
     snap.insert("proc_parentless".into(), Value::Array(parentless));
 
     // ── fleet: one page per mesh network, by the prefix TABS declares ───────
-    // Read from TABS rather than repeated here, so the day wg0 gets a v6
-    // address the page fills in with no change on this side.
+    // Read from TABS rather than repeated here: which prefix belongs to which
+    // network is written down once, in the table the tab strip is drawn from,
+    // and correcting wg0-ipv6 there filled this page with no change here.
     let fleet_tab = TABS.iter().find(|t| t.name == "fleet");
     for (sub, key) in [
         ("wg0-ipv4", "fleet_wg0_ipv4"),
@@ -128,24 +129,32 @@ pub(crate) fn derive(
         let net = fleet_tab
             .and_then(|t| t.subs.iter().find(|sb| sb.name == sub))
             .and_then(|sb| sb.net);
+        // Every address the machine answers on, so a peer lands on the page
+        // for each network it is actually ON. Reading `ip` alone put every
+        // machine on wg0-ipv4 and nowhere else, which is not a fact about the
+        // mesh — it is a fact about which address happened to be recorded.
+        let on = |m: &Value, pfx: &str| -> Option<String> {
+            let mut all: Vec<String> =
+                arr(m, "addrs").iter().filter_map(|a| a.as_str().map(String::from)).collect();
+            // The two named fields as well, so a machine recorded before
+            // `addrs` existed still lands on its network rather than nowhere.
+            all.push(text(m, "ip"));
+            all.push(text(m, "public"));
+            all.into_iter().find(|a| a.starts_with(pfx))
+        };
         let rows: Vec<Value> = match net {
             None => vec![],
             Some(pfx) => machines
                 .iter()
-                .filter(|m| text(m, "ip").starts_with(pfx) || text(m, "public").starts_with(pfx))
-                .map(|m| {
-                    let addr = if text(m, "ip").starts_with(pfx) {
-                        text(m, "ip")
-                    } else {
-                        text(m, "public")
-                    };
-                    row(vec![
+                .filter_map(|m| {
+                    let addr = on(m, pfx)?;
+                    Some(row(vec![
                         ("machine", Value::String(text(m, "name"))),
                         ("addr", Value::String(addr)),
                         ("alias", Value::String(text(m, "alias"))),
                         ("role", Value::String(text(m, "role"))),
                         ("kind", Value::String(text(m, "kind"))),
-                    ])
+                    ]))
                 })
                 .collect(),
         };
