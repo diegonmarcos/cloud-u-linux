@@ -414,8 +414,22 @@ function cell(v: unknown, col?: string): string {
 // The columns a phone shows, in order, when a row has them. The process table
 // is 18 wide, and scrolling sideways through 18 columns to find a number is
 // not reading it. Desktop is untouched — this narrows the phone page only.
+// pid is deliberately absent: the panel dropped the column, and a phone that
+// still shows it is the same page disagreeing with itself.
 const PHONE_COLS = ['name', 'user', 'origin', 'cpu_pct', 'mem_pct', 'mem_rss_bytes',
-                    'pid', 'slice', 'state', 'mount', 'pct', 'alias', 'ip'];
+                    'slice',
+                    // the fleet's per-network pages
+                    'machine', 'addr', 'role', 'alias', 'ip',
+                    // both firewall halves
+                    'port', 'proto', 'source', 'state', 'desc',
+                    'bind', 'container', 'socket', 'declared',
+                    // the journal, and its 24h summary
+                    'section', 'alerts_24h', 'time', 'unit', 'msg',
+                    // about/update
+                    'way', 'step', 'why', 'cmd',
+                    // the day rollup
+                    'date', 'cpu_pct_avg', 'mem_pct_avg',
+                    'mount', 'pct'];
 
 function table(rows: Dict[]): string {
   if (!rows.length) return '<div class="panel-body"><pre>no rows</pre></div>';

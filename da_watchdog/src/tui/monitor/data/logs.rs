@@ -167,6 +167,47 @@ fn read_counts(target: Option<&str>) -> Vec<(String, usize)> {
         .collect()
 }
 
+/// Every section's tail in ONE round trip, for the export.
+///
+/// The panel fetches one section at a time because a reader opens one; an
+/// export carries all eight, and eight ssh handshakes to read eight tails is
+/// seven too many. Same journalctl invocations as [`read_section`], joined by
+/// a sentinel the peer's shell cannot produce by accident.
+///
+/// 200 rather than the panel's 500: this crosses a wire to a phone, and eight
+/// sections at 500 lines is most of a megabyte of envelope to show a tail.
+pub(crate) fn tail_all(target: Option<&str>) -> Vec<(String, Vec<String>)> {
+    const MARK: &str = "@@wd-section@@";
+    let body: String = SECTIONS
+        .iter()
+        .map(|s| {
+            format!(
+                "printf '{MARK}%s\\n' '{}'; journalctl {}-n 200 --no-pager -o short-iso 2>&1; ",
+                s.name,
+                argv(s)
+            )
+        })
+        .collect();
+    let out = sh(&body, target);
+    let mut sections: Vec<(String, Vec<String>)> = vec![];
+    for line in out.lines() {
+        match line.strip_prefix(MARK) {
+            Some(name) => sections.push((name.to_string(), vec![])),
+            None => {
+                if let Some(last) = sections.last_mut() {
+                    last.1.push(line.to_string());
+                }
+            }
+        }
+    }
+    sections
+}
+
+/// The 24h alert counts, read now rather than through the cache.
+pub(crate) fn counts_now(target: Option<&str>) -> Vec<(String, usize)> {
+    read_counts(target)
+}
+
 /// One section's lines plus the 24h counts, fetched off-thread.
 ///
 /// Keyed exactly like TreeCache: journalctl over ssh takes seconds, and a

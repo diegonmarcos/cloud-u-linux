@@ -32,41 +32,10 @@ const PREFERRED: &[&str] = &[
     "storage", "proc_table",
 ];
 
-/// Which snapshot array backs each node of the CLI's tab tree.
-///
-/// The sidebar is the panel's own tree, not a second invention: TABS is the
-/// single source of the names, the order, the tab keys and the sub-tab
-/// numbering, so the two interfaces can be talked about in the same words —
-/// `:f2` is the second sub-tab in both. What TABS cannot know is which array
-/// in the exported snapshot holds a given view's rows, and that is all this
-/// table says.
-///
-/// An empty sub means the row belongs to the tab itself, which is how a tab
-/// with no sub-tabs gets children: `about` is four tables the panel keeps in
-/// its own header.
-///
-/// A node nothing claims still renders — dimmed and inert — because "the panel
-/// has this view and the export does not carry it" is worth seeing. Dropping
-/// it would read as the panel not having it either. Notably `logs` and
-/// `history`: both are live journal reads, and a snapshot is not a journal.
-const BACKED_BY: &[(&str, &str, &str)] = &[
-    ("proc", "normal", "proc_table"),
-    ("proc", "tree", "proc_spine"),
-    ("containers", "compose", "compose"),
-    ("containers", "images", "images"),
-    ("containers", "containers", "containers"),
-    ("containers", "volumes", "volumes"),
-    ("containers", "network", "networks"),
-    ("fleet", "storage", "storage"),
-    // Both firewalls are read from the one `listening` array; the panel's
-    // consolidated and container views are joins the export does not carry.
-    ("firewall", "os", "listening"),
-    ("files", "", "__files"),
-    ("about", "", "cores"),
-    ("about", "", "disks"),
-    ("about", "", "services"),
-    ("about", "", "slices"),
-];
+/// The tab tree's backing arrays live beside the code that computes them —
+/// a table that says which page shows which rows, and a producer for the rows
+/// that are not in the snapshot, are one fact and were two files.
+use super::data::pages::BACKED_BY;
 
 pub(crate) fn esc(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
@@ -111,8 +80,13 @@ fn sections(snap: &Value) -> Vec<String> {
 /// with no columns instead of a column of invented ones.
 pub(crate) fn app_shell() -> String {
     let mut snap = serde_json::Map::new();
-    for k in PREFERRED {
-        snap.insert((*k).into(), serde_json::json!([{}]));
+    // EVERY key the tab tree names, not the handful `sections` happens to
+    // prefer. The shell is the APK's whole interface and it is generated
+    // against an empty machine, so a drawer row that only appears once data
+    // arrives is a row the phone can never grow — which is exactly how the
+    // phone ended up offering seventeen of the panel's thirty-one pages.
+    for k in super::data::pages::keys() {
+        snap.insert(k.into(), serde_json::json!([{}]));
     }
     let env = serde_json::json!({
         "snapshot": Value::Object(snap),
@@ -149,6 +123,11 @@ pub(crate) fn page(
 
     let count = |k: &str| snap.get(k).and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
     let has = |k: &str| tabs.iter().any(|t| t == k);
+    // A DECLARED page is present when the envelope carries its key, empty or
+    // not — `has` asks whether there are rows, and "zero zombies" is an answer
+    // rather than an absence. Gating the tree on `has` meant a page appeared
+    // and disappeared with the weather, and vanished entirely from the shell.
+    let backed = |k: &str| snap.get(k).map(|v| v.is_array()).unwrap_or(false);
 
     // One row of the tree. `num` is the number the panel addresses the sub-tab
     // by, kept visible for the same reason the panel prints it.
@@ -206,7 +185,7 @@ pub(crate) fn page(
             for k in mine {
                 if k == "__files" {
                     nav.push_str(&row(None, "files", Some(k), Some(files.to_string())));
-                } else if has(k) {
+                } else if backed(k) {
                     claimed.push(k);
                     nav.push_str(&row(None, k, Some(k), Some(count(k).to_string())));
                 } else {
@@ -220,7 +199,7 @@ pub(crate) fn page(
                     .find(|(tab, sub, _)| *tab == t.name && *sub == sb.name)
                     .map(|(_, _, k)| *k);
                 match k {
-                    Some(k) if has(k) => {
+                    Some(k) if backed(k) => {
                         claimed.push(k);
                         nav.push_str(&row(
                             Some(i + 1),

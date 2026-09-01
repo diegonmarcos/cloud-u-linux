@@ -304,13 +304,40 @@
     "cpu_pct",
     "mem_pct",
     "mem_rss_bytes",
-    "pid",
     "slice",
-    "state",
-    "mount",
-    "pct",
+    // the fleet's per-network pages
+    "machine",
+    "addr",
+    "role",
     "alias",
-    "ip"
+    "ip",
+    // both firewall halves
+    "port",
+    "proto",
+    "source",
+    "state",
+    "desc",
+    "bind",
+    "container",
+    "socket",
+    "declared",
+    // the journal, and its 24h summary
+    "section",
+    "alerts_24h",
+    "time",
+    "unit",
+    "msg",
+    // about/update
+    "way",
+    "step",
+    "why",
+    "cmd",
+    // the day rollup
+    "date",
+    "cpu_pct_avg",
+    "mem_pct_avg",
+    "mount",
+    "pct"
   ];
   function table(rows) {
     if (!rows.length) return '<div class="panel-body"><pre>no rows</pre></div>';

@@ -566,10 +566,17 @@ pub(crate) fn envelope_json_for(alias: Option<&str>) -> Result<String, String> {
         if !err.is_empty() {
             return Err(format!("{a}: {err}"));
         }
-        let s: Value = serde_json::from_str(&body)
+        let mut s: Value = serde_json::from_str(&body)
             .map_err(|e| format!("{a}: unparseable snapshot — {e}"))?;
         if text(&s, "host_info.host").is_empty() {
             return Err(format!("{a}: answered, but with no usable snapshot"));
+        }
+        // The derived pages for the PEER: `target` is the alias, so the
+        // journal sections are read on that box over the same hop the
+        // snapshot came down, not on this one.
+        let machines = export::fleet_machines();
+        if let Some(map) = s.as_object_mut() {
+            data::pages::derive(map, &machines, Some(a));
         }
         // No transcript for a peer: rendering one means driving a Monitor
         // against a snapshot that is not this machine's, and the panel's own
@@ -578,7 +585,7 @@ pub(crate) fn envelope_json_for(alias: Option<&str>) -> Result<String, String> {
         let env = serde_json::json!({
             "snapshot": s,
             "files": [],
-            "machines": export::fleet_machines(),
+            "machines": machines,
             "exported": "",
             "measured": a,
         });
@@ -640,10 +647,20 @@ pub(crate) fn envelope_json_for(alias: Option<&str>) -> Result<String, String> {
         })
         .collect();
 
+    // THE DERIVED PAGES. zombies, the four mesh networks, both firewall
+    // halves, the journal, the day rollup and the update steps are all pages
+    // the panel HAS and the sampler does not publish — computed here, on the
+    // machine that can see them, so the phone renders rows instead of the
+    // TypeScript growing a second implementation of each view.
+    let machines = export::fleet_machines();
+    if let Some(map) = s.as_object_mut() {
+        data::pages::derive(map, &machines, None);
+    }
+
     let env = serde_json::json!({
         "snapshot": s,
         "files": [],
-        "machines": export::fleet_machines(),
+        "machines": machines,
         "exported": "",
         "measured": "local",
         "tui": wide,

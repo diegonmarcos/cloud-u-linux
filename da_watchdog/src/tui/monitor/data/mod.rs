@@ -1,6 +1,7 @@
 // Where the numbers come from. Knows nothing about drawing.
 pub(crate) mod logs;
 pub(crate) mod manifest;
+pub(crate) mod pages;
 pub(crate) mod parse;
 pub(crate) mod appmap;
 pub(crate) mod rules;

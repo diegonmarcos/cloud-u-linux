@@ -516,9 +516,16 @@ pub(crate) fn export_snapshot(
     // Still an envelope rather than the bare snapshot: the file tree is read
     // from disk by the panel and never appears in what the sampler publishes.
     let mut envelope = serde_json::Map::new();
-    envelope.insert("snapshot".into(), trim_units(s));
+    // Same derivation the headless envelope does, and `target` is honoured:
+    // exporting a peer reads THAT peer's journal, not this box's.
+    let machines = fleet_machines();
+    let mut trimmed = trim_units(s);
+    if let Some(map) = trimmed.as_object_mut() {
+        super::data::pages::derive(map, &machines, target.as_deref());
+    }
+    envelope.insert("snapshot".into(), trimmed);
     envelope.insert("files".into(), serde_json::json!(files));
-    envelope.insert("machines".into(), Value::Array(fleet_machines()));
+    envelope.insert("machines".into(), Value::Array(machines));
     // The same rulebook the panel's about/rules page shows, carried in the
     // export so the HTML report and the phone show it too. Read here rather
     // than by each renderer: this is the machine that HAS the policy file, and
