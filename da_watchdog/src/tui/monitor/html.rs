@@ -198,20 +198,33 @@ pub(crate) fn page(
             }
         } else {
             for (i, sb) in t.subs.iter().enumerate() {
-                let k = BACKED_BY
+                // ALL of them, not the first. about/about is four tables in
+                // the panel — cores, disks, services and slices — and `find`
+                // showed one and let the other three fall through to the
+                // "other" bucket at the bottom of the drawer, which is where
+                // a section nobody claimed goes. They were reachable and in
+                // the wrong place, which is its own kind of drift.
+                let mine: Vec<&str> = BACKED_BY
                     .iter()
-                    .find(|(tab, sub, _)| *tab == t.name && *sub == sb.name)
-                    .map(|(_, _, k)| *k);
-                match k {
-                    Some(k) if backed(k) => {
-                        claimed.push(k);
-                        // No badge on an envelope page: the number would be a
-                        // count of rows in an array that does not exist.
-                        let badge =
-                            if k.starts_with("__") { None } else { Some(count(k).to_string()) };
-                        nav.push_str(&row(Some(i + 1), sb.name, Some(k), badge));
-                    }
-                    _ => nav.push_str(&row(Some(i + 1), sb.name, None, None)),
+                    .filter(|(tab, sub, _)| *tab == t.name && *sub == sb.name)
+                    .map(|(_, _, k)| *k)
+                    .filter(|k| backed(k))
+                    .collect();
+                if mine.is_empty() {
+                    nav.push_str(&row(Some(i + 1), sb.name, None, None));
+                    continue;
+                }
+                for (j, k) in mine.iter().enumerate() {
+                    claimed.push(k);
+                    // No badge on an envelope page: the number would be a
+                    // count of rows in an array that does not exist.
+                    let badge =
+                        if k.starts_with("__") { None } else { Some(count(k).to_string()) };
+                    // The sub-tab's number belongs to the sub-tab, so only its
+                    // first row carries it; the rest are the tables that page
+                    // shows, named by their own key.
+                    let (n, label) = if j == 0 { (Some(i + 1), sb.name) } else { (None, *k) };
+                    nav.push_str(&row(n, label, Some(k), badge));
                 }
             }
         }
