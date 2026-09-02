@@ -20,16 +20,17 @@
   const mibG = (g) => mib((g || 0) * GIB);
   const bare = (g) => mibG(g).replace(" MiB", "");
   const gb = (g) => (g || 0) < 1 ? Math.round((g || 0) * 1024) + "M" : (g || 0).toFixed(2) + "G";
-  const pc = (x) => (x == null ? 0 : x).toFixed(1) + "%";
-  const bytes = (n) => {
-    n = n || 0;
+  const n = (x) => typeof x === "number" && isFinite(x) ? x : 0;
+  const pc = (x) => n(x).toFixed(1) + "%";
+  const bytes = (n2) => {
+    n2 = n2 || 0;
     const u = ["B", "K", "M", "G", "T"];
     let i = 0;
-    while (n >= 1024 && i < u.length - 1) {
-      n /= 1024;
+    while (n2 >= 1024 && i < u.length - 1) {
+      n2 /= 1024;
       i++;
     }
-    return (i ? n.toFixed(1) : String(Math.round(n))) + u[i];
+    return (i ? n2.toFixed(1) : String(Math.round(n2))) + u[i];
   };
   function grad(t) {
     t = Math.max(0, Math.min(1, t));
@@ -55,8 +56,8 @@
     const d = S.cpu_detail || {}, i = S.cpu_info || {}, h = S.health || {};
     const cores = S.cores || [];
     let b = bar("CPU", S.cpu || 0, pc(S.cpu));
-    cores.forEach((c, n) => {
-      b += `<div class="r core"><span class="lb">C${n}</span>` + meter((c || 0) / 100, MOBILE ? 6 : 8) + `<span class="v">${pc(c)}</span></div>`;
+    cores.forEach((c, n2) => {
+      b += `<div class="r core"><span class="lb">C${n2}</span>` + meter((c || 0) / 100, MOBILE ? 6 : 8) + `<span class="v">${pc(c)}</span></div>`;
     });
     b += kv(
       "usr",
@@ -268,6 +269,14 @@
   function overview() {
     const t = MOBILE ? E.tui_narrow || E.tui : E.tui;
     if (t) return `<div class="tui-wrap">${t}</div>`;
+    if (typeof S.cpu !== "number") {
+      return panel(
+        "overview",
+        "waiting for a machine",
+        "<pre>Pick a machine in the drawer, or wait for this one to answer.\n\nThe interface is here; the numbers arrive when the sampler does.</pre>",
+        true
+      );
+    }
     return legacyOverview();
   }
   function legacyOverview() {
@@ -388,7 +397,7 @@
     if (k === "__overview") out.innerHTML = overview();
     else if (k === "__appmap") {
       const ns = E.app_map || [];
-      const b = ns.map((n) => `<div class="r d${n.depth}"><span class="mk">${esc(n.key)}</span><span class="mn">${esc(n.name)}</span><span class="md">${esc(n.desc)}</span></div>`).join("");
+      const b = ns.map((n2) => `<div class="r d${n2.depth}"><span class="mk">${esc(n2.key)}</span><span class="mn">${esc(n2.name)}</span><span class="md">${esc(n2.desc)}</span></div>`).join("");
       out.innerHTML = panel(
         "app map",
         ns.length ? ns.length + " entries" : null,

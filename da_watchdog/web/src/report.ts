@@ -97,7 +97,14 @@ const bare = (g: number): string => mibG(g).replace(' MiB', '');
 // decimal of gigabytes turned every small mount into 0.0G and lost it.
 const gb = (g: number): string =>
   (g || 0) < 1 ? Math.round((g || 0) * 1024) + 'M' : (g || 0).toFixed(2) + 'G';
-const pc = (x: number | null | undefined): string => (x == null ? 0 : x).toFixed(1) + '%';
+// Coerce ANYTHING to a number, because the values reaching these formatters
+// are read defensively out of a snapshot whose shape grows on the daemon side
+// — and, in the shipped app-shell, are placeholder `{}` objects with no fields
+// at all. `({}).toFixed` threw and took the whole page down with it; a
+// dashboard must never blank because one cell is the wrong type, exactly as
+// the Rust `num()` never blanks a panel for a missing key.
+const n = (x: unknown): number => (typeof x === 'number' && isFinite(x) ? x : 0);
+const pc = (x: unknown): string => n(x).toFixed(1) + '%';
 
 const bytes = (n: number): string => {
   n = n || 0;
@@ -377,6 +384,23 @@ function overview(): string {
   // about three pixels a character, which is a texture, not text.
   const t = MOBILE ? (E.tui_narrow || E.tui) : E.tui;
   if (t) return `<div class="tui-wrap">${t}</div>`;
+  // NO TRANSCRIPT. Two very different reasons, and only one of them is a
+  // dashboard.
+  //
+  // The app ships an EMPTY shell — every snapshot array is a single `{}`
+  // placeholder and there are no real numbers yet — so it can open before it
+  // has reached anything. Drawing the boxes against that placeholder is what
+  // crashed the whole page: legacyOverview() read `cores: [{}]` and called
+  // .toFixed on an object. Until a machine answers there is nothing to draw,
+  // and saying so is the honest state — not a wall of zeros pretending to be a
+  // measurement.
+  if (typeof S.cpu !== 'number') {
+    return panel('overview', 'waiting for a machine',
+      '<pre>Pick a machine in the drawer, or wait for this one to answer.\n\n'
+      + 'The interface is here; the numbers arrive when the sampler does.</pre>', true);
+  }
+  // A real envelope that predates the transcript, or a build that could not
+  // draw one. The numbers are genuine here, so the boxes are too.
   return legacyOverview();
 }
 
