@@ -59,7 +59,7 @@
       "type": "stdio",
       "command": "/home/diego/.claude/mcp-local-launch.sh",
       "args": [
-        "/home/diego/git/cloud-infra/a_solutions/infra-api_cloud-superapp-mcp/src/index.ts"
+        "/home/diego/git/cloud-infra/a_solutions/infra-api_cloud-superapp-mcp/cloud-superapp-mcp/src/index.ts"
       ],
       "env": {
         "NODE_PATH": "/home/diego/.node_modules/node_modules",

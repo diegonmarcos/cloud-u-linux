@@ -53,6 +53,32 @@ if [ -L "$DIR/shared" ]; then
   link_node_modules "$(dirname "$(readlink -f "$DIR/shared")")"
 fi
 
+# 3) the enclosing multi-package solution, if there is one.
+#
+#    cloud-superapp-mcp is not one directory of TypeScript: the entry lives in
+#    cloud-superapp-mcp/src/ but imports ../../lib-mcp/src/, and every file
+#    under mcps-apps/ imports the SDK too. Linking only $DIR leaves all of
+#    those unresolved — Node walks up from the IMPORTING file, not from the
+#    entry, so lib-mcp/src/tools.ts never sees cloud-superapp-mcp/src's link
+#    and the server dies with ERR_MODULE_NOT_FOUND on first import.
+#
+#    One link at the root the sub-packages share fixes every one of them at
+#    once, because the walk reaches it from all of them. The root is the
+#    nearest ancestor holding a tsconfig.json that is not $DIR itself — the
+#    file that already declares which sub-trees belong together. Single-package
+#    servers (vault, cgc) have no such ancestor and this is a no-op for them.
+_p="$DIR"
+while [ "$_p" != "/" ]; do
+  _p="$(dirname "$_p")"
+  # Stop at a repo boundary rather than wandering into $HOME/git. -e, not
+  # -d: a submodule checkout (a_solutions is one) has .git as a FILE.
+  [ -e "$_p/.git" ] && break
+  if [ -f "$_p/tsconfig.json" ]; then
+    link_node_modules "$_p"
+    break
+  fi
+done
+
 # cloud-cgc-mcp only: keep the LOCAL octocode DB tracking the GHCR upstream
 # (single source of truth, identical to oci-apps). Guarded to ≤ once/24h,
 # non-fatal, and a no-op until the producer (ship-cgc-db) has seeded GHCR.
