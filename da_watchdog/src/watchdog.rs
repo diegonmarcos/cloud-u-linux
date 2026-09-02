@@ -2739,13 +2739,60 @@ fn is_global(a: &str) -> bool {
 /// panel, because the panel can be pointed at a peer — and a header that said
 /// "surface-nixos" while the numbers underneath came from oci-apps would be
 /// worse than showing nothing.
+/// This machine's name, from whichever source can answer.
+///
+/// /proc/sys/kernel/hostname is the right first question and it returns an
+/// EMPTY STRING inside nix-on-droid's proot — so on the phone every field
+/// derived from it was blank, and the panel's "did the sampler publish?" test,
+/// which used to read this very field, concluded that a perfectly good
+/// snapshot was not one. The app then got an error instead of an envelope and
+/// showed its empty shell.
+///
+/// A hostname is a nice-to-have that a container, a chroot or a locked-down
+/// Android can all legitimately lack, so it is asked for four ways and the
+/// last of them always answers:
+///
+///   1. the kernel, which is right everywhere it is readable;
+///   2. /etc/hostname, which survives a proot that hides the sysctl;
+///   3. $HOSTNAME, set by most login shells;
+///   4. the device's own model, via getprop — Android has no hostname to give
+///      and "Pixel 7a" is a better row label than a blank cell.
+fn hostname() -> String {
+    let read = |p: &str| fs::read_to_string(p).unwrap_or_default().trim().to_string();
+    let h = read("/proc/sys/kernel/hostname");
+    if !h.is_empty() {
+        return h;
+    }
+    let h = read("/etc/hostname");
+    if !h.is_empty() {
+        return h;
+    }
+    if let Ok(h) = std::env::var("HOSTNAME") {
+        if !h.trim().is_empty() {
+            return h.trim().to_string();
+        }
+    }
+    for prop in ["ro.product.model", "ro.product.device"] {
+        let out = clean_command("getprop")
+            .arg(prop)
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        if !out.is_empty() {
+            return out;
+        }
+    }
+    String::new()
+}
+
 fn host_info_json() -> String {
     let os = fs::read_to_string("/etc/os-release")
         .unwrap_or_default()
         .lines()
         .find_map(|l| l.strip_prefix("PRETTY_NAME=").map(|v| v.trim_matches('"').to_string()))
         .unwrap_or_default();
-    let host = fs::read_to_string("/proc/sys/kernel/hostname").unwrap_or_default().trim().to_string();
+    let host = hostname();
     // The user this is sampling AS, which is not cosmetic: what it can read in
     // /proc and what it is allowed to signal both follow from it.
     let user = read_uid_names()

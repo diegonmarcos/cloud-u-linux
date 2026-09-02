@@ -539,6 +539,25 @@ pub(crate) fn app_shell() -> String {
     html::app_shell()
 }
 
+/// Did the sampler publish?
+///
+/// THE TEST IS THE TIMESTAMP, and it used to be the hostname.
+///
+/// `host_info.host` is read from /proc/sys/kernel/hostname, which is empty
+/// inside nix-on-droid's proot — so on the PHONE every published snapshot
+/// looked like no snapshot at all, `snapshot` exited 1, and the app got an
+/// error instead of an envelope. The whole interface stayed at the empty shell
+/// it ships with: no fleet, no numbers, no pages. Every "the APK has not
+/// changed" was this, and the APK was never the thing that was wrong.
+///
+/// A hostname is a nice-to-have that a container, a chroot or a locked-down
+/// Android can all legitimately lack. `ts` is written by the publisher on
+/// every tick and by nothing else, so it is the only field whose presence
+/// actually means "a sampler wrote this".
+fn no_sample(s: &Value) -> bool {
+    num(s, "ts") <= 0.0
+}
+
 /// The live envelope as JSON on stdout, for a caller that already has the UI
 /// and only needs numbers.
 ///
@@ -568,7 +587,7 @@ pub(crate) fn envelope_json_for(alias: Option<&str>) -> Result<String, String> {
         }
         let mut s: Value = serde_json::from_str(&body)
             .map_err(|e| format!("{a}: unparseable snapshot — {e}"))?;
-        if text(&s, "host_info.host").is_empty() {
+        if no_sample(&s) {
             return Err(format!("{a}: answered, but with no usable snapshot"));
         }
         // The derived pages for the PEER: `target` is the alias, so the
@@ -598,17 +617,17 @@ pub(crate) fn envelope_json_for(alias: Option<&str>) -> Result<String, String> {
     // over the terminal's exec service nobody did, and "is my-watchdog
     // running?" is not an answer a phone app can act on. So it starts one
     // itself and waits for the first publish.
-    if text(&s, "host_info.host").is_empty() {
+    if no_sample(&s) {
         start_sampler();
         for _ in 0..25 {
             std::thread::sleep(std::time::Duration::from_millis(200));
             s = read_json(&p);
-            if !text(&s, "host_info.host").is_empty() {
+            if !no_sample(&s) {
                 break;
             }
         }
     }
-    if text(&s, "host_info.host").is_empty() {
+    if no_sample(&s) {
         return Err(format!("no usable snapshot at {p} — the sampler did not publish"));
     }
     // THE TRANSCRIPT, and it is not optional.
@@ -679,7 +698,7 @@ pub(crate) fn envelope_json_for(alias: Option<&str>) -> Result<String, String> {
 pub(crate) fn export_headless() -> Result<String, String> {
     let p = snapshot_path();
     let s = read_json(&p);
-    if text(&s, "host_info.host").is_empty() {
+    if no_sample(&s) {
         return Err(format!("no usable snapshot at {p} — is my-watchdog running?"));
     }
     export_snapshot(&s, None, &[], &[], false)

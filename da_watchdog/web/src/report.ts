@@ -450,6 +450,87 @@ function table(rows: Dict[]): string {
     + '</tbody></table></div>';
 }
 
+// ── choosing a machine ──────────────────────────────────────────────────────
+// ONE answer to "which machines are there, which one am I on, which can be
+// measured, and what happens when you pick one" — for the two places that ask:
+// the drawer's machine group and the machines page.
+//
+// It was written twice and the two copies had ALREADY DIVERGED. The page
+// offered a measure button on any peer; the drawer refused one with no
+// reachable address, so `vast-RTX-p_0` — declared with ip "TBD" — got a button
+// on one surface that could never have worked. And "is this the machine we are
+// measuring" was spelled differently in each, so they could disagree about
+// which row to mark. Neither difference was intended by anyone.
+//
+// So the list is `E.machines`, the judgement is [`fleet`], the verb is
+// [`bindPicks`], and the two renderers decide nothing: they lay out rows and
+// say which ones are pickable by copying the flag.
+
+interface Choice {
+  m: Machine;
+  /** What the host is asked to measure — the ssh alias, or the name. */
+  target: string;
+  /** The machine this page is running on. */
+  here: boolean;
+  /** The machine this envelope describes. */
+  current: boolean;
+  /** There is a host to ask, and something for it to reach. */
+  pickable: boolean;
+}
+
+/**
+ * The host bridge, or null.
+ *
+ * "Measure" asks the HOST, because the phone cannot: it reaches exactly one
+ * machine and every other peer is behind an ssh hop only that host can make.
+ * A static export has no host at all, and there the fleet still lists — it
+ * simply does not offer the verb.
+ */
+function bridge(): Dict | null {
+  const h = (window as unknown as Dict).AndroidWatchdog as Dict | undefined;
+  return h && h.refresh ? h : null;
+}
+
+function fleet(): Choice[] {
+  const measured = E.measured || 'local';
+  const can = !!bridge();
+  return (E.machines || []).map((m: Machine) => {
+    const here = !!m.local;
+    const target = m.alias || m.name;
+    return {
+      m,
+      target,
+      here,
+      current: here ? measured === 'local' || measured === target : measured === target,
+      // A machine with no way in is never offered: the host you are already
+      // on, and a VM declared with ip "TBD", which is in the fleet and not
+      // reachable. A button that cannot work is worse than no button.
+      pickable: can && !here && !!target && (m.ip || '') !== 'TBD',
+    };
+  });
+}
+
+/**
+ * Wire everything the render marked pickable.
+ *
+ * `data-alias` is what to measure and `data-busy` is what the element should
+ * say while it waits — the only two things the surfaces differ about, and both
+ * of them are text.
+ */
+function bindPicks(root: HTMLElement): void {
+  const h = bridge();
+  if (!h) return;
+  root.querySelectorAll<HTMLElement>('[data-alias]').forEach(el => {
+    el.onclick = () => {
+      el.textContent = el.dataset.busy || 'measuring…';
+      (h.refresh as (a?: string) => void)(el.dataset.alias);
+      // Harmless where the drawer is already shut, and the point of the click
+      // where it is not: you asked for a machine, not for a menu.
+      closeDrawer();
+    };
+  });
+}
+
 function show(k: string): void {
   if (k === '__overview') out.innerHTML = overview();
   else if (k === '__appmap') {
@@ -473,38 +554,28 @@ function show(k: string): void {
     // any more now that the overview is the panel's own transcript — so the
     // fleet was in the envelope and on no page at all.
     //
-    // "Measure" asks the HOST to do it, because the phone cannot: it reaches
-    // exactly one machine, and every other peer is behind an ssh hop only that
-    // host can make. Where there is no host — the exported report is a static
-    // file — the rows still list the fleet and simply do not offer the verb.
-    const ms: Machine[] = E.machines || [];
-    const host = (window as unknown as Dict).AndroidWatchdog;
-    const can = !!(host && host.refresh);
+    // The fleet, whether a row is current and whether it can be picked all
+    // come from `fleet()`, which is also what the drawer's machine group is
+    // built from. This function lays out columns and nothing else.
+    const fs = fleet();
+    const can = !!bridge();
     let b = `<div class="r hd"><span class="lb">machine</span>`
           + `<span class="v a">addr</span><span class="v t">role</span></div>`;
-    ms.forEach(m => {
-      const here = !!m.local;
-      const target = m.alias || m.name;
-      const measured = (E.measured || '') === target || (here && (E.measured || 'local') === 'local');
-      b += `<div class="r${measured ? ' here' : ''}">`
-         + `<span class="dot">${measured ? '●' : '·'}</span>`
+    fs.forEach(c => {
+      const m = c.m;
+      b += `<div class="r${c.current ? ' here' : ''}">`
+         + `<span class="dot">${c.current ? '●' : '·'}</span>`
          + `<span class="lb">${esc(m.name)}</span>`
          + `<span class="v a">${esc(m.ip || m.public || '-')}</span>`
-         + `<span class="v t">${esc(here ? 'this host' : (m.role || m.kind || ''))}</span>`
-         + (can && !here
-             ? `<button class="measure" data-alias="${esc(target)}">measure</button>`
+         + `<span class="v t">${esc(c.here ? 'this host' : (m.role || m.kind || ''))}</span>`
+         + (c.pickable
+             ? `<button class="measure" data-alias="${esc(c.target)}" `
+               + `data-busy="measuring…">measure</button>`
              : '')
          + `</div>`;
     });
-    out.innerHTML = panel('machines', ms.length + (can ? ' — tap to measure' : ''), b, true);
-    if (can) {
-      out.querySelectorAll<HTMLElement>('button.measure').forEach(btn => {
-        btn.onclick = () => {
-          btn.textContent = 'measuring…';
-          host.refresh(btn.dataset.alias);
-        };
-      });
-    }
+    out.innerHTML = panel('machines', fs.length + (can ? ' — tap to measure' : ''), b, true);
+    bindPicks(out);
   }
   else if (k === '__rules') {
     // The guards freeze and SIGTERM whole slices on thresholds that live in a
@@ -665,32 +736,18 @@ function fillSwitcher(): void {
   // A static export already put real links here. Never overwrite them: those
   // work offline and these do not.
   if (!ul || ul.querySelector('a[href]')) return;
-  const ms: Machine[] = E.machines || [];
-  const host = (window as unknown as Dict).AndroidWatchdog;
-  const can = !!(host && host.refresh);
-  if (!ms.length) {
+  const fs = fleet();
+  if (!fs.length) {
     ul.innerHTML = '<li><a class="off">no fleet in this envelope</a></li>';
     return;
   }
-  const measured = E.measured || 'local';
-  ul.innerHTML = ms.map(m => {
-    const here = !!m.local;
-    const target = m.alias || m.name;
-    const on = measured === target || (here && measured === 'local');
-    // Only a machine with a way in can be asked for numbers. A VM declared
-    // with ip "TBD" is in the fleet and not reachable, and offering it would
-    // be a button that cannot work.
-    const live = can && !here && !!target && (m.ip || '') !== 'TBD';
-    return `<li><a class="m${on ? ' on' : ''}${live ? '' : ' off'}"`
-         + `${live ? ` data-alias="${esc(target)}"` : ''}>${esc(m.name)}</a></li>`;
-  }).join('');
-  ul.querySelectorAll<HTMLElement>('a[data-alias]').forEach(a => {
-    a.onclick = () => {
-      a.textContent = a.textContent + ' …';
-      host.refresh(a.dataset.alias);
-      closeDrawer();
-    };
-  });
+  ul.innerHTML = fs.map(c =>
+    `<li><a class="m${c.current ? ' on' : ''}${c.pickable ? '' : ' off'}"`
+    + (c.pickable
+        ? ` data-alias="${esc(c.target)}" data-busy="${esc(c.m.name)} …"`
+        : '')
+    + `>${esc(c.m.name)}</a></li>`).join('');
+  bindPicks(ul);
 }
 
 /**

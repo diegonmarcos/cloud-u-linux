@@ -351,6 +351,39 @@
     }
     return '<div class="scroll"><table><thead><tr>' + cols.map((c) => `<th>${esc(c)}</th>`).join("") + "</tr></thead><tbody>" + rows.map((r) => "<tr>" + cols.map((c) => cell(r[c], c)).join("") + "</tr>").join("") + "</tbody></table></div>";
   }
+  function bridge() {
+    const h = window.AndroidWatchdog;
+    return h && h.refresh ? h : null;
+  }
+  function fleet() {
+    const measured = E.measured || "local";
+    const can = !!bridge();
+    return (E.machines || []).map((m) => {
+      const here = !!m.local;
+      const target = m.alias || m.name;
+      return {
+        m,
+        target,
+        here,
+        current: here ? measured === "local" || measured === target : measured === target,
+        // A machine with no way in is never offered: the host you are already
+        // on, and a VM declared with ip "TBD", which is in the fleet and not
+        // reachable. A button that cannot work is worse than no button.
+        pickable: can && !here && !!target && (m.ip || "") !== "TBD"
+      };
+    });
+  }
+  function bindPicks(root) {
+    const h = bridge();
+    if (!h) return;
+    root.querySelectorAll("[data-alias]").forEach((el) => {
+      el.onclick = () => {
+        el.textContent = el.dataset.busy || "measuring\u2026";
+        h.refresh(el.dataset.alias);
+        closeDrawer();
+      };
+    });
+  }
   function show(k) {
     if (k === "__overview") out.innerHTML = overview();
     else if (k === "__appmap") {
@@ -363,25 +396,15 @@
         true
       );
     } else if (k === "__machines") {
-      const ms = E.machines || [];
-      const host = window.AndroidWatchdog;
-      const can = !!(host && host.refresh);
+      const fs = fleet();
+      const can = !!bridge();
       let b = `<div class="r hd"><span class="lb">machine</span><span class="v a">addr</span><span class="v t">role</span></div>`;
-      ms.forEach((m) => {
-        const here = !!m.local;
-        const target = m.alias || m.name;
-        const measured = (E.measured || "") === target || here && (E.measured || "local") === "local";
-        b += `<div class="r${measured ? " here" : ""}"><span class="dot">${measured ? "\u25CF" : "\xB7"}</span><span class="lb">${esc(m.name)}</span><span class="v a">${esc(m.ip || m.public || "-")}</span><span class="v t">${esc(here ? "this host" : m.role || m.kind || "")}</span>` + (can && !here ? `<button class="measure" data-alias="${esc(target)}">measure</button>` : "") + `</div>`;
+      fs.forEach((c) => {
+        const m = c.m;
+        b += `<div class="r${c.current ? " here" : ""}"><span class="dot">${c.current ? "\u25CF" : "\xB7"}</span><span class="lb">${esc(m.name)}</span><span class="v a">${esc(m.ip || m.public || "-")}</span><span class="v t">${esc(c.here ? "this host" : m.role || m.kind || "")}</span>` + (c.pickable ? `<button class="measure" data-alias="${esc(c.target)}" data-busy="measuring\u2026">measure</button>` : "") + `</div>`;
       });
-      out.innerHTML = panel("machines", ms.length + (can ? " \u2014 tap to measure" : ""), b, true);
-      if (can) {
-        out.querySelectorAll("button.measure").forEach((btn) => {
-          btn.onclick = () => {
-            btn.textContent = "measuring\u2026";
-            host.refresh(btn.dataset.alias);
-          };
-        });
-      }
+      out.innerHTML = panel("machines", fs.length + (can ? " \u2014 tap to measure" : ""), b, true);
+      bindPicks(out);
     } else if (k === "__rules") {
       const rs = E.rules || [];
       const cell2 = (r) => {
@@ -482,28 +505,13 @@
   function fillSwitcher() {
     const ul = document.getElementById("sw");
     if (!ul || ul.querySelector("a[href]")) return;
-    const ms = E.machines || [];
-    const host = window.AndroidWatchdog;
-    const can = !!(host && host.refresh);
-    if (!ms.length) {
+    const fs = fleet();
+    if (!fs.length) {
       ul.innerHTML = '<li><a class="off">no fleet in this envelope</a></li>';
       return;
     }
-    const measured = E.measured || "local";
-    ul.innerHTML = ms.map((m) => {
-      const here = !!m.local;
-      const target = m.alias || m.name;
-      const on = measured === target || here && measured === "local";
-      const live = can && !here && !!target && (m.ip || "") !== "TBD";
-      return `<li><a class="m${on ? " on" : ""}${live ? "" : " off"}"${live ? ` data-alias="${esc(target)}"` : ""}>${esc(m.name)}</a></li>`;
-    }).join("");
-    ul.querySelectorAll("a[data-alias]").forEach((a) => {
-      a.onclick = () => {
-        a.textContent = a.textContent + " \u2026";
-        host.refresh(a.dataset.alias);
-        closeDrawer();
-      };
-    });
+    ul.innerHTML = fs.map((c) => `<li><a class="m${c.current ? " on" : ""}${c.pickable ? "" : " off"}"` + (c.pickable ? ` data-alias="${esc(c.target)}" data-busy="${esc(c.m.name)} \u2026"` : "") + `>${esc(c.m.name)}</a></li>`).join("");
+    bindPicks(ul);
   }
   window.__wdRender = (json) => {
     let next;
