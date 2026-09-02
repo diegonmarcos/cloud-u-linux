@@ -644,6 +644,56 @@ if (MOBILE) {
 }
 
 /**
+ * The drawer's "machine" group.
+ *
+ * It has always been the first thing in the sidebar and, in the app, it has
+ * always been EMPTY: the switcher is built at export time as plain <a href>
+ * links between sibling files, which is exactly right for a directory of
+ * static reports read from a USB stick with the network off — and meaningless
+ * in an APK, where there are no sibling files and `app_shell` passes "". So
+ * the phone shipped a heading called "machine" with nothing under it, while
+ * the fleet sat one page away on __machines.
+ *
+ * Filled from the envelope when the static list is absent. Same verb as the
+ * machines page, and deliberately the same code path: "pick a machine" is one
+ * behaviour and a second implementation of it is a second thing to diverge.
+ * Where there is no host to ask — the exported report is a static file — the
+ * rows still name the fleet and simply do not offer the verb.
+ */
+function fillSwitcher(): void {
+  const ul = document.getElementById('sw');
+  // A static export already put real links here. Never overwrite them: those
+  // work offline and these do not.
+  if (!ul || ul.querySelector('a[href]')) return;
+  const ms: Machine[] = E.machines || [];
+  const host = (window as unknown as Dict).AndroidWatchdog;
+  const can = !!(host && host.refresh);
+  if (!ms.length) {
+    ul.innerHTML = '<li><a class="off">no fleet in this envelope</a></li>';
+    return;
+  }
+  const measured = E.measured || 'local';
+  ul.innerHTML = ms.map(m => {
+    const here = !!m.local;
+    const target = m.alias || m.name;
+    const on = measured === target || (here && measured === 'local');
+    // Only a machine with a way in can be asked for numbers. A VM declared
+    // with ip "TBD" is in the fleet and not reachable, and offering it would
+    // be a button that cannot work.
+    const live = can && !here && !!target && (m.ip || '') !== 'TBD';
+    return `<li><a class="m${on ? ' on' : ''}${live ? '' : ' off'}"`
+         + `${live ? ` data-alias="${esc(target)}"` : ''}>${esc(m.name)}</a></li>`;
+  }).join('');
+  ul.querySelectorAll<HTMLElement>('a[data-alias]').forEach(a => {
+    a.onclick = () => {
+      a.textContent = a.textContent + ' …';
+      host.refresh(a.dataset.alias);
+      closeDrawer();
+    };
+  });
+}
+
+/**
  * Hand the page a new envelope. The app calls this when a snapshot comes back
  * from the machine; nothing else changes, so the drawer, the scroll position
  * and the selected panel all survive a refresh.
@@ -657,10 +707,15 @@ if (MOBILE) {
   try { next = JSON.parse(json); } catch { return false; }
   E = next;
   S = E.snapshot || {};
+  // Before the panel, so switching machine repaints the list that says which
+  // one you are on — the row would otherwise keep pointing at the previous
+  // machine until something else happened to redraw.
+  fillSwitcher();
   show(current);
   return true;
 };
 
+fillSwitcher();
 show('__overview');
 // The first fit has to wait for layout: scrollWidth is 0 until the browser
 // has measured the <pre> it was just handed.

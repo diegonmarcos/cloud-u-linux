@@ -479,6 +479,32 @@
     window.addEventListener("resize", fit);
     fitNow = fit;
   }
+  function fillSwitcher() {
+    const ul = document.getElementById("sw");
+    if (!ul || ul.querySelector("a[href]")) return;
+    const ms = E.machines || [];
+    const host = window.AndroidWatchdog;
+    const can = !!(host && host.refresh);
+    if (!ms.length) {
+      ul.innerHTML = '<li><a class="off">no fleet in this envelope</a></li>';
+      return;
+    }
+    const measured = E.measured || "local";
+    ul.innerHTML = ms.map((m) => {
+      const here = !!m.local;
+      const target = m.alias || m.name;
+      const on = measured === target || here && measured === "local";
+      const live = can && !here && !!target && (m.ip || "") !== "TBD";
+      return `<li><a class="m${on ? " on" : ""}${live ? "" : " off"}"${live ? ` data-alias="${esc(target)}"` : ""}>${esc(m.name)}</a></li>`;
+    }).join("");
+    ul.querySelectorAll("a[data-alias]").forEach((a) => {
+      a.onclick = () => {
+        a.textContent = a.textContent + " \u2026";
+        host.refresh(a.dataset.alias);
+        closeDrawer();
+      };
+    });
+  }
   window.__wdRender = (json) => {
     let next;
     try {
@@ -488,9 +514,11 @@
     }
     E = next;
     S = E.snapshot || {};
+    fillSwitcher();
     show(current);
     return true;
   };
+  fillSwitcher();
   show("__overview");
   if (MOBILE) requestAnimationFrame(fitNow);
 })();

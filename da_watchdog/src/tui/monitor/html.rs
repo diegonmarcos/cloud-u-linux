@@ -291,7 +291,7 @@ const TEMPLATE: &str = r##"<!doctype html><html lang="en"><head><meta charset="u
 <div class="scrim" id="scrim"></div>
 <nav class="sidebar" id="sb">
   <div class="sb-head"><h2>my-konsole</h2><button class="x" id="cls">&times;</button></div>
-  <div class="grp"><div class="tab">machine</div><ul>__SWITCH__</ul></div>
+  <div class="grp"><div class="tab">machine</div><ul id="sw">__SWITCH__</ul></div>
   __NAV__
 </nav>
 <main class="content">
