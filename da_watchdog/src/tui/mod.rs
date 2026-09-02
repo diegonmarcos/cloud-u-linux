@@ -18,6 +18,7 @@
 // architecture. ratatui and crossterm would triple an 800KB sampler to carry a
 // UI no headless VM will ever draw. So the fleet builds the daemon alone and a
 // desktop builds `--features tui`, from the same source.
+pub mod android_bridge;
 pub mod frame;
 pub mod mesh;
 pub mod monitor;
@@ -56,6 +57,12 @@ pub fn run(args: Vec<String>) -> std::io::Result<()> {
     // The numbers alone, for a caller that already has the UI. This is the
     // other half of `app-shell`: the app ships the interface and asks the
     // machine only for what changes.
+    // The env side of the phone app: measure what the app asks for and push
+    // it in through the app's provider. Runs forever in nix-on-droid.
+    if cmd == "android-bridge" {
+        return android_bridge::run();
+    }
+
     if cmd == "snapshot" {
         // `snapshot [alias]` — this machine, or a mesh peer. The phone can
         // reach exactly one host, so measuring any other machine means asking
