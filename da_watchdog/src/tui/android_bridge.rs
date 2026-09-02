@@ -55,13 +55,17 @@ fn content(env: &[(String, String)], args: &[&str], stdin: Option<&[u8]>) -> Res
     let mut child = cmd.spawn().map_err(|e| format!("{CONTENT}: {e}"))?;
     if let Some(body) = stdin {
         let mut w = child.stdin.take().ok_or("no stdin")?;
-        w.write_all(body).map_err(|e| e.to_string())?;
+        // EPIPE here means `content` quit before reading — the provider is
+        // missing or refused us. Its stderr says which; that is the error.
+        let _ = w.write_all(body);
         drop(w);
     }
     let out = child.wait_with_output().map_err(|e| e.to_string())?;
     let text = String::from_utf8_lossy(&out.stdout).to_string();
-    if !out.status.success() || text.contains("Error") || text.contains("Exception") {
-        let err = String::from_utf8_lossy(&out.stderr);
+    // `content` exits 0 and explains on stderr, so exit status alone says nothing.
+    let err = String::from_utf8_lossy(&out.stderr).to_string();
+    let bad = |s: &str| s.contains("Error") || s.contains("Exception") || s.contains("Could not find");
+    if !out.status.success() || bad(&text) || bad(&err) {
         return Err(format!("{} {}", text.trim(), err.trim()).trim().to_string());
     }
     Ok(text)
