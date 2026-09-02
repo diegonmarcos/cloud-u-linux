@@ -1622,8 +1622,14 @@ impl Monitor {
             format!("{:.1}%  {} of {}", g("swap"), fmt_mib_g(num(&v, "swap_detail.used")), fmt_mib_g(num(&v, "swap_detail.total"))),
         ));
         l.push(kv(
-            "psi cpu / io / mem",
-            format!("{:.2}  {:.2}  {:.2}", g("psi.cpu.some10"), g("psi.io.full10"), g("psi.memory.full10")),
+            "psi cpu / io / mem some / mem full",
+            format!(
+                "{:.2}  {:.2}  {:.2}  {:.2}",
+                g("psi.cpu.some10"),
+                g("psi.io.full10"),
+                g("psi.memory.some10"),
+                g("psi.memory.full10"),
+            ),
         ));
         l.push(kv("processes", format!("{} in the table", arr(&v, "proc_table").len())));
 
@@ -6959,10 +6965,15 @@ impl Dashboard for Monitor {
                         ),
                     ])),
                     Cell::from(format!("{:>4.0}", ncpu)).style(base.fg(DIM)),
-                    // some-cpu, full-io, full-mem at 10s: the three that
-                    // actually tell you what a machine is stuck on. `full`
-                    // for io and memory because that is every task stalled,
-                    // which is the figure that tracked the freeze.
+                    // some-cpu, full-io, then BOTH bands for memory at 10s.
+                    // `full` is every task stalled — the figure that tracked
+                    // the freeze — but memory reaches `some` long before it
+                    // reaches `full`: a box reclaiming and refaulting hard
+                    // stalls each task in turn and shows a full near zero. One
+                    // memory number therefore said "fine" on exactly the
+                    // machines this panel exists to catch, so the column shows
+                    // some AND full and the fleet is read the same way the psi
+                    // box on a single machine is.
                     Cell::from(Line::from(vec![
                         Span::styled(
                             format!("{:>6.2}", g("psi.cpu.some10")),
@@ -6971,6 +6982,10 @@ impl Dashboard for Monitor {
                         Span::styled(
                             format!(" {:>6.2}", g("psi.io.full10")),
                             Style::default().fg(grad(g("psi.io.full10") / 20.0)),
+                        ),
+                        Span::styled(
+                            format!(" {:>6.2}", g("psi.memory.some10")),
+                            Style::default().fg(grad(g("psi.memory.some10") / 40.0)),
                         ),
                         Span::styled(
                             format!(" {:>6.2}", g("psi.memory.full10")),
@@ -7038,7 +7053,7 @@ impl Dashboard for Monitor {
                 fh("   DISK", "DISK%"),
                 fh(" LOAD  1     5   15", "LOAD"),
                 fh("CPUS", "CPUS"),
-                fh("PSI cpu     io   mem", "PSI"),
+                fh("PSI cpu     io mem-s  mem-f", "PSI"),
                 fh(" PROCS", "PROCS"),
             ]));
             f.render_widget(ftable, fin);
