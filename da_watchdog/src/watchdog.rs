@@ -327,6 +327,14 @@ fn container_ids() -> Vec<(String, String)> {
 /// happily on every VM, logged one line nobody was reading, and published
 /// nothing. It looked exactly like a working deployment.
 pub fn runtime_dir() -> PathBuf {
+    // The fleet layout first: a sampler running as root (vm-pilot's system
+    // unit) publishes under /run/my-watchdog, and the panel and my-webserver
+    // — which run as the user — must read the same file. It exists only where
+    // that unit created it, so a desktop is untouched by this branch.
+    let fleet = PathBuf::from("/run/my-watchdog");
+    if fleet.is_dir() {
+        return fleet;
+    }
     if let Some(d) = std::env::var_os("XDG_RUNTIME_DIR") {
         let p = PathBuf::from(d);
         if p.is_dir() {

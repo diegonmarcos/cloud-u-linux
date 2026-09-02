@@ -787,6 +787,8 @@ const server = createServer(async (req, res) => {
       // XDG_RUNTIME_DIR, and that is the common case on a VM.
       const uid = process.getuid ? process.getuid() : 1000;
       const candidates = [
+        // The fleet layout: a root sampler (vm-pilot's system unit) publishes here.
+        '/run/my-watchdog/my-konsole-watchdog.json',
         process.env.XDG_RUNTIME_DIR && `${process.env.XDG_RUNTIME_DIR}/my-konsole-watchdog.json`,
         `/run/user/${uid}/my-konsole-watchdog.json`,
         `/tmp/my-konsole-${uid}/my-konsole-watchdog.json`,

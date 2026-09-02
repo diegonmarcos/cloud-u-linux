@@ -5049,6 +5049,60 @@ impl Dashboard for Monitor {
             r3.extend(cell("ctxsw/s", fmt_rate(hh("ctxt_per_s")), Color::Gray));
             pl.push(Line::from(r3));
 
+            // ── why ──────────────────────────────────────────────────────
+            // Every row above says THAT something is held back. These say by
+            // what, in the terms the reader will act on: a disk at 100% busy
+            // whose reads match the file-refault rate is not a disk problem,
+            // it is memory — the page cache is being evicted and re-read —
+            // and no per-process column can show that, because refaults are
+            // charged to nobody. Two lines at most; the worst two.
+            let io_some = num(&s, "psi.io.some10");
+            let mem_some = num(&s, "psi.memory.some10");
+            let cpu_some = num(&s, "psi.cpu.some10");
+            let refault_bps = rc("refault_file") * 4096.0;
+            let read_bps = num(&s, "disk_r") * 1_048_576.0;
+            let write_bps = num(&s, "disk_w") * 1_048_576.0;
+            let swap_bps = (rc("swap_in") + rc("swap_out")) * 4096.0;
+            let avail = fmt_mib_g(md("available"));
+            let mut why: Vec<(f64, String)> = vec![];
+            if io_some >= 5.0 {
+                let text = if refault_bps > 0.0 && refault_bps >= read_bps * 0.5 {
+                    format!(
+                        "io: reads {}/s ≈ file refaults {}/s — page cache evicted and re-read, avail {} → MEMORY, not disk",
+                        fmt_bps(read_bps), fmt_bps(refault_bps), avail
+                    )
+                } else if swap_bps > 0.0 && swap_bps >= read_bps * 0.5 {
+                    format!("io: swap {}/s, avail {} → MEMORY, not disk", fmt_bps(swap_bps), avail)
+                } else if hh("disk_busy_pct") >= 80.0 {
+                    format!(
+                        "io: disk saturated — {:.0} iops at {:.0}ms, {}/s read {}/s write; see W/s R/s per process",
+                        hh("disk_iops"), hh("disk_avio_ms"), fmt_bps(read_bps), fmt_bps(write_bps)
+                    )
+                } else {
+                    format!("io: {:.0} blocked (D state), wait {:.0}%", hh("procs_blocked"), cd("iowait"))
+                };
+                why.push((io_some, text));
+            }
+            if mem_some >= 5.0 {
+                why.push((mem_some, format!(
+                    "mem: direct reclaim {}/s stalls callers, kswapd {}/s, refault {}/s, avail {}",
+                    fmt_rate(rc("scan_direct")), fmt_rate(rc("scan_kswapd")), fmt_rate(rc("refault_file")), avail
+                )));
+            }
+            if cpu_some >= 5.0 {
+                why.push((cpu_some, format!(
+                    "cpu: runq {:.0}, steal {:.1}%, wait {:.0}% — sort by CPU% / RUNQ below",
+                    hh("procs_running"), cd("steal"), cd("iowait")
+                )));
+            }
+            why.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+            for (v, text) in why.into_iter().take(2) {
+                pl.push(Line::from(vec![
+                    Span::styled(format!("{:<9}", "why"), Style::default().fg(Color::Rgb(120, 200, 255))),
+                    Span::styled(text, Style::default().fg(grad(v / 50.0))),
+                ]));
+            }
+
         let voters = arr(&self.guard, "voters");
         if voters.is_empty() {
             pl.push(Line::from(Span::styled(
