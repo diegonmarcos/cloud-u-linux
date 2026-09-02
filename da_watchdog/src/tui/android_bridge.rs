@@ -2,26 +2,31 @@
 //!
 //! The phone app measures nothing. This loop, running in nix-on-droid, asks
 //! the app which machine it wants, measures it (this env, or a mesh peer over
-//! the ssh only this env can make), and pushes the envelope INTO the app
-//! through Android's own `content` tool — a ContentProvider the app exports
-//! for this uid alone. No socket, no key, no ssh client in the app.
+//! the ssh only this env can make), and pushes the envelope INTO the app with
+//! explicit broadcasts — `am broadcast`, which any uid may send, and whose
+//! result data comes straight back on stdout. No socket, no key, no ssh
+//! client in the app.
 //!
-//!   content query --uri content://…/wants           what the user picked
-//!   content write --uri content://…/snapshot/<a>    the envelope, on stdin
+//!   am broadcast -a …WANTS -n <app>/<receiver>            → data="oci-apps"
+//!   am broadcast -a …PUSH  --es alias A --es gz <b64> …    the envelope, gzip+base64
 //!
-//! Every step is a shell command, so the whole chain can be exercised by
-//! hand over ssh and read back with `content query …/log`.
+//! Not a ContentProvider: Android's `content` tool needs a permission only
+//! the shell uid holds. Broadcasts do not, so every step is a shell command
+//! runnable by hand over ssh, and `…LOG` reads the app's own log the same way.
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-const AUTHORITY: &str = "com.diegonmarcos.watchdog.bridge";
-const CONTENT: &str = "/system/bin/content";
+const APP: &str = "com.diegonmarcos.watchdog";
+const RECEIVER: &str = "com.diegonmarcos.superapp.watchdog.BridgeReceiver";
+const AM: &str = "/system/bin/am";
 const TICK: Duration = Duration::from_secs(5);
+/// Linux caps one argv string at 128 KiB; stay well under it.
+const PART: usize = 100_000;
 
-/// The Android runtime environment `content` (an app_process) needs and a
-/// proot shell does not carry: read once off the proot launcher, which is
-/// this uid and still holds it.
+/// The Android runtime environment `am` (an app_process) needs and a proot
+/// shell does not carry: read once off the proot launcher, which is this uid
+/// and still holds it.
 fn android_env() -> Vec<(String, String)> {
     let want = |k: &str| {
         k.starts_with("ANDROID_")
@@ -45,51 +50,76 @@ fn android_env() -> Vec<(String, String)> {
     vec![]
 }
 
-fn content(env: &[(String, String)], args: &[&str], stdin: Option<&[u8]>) -> Result<String, String> {
-    let mut cmd = Command::new(CONTENT);
-    cmd.args(args).envs(env.iter().cloned());
+/// One explicit broadcast; the receiver's result data, or why not.
+fn am(env: &[(String, String)], action: &str, extras: &[(&str, &str, &str)]) -> Result<String, String> {
+    let mut cmd = Command::new(AM);
+    cmd.arg("broadcast").arg("-a").arg(format!("{APP}.{action}")).arg("-n").arg(format!("{APP}/{RECEIVER}"));
+    for (flag, k, v) in extras {
+        cmd.arg(flag).arg(k).arg(v);
+    }
+    cmd.envs(env.iter().cloned());
     let path = std::env::var("PATH").unwrap_or_default();
     cmd.env("PATH", format!("{path}:/system/bin"));
-    cmd.stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() });
-    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = cmd.spawn().map_err(|e| format!("{CONTENT}: {e}"))?;
-    if let Some(body) = stdin {
-        let mut w = child.stdin.take().ok_or("no stdin")?;
-        // EPIPE here means `content` quit before reading — the provider is
-        // missing or refused us. Its stderr says which; that is the error.
-        let _ = w.write_all(body);
-        drop(w);
-    }
-    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let out = cmd.output().map_err(|e| format!("{AM}: {e}"))?;
     let text = String::from_utf8_lossy(&out.stdout).to_string();
-    // `content` exits 0 and explains on stderr, so exit status alone says nothing.
     let err = String::from_utf8_lossy(&out.stderr).to_string();
-    let bad = |s: &str| s.contains("Error") || s.contains("Exception") || s.contains("Could not find");
+    let bad = |s: &str| s.contains("Error") || s.contains("Exception") || s.contains("does not exist");
     if !out.status.success() || bad(&text) || bad(&err) {
         return Err(format!("{} {}", text.trim(), err.trim()).trim().to_string());
     }
-    Ok(text)
+    // `Broadcast completed: result=-1, data="oci-apps"` — no data means no
+    // receiver answered, which is "the app is not installed" in practice.
+    let line = text.lines().find(|l| l.contains("Broadcast completed")).unwrap_or("");
+    let data = line
+        .split_once("data=\"")
+        .map(|(_, d)| d.trim_end_matches('"').to_string())
+        .ok_or_else(|| format!("no receiver answered ({})", line.trim()))?;
+    Ok(data)
 }
 
-fn uri(path: &str) -> String {
-    format!("content://{AUTHORITY}/{path}")
-}
-
-/// `Row: 0 alias=oci-apps` → `oci-apps`
 fn wanted(env: &[(String, String)]) -> Result<String, String> {
-    let out = content(env, &["query", "--uri", &uri("wants")], None)?;
-    let a = out
-        .lines()
-        .find_map(|l| l.split_once("alias=").map(|(_, v)| v.trim().to_string()))
-        .unwrap_or_default();
-    Ok(if a.is_empty() || a == "NULL" { "local".into() } else { a })
+    let a = am(env, "WANTS", &[])?;
+    Ok(if a.is_empty() || a == "denied" { "local".into() } else { a })
 }
 
-fn push(env: &[(String, String)], alias: &str) -> Result<usize, String> {
+/// gzip + base64 through the env's own tools — both are in nix-on-droid and
+/// neither is worth a crate in a binary that is mostly not on Android.
+fn pack(json: &str) -> Result<String, String> {
+    let mut child = Command::new("sh")
+        .args(["-c", "gzip -c | base64 -w0"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("gzip|base64: {e}"))?;
+    child.stdin.take().ok_or("no stdin")?.write_all(json.as_bytes()).map_err(|e| e.to_string())?;
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+fn push(env: &[(String, String)], alias: &str) -> Result<String, String> {
     let peer = if alias == "local" { None } else { Some(alias) };
     let json = super::monitor::envelope_json_for(peer)?;
-    content(env, &["write", "--uri", &uri(&format!("snapshot/{alias}"))], Some(json.as_bytes()))?;
-    Ok(json.len())
+    let b64 = pack(&json)?;
+    let parts: Vec<&str> = b64.as_bytes().chunks(PART).map(|c| std::str::from_utf8(c).unwrap_or("")).collect();
+    let id = format!(
+        "{}",
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0)
+    );
+    let n = parts.len().to_string();
+    let mut last = String::new();
+    for (i, p) in parts.iter().enumerate() {
+        let idx = i.to_string();
+        last = am(
+            env,
+            "PUSH",
+            &[("--es", "alias", alias), ("--es", "id", &id), ("--ei", "part", &idx), ("--ei", "parts", &n), ("--es", "gz", p)],
+        )?;
+    }
+    if !last.starts_with("ok") {
+        return Err(format!("app said: {last}"));
+    }
+    Ok(format!("{} B json, {} B packed, {} part(s) — {last}", json.len(), b64.len(), parts.len()))
 }
 
 pub fn run() -> std::io::Result<()> {
@@ -121,11 +151,11 @@ pub fn run() -> std::io::Result<()> {
         }
         for a in todo {
             match push(&env, &a) {
-                Ok(n) => {
+                Ok(msg) => {
                     if a == "local" {
                         last_local = std::time::Instant::now();
                     }
-                    eprintln!("android-bridge: pushed {a} ({n} B)");
+                    eprintln!("android-bridge: pushed {a}: {msg}");
                 }
                 Err(e) => eprintln!("android-bridge: {a}: {e}"),
             }
