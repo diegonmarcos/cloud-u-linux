@@ -57,6 +57,12 @@ const out = document.getElementById('out') as HTMLElement;
 // Which panel is on screen, so a data refresh redraws THAT one rather than
 // throwing the reader back to the overview every time a snapshot lands.
 let current = '__overview';
+// The last thing the app's bridge said — "ssh nix-on-droid: Auth fail",
+// "stale: oci-apps unreachable". The bridge always pushed these; the page
+// never defined the function they were pushed at, so every reason a machine
+// did not answer was thrown away and the only symptom left was a dashboard
+// that never filled in.
+let lastEvent = '';
 // Set by index-mobile.html. Not a viewport query: the page is chosen when it
 // is written, so a phone in landscape gets the phone page and a narrow window
 // on a desktop does not.
@@ -397,7 +403,8 @@ function overview(): string {
   if (typeof S.cpu !== 'number') {
     return panel('overview', 'waiting for a machine',
       '<pre>Pick a machine in the drawer, or wait for this one to answer.\n\n'
-      + 'The interface is here; the numbers arrive when the sampler does.</pre>', true);
+      + 'The interface is here; the numbers arrive when the sampler does.'
+      + (lastEvent ? `\n\n${esc(lastEvent)}` : '') + '</pre>', true);
   }
   // A real envelope that predates the transcript, or a build that could not
   // draw one. The numbers are genuine here, so the boxes are too.
@@ -762,7 +769,7 @@ function fillSwitcher(): void {
   if (!ul || ul.querySelector('a[href]')) return;
   const fs = fleet();
   if (!fs.length) {
-    ul.innerHTML = '<li><a class="off">no fleet in this envelope</a></li>';
+    ul.innerHTML = `<li><a class="off">no fleet in this envelope${lastEvent ? ' — ' + esc(lastEvent) : ''}</a></li>`;
     return;
   }
   ul.innerHTML = fs.map(c =>
@@ -794,6 +801,16 @@ function fillSwitcher(): void {
   fillSwitcher();
   show(current);
   return true;
+};
+
+(window as unknown as Dict).__wdEvent = (kind: string, payload: string): void => {
+  lastEvent = `${kind}: ${payload}`;
+  // Repaint only the surfaces that show it: the placeholder overview and the
+  // empty drawer. A live dashboard is not redrawn for a status line.
+  if (current === '__overview' && typeof S.cpu !== 'number') show('__overview');
+  const ul = document.getElementById('sw');
+  const off = ul?.querySelector('a.off');
+  if (off && !fleet().length) off.textContent = `no fleet in this envelope — ${lastEvent}`;
 };
 
 fillSwitcher();

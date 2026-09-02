@@ -7,6 +7,7 @@
   let S = E.snapshot || {};
   const out = document.getElementById("out");
   let current = "__overview";
+  let lastEvent = "";
   const MOBILE = document.body.dataset.view === "mobile";
   let fitNow = () => {
   };
@@ -273,7 +274,9 @@
       return panel(
         "overview",
         "waiting for a machine",
-        "<pre>Pick a machine in the drawer, or wait for this one to answer.\n\nThe interface is here; the numbers arrive when the sampler does.</pre>",
+        "<pre>Pick a machine in the drawer, or wait for this one to answer.\n\nThe interface is here; the numbers arrive when the sampler does." + (lastEvent ? `
+
+${esc(lastEvent)}` : "") + "</pre>",
         true
       );
     }
@@ -516,7 +519,7 @@
     if (!ul || ul.querySelector("a[href]")) return;
     const fs = fleet();
     if (!fs.length) {
-      ul.innerHTML = '<li><a class="off">no fleet in this envelope</a></li>';
+      ul.innerHTML = `<li><a class="off">no fleet in this envelope${lastEvent ? " \u2014 " + esc(lastEvent) : ""}</a></li>`;
       return;
     }
     ul.innerHTML = fs.map((c) => `<li><a class="m${c.current ? " on" : ""}${c.pickable ? "" : " off"}"` + (c.pickable ? ` data-alias="${esc(c.target)}" data-busy="${esc(c.m.name)} \u2026"` : "") + `>${esc(c.m.name)}</a></li>`).join("");
@@ -534,6 +537,13 @@
     fillSwitcher();
     show(current);
     return true;
+  };
+  window.__wdEvent = (kind, payload) => {
+    lastEvent = `${kind}: ${payload}`;
+    if (current === "__overview" && typeof S.cpu !== "number") show("__overview");
+    const ul = document.getElementById("sw");
+    const off = ul == null ? void 0 : ul.querySelector("a.off");
+    if (off && !fleet().length) off.textContent = `no fleet in this envelope \u2014 ${lastEvent}`;
   };
   fillSwitcher();
   show("__overview");
