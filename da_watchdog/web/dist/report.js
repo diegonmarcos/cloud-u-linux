@@ -11,6 +11,11 @@
   const MOBILE = document.body.dataset.view === "mobile";
   let fitNow = () => {
   };
+  let view = "cards";
+  try {
+    view = localStorage.getItem("wd.view") || "cards";
+  } catch (e) {
+  }
   const BAR = MOBILE ? 10 : 20;
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const num = (o, k) => {
@@ -236,6 +241,16 @@
       "iops",
       String(num(h, "disk_iops"))
     );
+    const bps = (v) => bytes(v) + "/s";
+    const readB = num(S, "disk_r") * 1048576;
+    const refB = num(r, "refault_file") * 4096, swapB = (num(r, "swap_in") + num(r, "swap_out")) * 4096;
+    const avail = mibG(num(m, "available"));
+    const why = [];
+    const io = num(p.io || {}, "some10"), me = num(p.memory || {}, "some10"), cp = num(p.cpu || {}, "some10");
+    if (io >= 5) why.push([io, refB > 0 && refB >= readB * 0.5 ? `io: reads ${bps(readB)} \u2248 file refaults ${bps(refB)} \u2014 page cache evicted and re-read, avail ${avail} \u2192 MEMORY, not disk` : swapB > 0 && swapB >= readB * 0.5 ? `io: swap ${bps(swapB)}, avail ${avail} \u2192 MEMORY, not disk` : num(h, "disk_busy_pct") >= 80 ? `io: disk saturated \u2014 ${Math.round(num(h, "disk_iops"))} iops at ${Math.round(num(h, "disk_avio_ms"))}ms` : `io: ${Math.round(num(h, "procs_blocked"))} blocked (D state), wait ${pc(num(S.cpu_detail || {}, "iowait"))}`]);
+    if (me >= 5) why.push([me, `mem: direct reclaim ${dash(num(r, "scan_direct"))}/s, kswapd ${dash(num(r, "scan_kswapd"))}/s, avail ${avail}`]);
+    if (cp >= 5) why.push([cp, `cpu: runq ${Math.round(num(h, "procs_running"))}, steal ${pc(num(S.cpu_detail || {}, "steal"))}`]);
+    why.sort((a, b2) => b2[0] - a[0]).slice(0, 2).forEach(([, t]) => b += `<div class="r why"><span class="lb">why</span><span class="v">${esc(t)}</span></div>`);
     return panel("psi", null, b, true);
   }
   function boxSlices() {
@@ -268,7 +283,8 @@
     return panel("mesh", ms.length + " machines", b, true);
   }
   function overview() {
-    const t = MOBILE ? E.tui_narrow || E.tui : E.tui;
+    if (MOBILE && view === "cards" && typeof S.cpu === "number") return legacyOverview();
+    const t = MOBILE ? E.tui || E.tui_narrow : E.tui;
     if (t) return `<div class="tui-wrap">${t}</div>`;
     if (typeof S.cpu !== "number") {
       return panel(
@@ -484,9 +500,8 @@ ${esc(lastEvent)}` : "") + "</pre>",
     const zoom = document.createElement("button");
     zoom.className = "zoom";
     zoom.type = "button";
-    zoom.textContent = "1:1";
-    zoom.setAttribute("aria-pressed", "false");
-    zoom.setAttribute("aria-label", "actual size");
+    zoom.textContent = view;
+    zoom.setAttribute("aria-label", "switch between cards and the desktop screen");
     bar2.appendChild(zoom);
     document.body.insertBefore(bar2, document.body.firstChild);
     const root = document.documentElement;
@@ -494,23 +509,22 @@ ${esc(lastEvent)}` : "") + "</pre>",
       const pre = document.querySelector(".tui");
       const wrap = document.querySelector(".tui-wrap");
       if (!pre || !wrap) return;
-      if (root.classList.contains("zoom1")) {
-        pre.style.transform = "";
-        wrap.style.height = "";
-        return;
-      }
       pre.style.transform = "";
       wrap.style.height = "";
-      const k = Math.min(1, wrap.clientWidth / Math.max(1, pre.scrollWidth));
+      const k = wrap.clientWidth / Math.max(1, pre.scrollWidth);
       pre.style.transform = `scale(${k})`;
       wrap.style.height = `${pre.offsetHeight * k}px`;
     };
     zoom.onclick = () => {
-      const on = root.classList.toggle("zoom1");
-      zoom.setAttribute("aria-pressed", String(on));
-      zoom.textContent = on ? "fit" : "1:1";
-      fit();
+      view = view === "cards" ? "desktop" : "cards";
+      try {
+        localStorage.setItem("wd.view", view);
+      } catch (e) {
+      }
+      zoom.textContent = view;
+      show(current);
     };
+    void root;
     window.addEventListener("resize", fit);
     fitNow = fit;
   }

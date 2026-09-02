@@ -686,3 +686,7 @@ button.measure {
 
 .mn { display: inline-block; min-width: 11em; }
 .md { color: #6b7686; }
+
+// The psi box's "why" lines: prose, so they wrap where the numbers do not.
+.r.why { flex-wrap: wrap; }
+.r.why .v { flex: 1 1 100%; white-space: normal; color: var(--accent); }

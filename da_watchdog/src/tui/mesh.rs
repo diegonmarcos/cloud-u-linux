@@ -158,6 +158,13 @@ fn is_mesh_addr(a: &str) -> bool {
     a.starts_with("10.0.0.") || a.starts_with("10.1.0.") || a.starts_with("fd0c:")
 }
 
+/// Does anything answer at this address? The same TCP connect [`probe`] makes,
+/// for callers that want the yes/no rather than the timing — the fleet list
+/// uses it to drop ssh-config hosts the declaration no longer knows.
+pub fn reachable(ip: &str) -> bool {
+    probe(ip).is_some()
+}
+
 /// One TCP connect, timed. Reachability that the kernel actually confirmed —
 /// a SYN/ACK from the peer's sshd — rather than a config file's opinion.
 fn probe(ip: &str) -> Option<f64> {

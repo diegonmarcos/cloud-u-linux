@@ -986,3 +986,13 @@ button.measure:active {
 .md {
   color: #6b7686;
 }
+
+.r.why {
+  flex-wrap: wrap;
+}
+
+.r.why .v {
+  flex: 1 1 100%;
+  white-space: normal;
+  color: var(--accent);
+}

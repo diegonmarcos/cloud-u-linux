@@ -419,12 +419,18 @@ pub(super) fn fleet_machines() -> Vec<Value> {
         if !key.is_empty() {
             seen.push(key);
         }
-        let alias = text(&v, "ssh_alias");
-        if !alias.is_empty() {
-            seen.push(alias);
+        if !text(&v, "ssh_alias").is_empty() {
+            seen.push(text(&v, "ssh_alias"));
         }
+        // The NAME is what the fleet calls it — the ssh alias — not the key
+        // config.json happens to file it under. "gcp-E2-f_0" is a provider
+        // and a shape; "gcp-proxy" is the machine, and it is the name in
+        // every other tool, in the mesh table and in the reader's head.
+        let alias = text(&v, "ssh_alias");
+        let shown = if alias.is_empty() { name.clone() } else { alias.clone() };
         out.push(serde_json::json!({
-            "name": name,
+            "name": shown,
+            "key": name,
             "alias": text(&v, "ssh_alias"),
             "ip": if wg.is_empty() { text(&v, "ip") } else { wg.clone() },
             "public": text(&v, "ip"),
@@ -481,6 +487,26 @@ pub(super) fn fleet_machines() -> Vec<Value> {
         }));
     }
 
+    // STALE ssh-config HOSTS ARE NOT FLEET.
+    //
+    // ~/.ssh/config outlives the machines in it: oci-apps-2 and gcp-t4 were
+    // archived from config.json and stayed in the phone's config file for
+    // months, so the drawer offered two machines that do not exist. A Host
+    // entry is evidence that something WAS reachable, not that it is fleet —
+    // the declaration is what says which machines exist. So a peer the
+    // declaration does not know is kept only while it answers, and marked.
+    for m in out.iter_mut() {
+        if text(m, "kind") != "peer" {
+            continue;
+        }
+        if let Some(o) = m.as_object_mut() {
+            o.insert("undeclared".into(), Value::Bool(true));
+        }
+    }
+    out.retain(|m| {
+        text(m, "kind") != "peer" || crate::tui::mesh::reachable(&text(m, "ip"))
+    });
+
     // THE CLIENTS ARE FLEET TOO — and they come LAST.
     //
     // config.json declares five wireguard clients beside the VMs: this laptop,
@@ -506,7 +532,17 @@ pub(super) fn fleet_machines() -> Vec<Value> {
         if wg.is_empty() {
             continue;
         }
+        // The DECLARED name, where there is one: config.json now carries
+        // `name` per client, so this laptop is desktop-nixos and the phone is
+        // termux-galaxy rather than the config keys `surface` and `termux`.
+        let shown = { let n = text(&v, "name"); if n.is_empty() { name.clone() } else { n } };
         if let Some(i) = out.iter().position(|m| text(m, "ip") == wg) {
+            // A row ssh named first is renamed to the declared name — the
+            // declaration is where the fleet's names live — but keeps the
+            // `local` flag and the alias ssh gave it.
+            if let Some(o) = out[i].as_object_mut() {
+                o.insert("name".into(), Value::String(shown.clone()));
+            }
             if !wg6.is_empty() {
                 if let Some(list) = out[i].get_mut("addrs").and_then(|a| a.as_array_mut()) {
                     if !list.iter().any(|a| a.as_str() == Some(wg6.as_str())) {
@@ -519,7 +555,8 @@ pub(super) fn fleet_machines() -> Vec<Value> {
         seen.push(wg.clone());
         seen.push(name.clone());
         out.push(serde_json::json!({
-            "name": name,
+            "name": shown,
+            "key": name,
             "alias": "",
             "ip": wg.clone(),
             "public": "",

@@ -70,6 +70,13 @@ const MOBILE = document.body.dataset.view === 'mobile';
 // Assigned by the phone shell below; a no-op on the desktop page so every
 // caller can just call it without asking which page it is on.
 let fitNow: () => void = () => {};
+// Two designs on the phone. "cards": the boxed dashboard, one column, built
+// from the numbers — readable at phone size. "desktop": the panel's wide
+// transcript scaled to the screen width, the exact desktop screen, for
+// seeing the whole shape at once (pinch to read). Remembered per device.
+type View = 'cards' | 'desktop';
+let view: View = 'cards';
+try { view = (localStorage.getItem('wd.view') as View) || 'cards'; } catch { /* no storage */ }
 // A 20-cell meter needs ~20ch beside a label and two figures. That fits a
 // terminal and does not fit 390px, so the bar gives up cells rather than
 // letting the numbers wrap — the numbers are the part being read.
@@ -313,6 +320,24 @@ function boxPsi(): string {
           'dirty', mibG(num(m,'dirty')));
   b += kv('io/net', '', 'busy', pc(num(h,'disk_busy_pct')), 'avio', num(h,'disk_avio_ms').toFixed(2) + 'ms',
           'iops', String(num(h,'disk_iops')));
+  // WHY — the same reading the panel's psi box gives. Reads that match the
+  // file-refault rate are the page cache being evicted and re-read: memory,
+  // not disk, and charged to no process.
+  const bps = (v: number) => bytes(v) + '/s';
+  const readB = num(S as Dict, 'disk_r') * 1048576;
+  const refB = num(r, 'refault_file') * 4096, swapB = (num(r, 'swap_in') + num(r, 'swap_out')) * 4096;
+  const avail = mibG(num(m, 'available'));
+  const why: [number, string][] = [];
+  const io = num((p as Dict).io || {}, 'some10'), me = num((p as Dict).memory || {}, 'some10'), cp = num((p as Dict).cpu || {}, 'some10');
+  if (io >= 5) why.push([io, refB > 0 && refB >= readB * 0.5
+    ? `io: reads ${bps(readB)} ≈ file refaults ${bps(refB)} — page cache evicted and re-read, avail ${avail} → MEMORY, not disk`
+    : swapB > 0 && swapB >= readB * 0.5 ? `io: swap ${bps(swapB)}, avail ${avail} → MEMORY, not disk`
+    : num(h,'disk_busy_pct') >= 80 ? `io: disk saturated — ${Math.round(num(h,'disk_iops'))} iops at ${Math.round(num(h,'disk_avio_ms'))}ms`
+    : `io: ${Math.round(num(h,'procs_blocked'))} blocked (D state), wait ${pc(num(S.cpu_detail || {},'iowait'))}`]);
+  if (me >= 5) why.push([me, `mem: direct reclaim ${dash(num(r,'scan_direct'))}/s, kswapd ${dash(num(r,'scan_kswapd'))}/s, avail ${avail}`]);
+  if (cp >= 5) why.push([cp, `cpu: runq ${Math.round(num(h,'procs_running'))}, steal ${pc(num(S.cpu_detail || {},'steal'))}`]);
+  why.sort((a, b2) => b2[0] - a[0]).slice(0, 2).forEach(([, t]) =>
+    b += `<div class="r why"><span class="lb">why</span><span class="v">${esc(t)}</span></div>`);
   return panel('psi', null, b, true);
 }
 
@@ -388,7 +413,8 @@ function overview(): string {
   // The phone gets its own transcript, drawn by the panel at 104 columns
   // rather than the 200-column one scaled down — 200 across a 390pt screen is
   // about three pixels a character, which is a texture, not text.
-  const t = MOBILE ? (E.tui_narrow || E.tui) : E.tui;
+  if (MOBILE && view === 'cards' && typeof S.cpu === 'number') return legacyOverview();
+  const t = MOBILE ? (E.tui || E.tui_narrow) : E.tui;
   if (t) return `<div class="tui-wrap">${t}</div>`;
   // NO TRANSCRIPT. Two very different reasons, and only one of them is a
   // dashboard.
@@ -708,9 +734,8 @@ if (MOBILE) {
   const zoom = document.createElement('button');
   zoom.className = 'zoom';
   zoom.type = 'button';
-  zoom.textContent = '1:1';
-  zoom.setAttribute('aria-pressed', 'false');
-  zoom.setAttribute('aria-label', 'actual size');
+  zoom.textContent = view;
+  zoom.setAttribute('aria-label', 'switch between cards and the desktop screen');
   bar.appendChild(zoom);
   document.body.insertBefore(bar, document.body.firstChild);
 
@@ -722,23 +747,21 @@ if (MOBILE) {
     const pre = document.querySelector('.tui') as HTMLElement | null;
     const wrap = document.querySelector('.tui-wrap') as HTMLElement | null;
     if (!pre || !wrap) return;
-    if (root.classList.contains('zoom1')) {
-      pre.style.transform = '';
-      wrap.style.height = '';
-      return;
-    }
     pre.style.transform = '';
     wrap.style.height = '';
-    const k = Math.min(1, wrap.clientWidth / Math.max(1, pre.scrollWidth));
+    // To the width, whichever way that is: the wide screen shrinks, a narrow
+    // one grows. The grid keeps every column in place either way.
+    const k = wrap.clientWidth / Math.max(1, pre.scrollWidth);
     pre.style.transform = `scale(${k})`;
     wrap.style.height = `${pre.offsetHeight * k}px`;
   };
   zoom.onclick = () => {
-    const on = root.classList.toggle('zoom1');
-    zoom.setAttribute('aria-pressed', String(on));
-    zoom.textContent = on ? 'fit' : '1:1';
-    fit();
+    view = view === 'cards' ? 'desktop' : 'cards';
+    try { localStorage.setItem('wd.view', view); } catch { /* no storage */ }
+    zoom.textContent = view;
+    show(current);
   };
+  void root;
   // Rotation changes the available width, so the fit is recomputed rather
   // than left at whatever the launch orientation happened to need.
   window.addEventListener('resize', fit);
