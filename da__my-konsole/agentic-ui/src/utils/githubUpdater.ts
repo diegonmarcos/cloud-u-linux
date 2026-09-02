@@ -32,6 +32,38 @@ export class GitHubUpdater {
   private readonly bundleName = process.env.GOOSE_BUNDLE_NAME || 'Goose';
   private readonly apiUrl = `https://api.github.com/repos/${this.owner}/${this.repo}/releases/latest`;
 
+  /** Rate-limit-proof check: resolve the latest tag from the 302 Location of
+   *  the human releases page (not the API), then build the asset URL from
+   *  tag + platform name — releases/download/ serves without any API quota. */
+  private async checkViaRedirect(): Promise<UpdateCheckResult> {
+    const url = `https://github.com/${this.owner}/${this.repo}/releases/latest`;
+    const res = await fetch(url, { method: 'HEAD', redirect: 'manual' });
+    const loc = res.headers.get('location') || '';
+    const m = loc.match(/\/tag\/([^/?#]+)/);
+    if (!m) {
+      return { updateAvailable: false, error: `redirect check failed (${res.status})` };
+    }
+    const tag = decodeURIComponent(m[1]);
+    const latestVersion = tag.replace(/^v/, '');
+    const currentVersion = app.getVersion();
+    const updateAvailable = compareVersions(latestVersion, currentVersion) > 0;
+    log.info(`GitHubUpdater: redirect check tag=${tag} current=${currentVersion} update=${updateAvailable}`);
+    if (!updateAvailable) return { updateAvailable: false, latestVersion };
+    const assetName = this.assetNameFor(process.platform, process.arch);
+    return {
+      updateAvailable: true,
+      latestVersion,
+      downloadUrl: `https://github.com/${this.owner}/${this.repo}/releases/download/${tag}/${assetName}`,
+      releaseUrl: loc,
+    };
+  }
+
+  private assetNameFor(platform: string, arch: string): string {
+    if (platform === 'darwin') return arch === 'arm64' ? `${this.bundleName}.zip` : `${this.bundleName}_intel_mac.zip`;
+    if (platform === 'win32') return `${this.bundleName}-win32-x64.zip`;
+    return `${this.bundleName}-linux-${arch}.zip`;
+  }
+
   async checkForUpdates(): Promise<UpdateCheckResult> {
     const startTime = Date.now();
     try {
@@ -47,15 +79,31 @@ export class GitHubUpdater {
         controller.abort();
       }, 30000);
 
+      // Unauthenticated api.github.com is 60 req/h PER SOURCE IP — shared with
+      // every other unauthenticated caller behind the same NAT (superapp
+      // panels, scripts, a Claude session hammering gh). When the pool is
+      // burned the API answers 403 and this updater read as "broken" on a
+      // schedule. A token lifts the limit to 5000/h; the 403 fallback below
+      // avoids the API entirely.
+      const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '';
       const response = await fetch(this.apiUrl, {
         headers: {
           Accept: 'application/vnd.github.v3+json',
           'User-Agent': `Goose-Desktop/${app.getVersion()}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
+
+      if (response.status === 403 || response.status === 429) {
+        // Rate-limited. github.com/<repo>/releases/latest is NOT the API and
+        // has no such limit: its redirect Location carries the tag, and asset
+        // URLs are constructible from tag + name. Same data, no 403, ever.
+        log.warn('GitHubUpdater: API rate-limited — falling back to redirect-based check');
+        return await this.checkViaRedirect();
+      }
       const fetchDuration = Date.now() - startTime;
       log.info(
         `GitHubUpdater: GitHub API response status: ${response.status} ${response.statusText} (took ${fetchDuration}ms)`
