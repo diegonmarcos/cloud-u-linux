@@ -53,7 +53,9 @@ fn android_env() -> Vec<(String, String)> {
 /// One explicit broadcast; the receiver's result data, or why not.
 fn am(env: &[(String, String)], action: &str, extras: &[(&str, &str, &str)]) -> Result<String, String> {
     let mut cmd = Command::new(AM);
-    cmd.arg("broadcast").arg("-a").arg(format!("{APP}.{action}")).arg("-n").arg(format!("{APP}/{RECEIVER}"));
+    // `--user 0`: without it `am` targets "the current user" (-2), which an
+    // app uid may not do — INTERACT_ACROSS_USERS — and the broadcast is refused.
+    cmd.args(["broadcast", "--user", "0", "-a"]).arg(format!("{APP}.{action}")).arg("-n").arg(format!("{APP}/{RECEIVER}"));
     for (flag, k, v) in extras {
         cmd.arg(flag).arg(k).arg(v);
     }
