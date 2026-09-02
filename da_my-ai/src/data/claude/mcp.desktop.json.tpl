@@ -55,6 +55,19 @@
       },
       "alwaysLoad": false
     },
+    "cloud-superapp-mcp": {
+      "type": "stdio",
+      "command": "/home/diego/.claude/mcp-local-launch.sh",
+      "args": [
+        "/home/diego/git/cloud-infra/a_solutions/infra-api_cloud-superapp-mcp/src/index.ts"
+      ],
+      "env": {
+        "NODE_PATH": "/home/diego/.node_modules/node_modules",
+        "SUPERAPP_HOSTS": "phone,phone-v6,phone-pub",
+        "SUPERAPP_FLEET_TOKEN": "${SUPERAPP_FLEET_TOKEN}"
+      },
+      "alwaysLoad": false
+    },
     "cloud-services-mcp": {
       "type": "http",
       "url": "https://mcp.diegonmarcos.com/c3-services-mcp/mcp",
