@@ -2768,15 +2768,24 @@ fn hostname() -> String {
         return h;
     }
     if let Ok(h) = std::env::var("HOSTNAME") {
-        if !h.trim().is_empty() {
-            return h.trim().to_string();
+        let h = h.trim();
+        // "localhost" is what a shell fills in when it has nothing either, so
+        // taking it would replace one non-answer with a more confident one.
+        if !h.is_empty() && h != "localhost" {
+            return h.to_string();
         }
     }
+    // BY ABSOLUTE PATH. getprop is not on PATH inside nix-on-droid's proot —
+    // that environment's PATH is the nix profile and nothing else — so naming
+    // it bare found nothing on the one platform this fallback exists for.
+    // /system/bin is Android's own, mounted through the proot, and the binary
+    // there is a symlink to toolbox on every device that has it.
     for prop in ["ro.product.model", "ro.product.device"] {
-        let out = clean_command("getprop")
+        let out = clean_command("/system/bin/getprop")
             .arg(prop)
             .output()
             .ok()
+            .filter(|o| o.status.success())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default();
         if !out.is_empty() {
