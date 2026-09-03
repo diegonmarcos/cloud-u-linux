@@ -1,11 +1,17 @@
 {
-  "_comment": "Written by ship-my-webserver-app.yml. Seeded from the values ba_flakes_desktop and bb_flakes_termux each carried their own copy of.",
+  "_comment": "Written by ship-my-webserver-app.yml. The per-arch Node SEA binaries — what ba_flakes_desktop and bb_flakes_termux install through da_my-webserver's flake, with no compiler and no second copy of this fetch.",
   "tag": "my-webserver-latest",
   "version": "latest",
   "x86_64-linux": {
-    "my-webserver": { "asset": "my-webserver-x86_64", "hash": "sha256-pZzhfITa6vIiuvp6rZgs/Dv2sbgWSzu+bIc5TwioPjE=" }
+    "my-webserver": {
+      "asset": "my-webserver-x86_64",
+      "hash": "sha256-pZzhfITa6vIiuvp6rZgs/Dv2sbgWSzu+bIc5TwioPjE="
+    }
   },
   "aarch64-linux": {
-    "my-webserver": { "asset": "my-webserver-aarch64", "hash": "sha256-8hjxYzs1mxPItIyYe7OQwVo98mKqRJmhF9Wi/aWOK5g=" }
+    "my-webserver": {
+      "asset": "my-webserver-aarch64",
+      "hash": "sha256-8hjxYzs1mxPItIyYe7OQwVo98mKqRJmhF9Wi/aWOK5g="
+    }
   }
 }
