@@ -14,6 +14,11 @@ on:
     paths:
       - 'da_watchdog/**'
       - '.github/workflows/ship-my-watchdog.yml'
+    paths-ignore:
+      # The pin job below commits this back after publishing. Without the
+      # exclusion every release would trigger the build that writes it, and
+      # the workflow would ship forever.
+      - 'da_watchdog/nix/hashes.json'
   workflow_dispatch:
 
 permissions:
@@ -184,6 +189,97 @@ jobs:
           # above ever stopped producing the other.
           tui="$(echo '${{ matrix.asset }}' | sed 's/^my-watchdog-/my-watchdog-tui-/')"
           gh release upload my-watchdog-latest "$tui" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+  # ── the pin ──────────────────────────────────────────────────────────────
+  # WHAT MAKES THE NIX PATH TRUE. nix/prebuilt.nix installs the static assets
+  # published above instead of compiling — that is the only reason a two-core
+  # VM can run this at all — and fetchurl needs a fixed hash. So the hash of
+  # what was just uploaded has to come back into the repository, or every
+  # consumer keeps installing the previous build behind a stale hash.
+  #
+  # This is the seam between the builder and everyone else: after it lands, a
+  # machine updates by bumping flake.lock — reviewable, atomic, roll-back-able
+  # — rather than by re-downloading a rolling tag that changed underneath it.
+  # A tag that moves without this commit is exactly how a laptop ran a
+  # three-week-old binary through four green deploys.
+  #
+  # No nix on the runner: an SRI hash is base64 of the raw sha256 digest, and
+  # sha256sum + xxd + base64 are already here.
+  pin:
+    needs: fleet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The commit below needs a real branch, not the detached head that
+          # actions/checkout leaves by default.
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Hash the published assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd da_watchdog
+          sri() {
+            gh release download my-watchdog-latest --repo "$GITHUB_REPOSITORY" \
+              --pattern "$1" --output "/tmp/$1" --clobber
+            h="$(sha256sum "/tmp/$1" | cut -d' ' -f1)"
+            printf 'sha256-%s' "$(printf '%s' "$h" | xxd -r -p | base64 -w0)"
+          }
+          jq -n \
+            --arg x64d "$(sri my-watchdog-x86_64)"      --arg x64t "$(sri my-watchdog-tui-x86_64)" \
+            --arg a64d "$(sri my-watchdog-aarch64)"     --arg a64t "$(sri my-watchdog-tui-aarch64)" \
+            '{
+              _comment: "Written by ship-my-watchdog.yml. The static musl assets, per arch — the pair a consumer installs without a compiler. Same convention as da_my-ai/nix/hashes.json.",
+              tag: "my-watchdog-latest",
+              version: "latest",
+              "x86_64-linux": {
+                "watchdog-d":   { asset: "my-watchdog-x86_64",     hash: $x64d },
+                "watchdog-tui": { asset: "my-watchdog-tui-x86_64", hash: $x64t }
+              },
+              "aarch64-linux": {
+                "watchdog-d":   { asset: "my-watchdog-aarch64",     hash: $a64d },
+                "watchdog-tui": { asset: "my-watchdog-tui-aarch64", hash: $a64t }
+              }
+            }' > nix/hashes.json
+
+      - name: Commit the pin
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Only this path. Other sessions and other jobs share this branch,
+          # and `git add -A` here would carry whatever else the runner touched.
+          git add da_watchdog/nix/hashes.json
+          git diff --cached --quiet && { echo "pin unchanged"; exit 0; }
+          git commit -m "da_watchdog: pin the published static assets [ci skip]"
+          # Rebase, never force: another push may have landed while the fleet
+          # job was building.
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      # THE TARBALL, BUILT AFTER THE PIN AND NEVER BEFORE. packages.dist reads
+      # nix/hashes.json to fetch the very binaries this run published, so
+      # building it earlier would package the previous release. This is also
+      # the only step that needs nix on a runner: the my-watchdog.service it
+      # carries is RENDERED from nix/watchdog-service.nix, the same expression
+      # the NixOS and home-manager modules render — which is what stops a
+      # Debian box and a NixOS laptop running units that disagree.
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: "experimental-features = nix-command flakes"
+
+      - name: Build and publish the dist tarball
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          nix build ./da_watchdog#dist --out-link /tmp/dist
+          cp /tmp/dist/my-watchdog-dist.tar.gz .
+          gh release upload my-watchdog-latest my-watchdog-dist.tar.gz \
             --repo "$GITHUB_REPOSITORY" --clobber
 
   # ── the container ────────────────────────────────────────────────────────
