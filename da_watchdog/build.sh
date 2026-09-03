@@ -66,6 +66,15 @@ case "${1:-fetch}" in
     chmod +x "$tmp"
     mv -f "$tmp" "$DEST/$BIN"
     ln -sf "$DEST/$BIN" "$LINK"
+    # THE NAME THE MACHINE ACTUALLY RUNS. my-watchdog.service has always said
+    # ExecStart=%h/.local/bin/watchdog-d and my-konsole's `watchdog` launcher
+    # has always exec'd ~/.local/bin/watchdog-tui, while the release artifacts
+    # are my-watchdog and my-watchdog-tui — so fetch installed two files
+    # nothing started and left the two that everything starts frozen at
+    # whatever build first put them there. A daemon from September ran for a
+    # day after four successful updates, and the panel kept rendering a fixed
+    # bug. Linking the names here means one artifact, every caller.
+    ln -sf "$DEST/$BIN" "$(dirname "$LINK")/watchdog-d"
     # The panel, beside the daemon it reads. Best-effort: the fleet artifacts
     # are the sampler alone (no tui feature), so a box that has no panel to
     # download is a normal headless box and not a failure.
@@ -74,6 +83,7 @@ case "${1:-fetch}" in
       chmod +x "$tui_tmp"
       mv -f "$tui_tmp" "$DEST/$BIN-tui"
       ln -sf "$DEST/$BIN-tui" "$(dirname "$LINK")/$BIN-tui"
+      ln -sf "$DEST/$BIN-tui" "$(dirname "$LINK")/watchdog-tui"
       say "panel: $BIN-tui"
     else
       rm -f "$tui_tmp"
