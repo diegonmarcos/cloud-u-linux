@@ -8,11 +8,11 @@
       },
       "locked": {
         "dir": "da__shared",
-        "lastModified": 1788432828,
-        "narHash": "sha256-Aj32YWTsRRjnJKCmGoV13+CbqUfp3fbwfxmEuiY5cEA=",
+        "lastModified": 1788433891,
+        "narHash": "sha256-k0fHKVDQjCRliOCcVhCPKZB+DbN5CIzUpb4rNKS50ZU=",
         "owner": "diegonmarcos",
         "repo": "cloud-u-linux",
-        "rev": "1ce507f5a36377822d13dcf67b3802e838db02c8",
+        "rev": "c0b16462d32db223e5e8b3706e10b54c279d6da0",
         "type": "github"
       },
       "original": {
