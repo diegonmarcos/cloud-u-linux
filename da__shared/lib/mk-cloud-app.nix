@@ -58,6 +58,17 @@ in
       description = "The build to install. Every binary this app ships comes from it.";
     };
 
+    args = lib.mkOption {
+      type = lib.types.str;
+      default = args;
+      description = ''
+        What the unit passes the daemon. A deployment choice, not a property of
+        the app: the desktop wants a port and a root, a VM wants the mesh
+        address it may bind, and a sampler wants --no-tray. systemd specifiers
+        such as %h are valid here.
+      '';
+    };
+
     memoryMax = lib.mkOption {
       type = lib.types.str;
       default = "96M";
@@ -95,7 +106,7 @@ in
           Unit = { Description = description; After = [ cfg.startWith ]; };
           # The store path, not a name in ~/.local/bin. A generation that says
           # what it starts is a generation you can read the answer off.
-          Service = service "${cfg.package}/bin/${daemon}${lib.optionalString (args != "") " ${args}"}";
+          Service = service "${cfg.package}/bin/${daemon}${lib.optionalString (cfg.args != "") " ${cfg.args}"}";
           Install.WantedBy = [ cfg.startWith ];
         };
       })
@@ -125,7 +136,7 @@ in
           # and would sample exactly as blindly as a user-level daemon.
           serviceConfig = service (
             (if capabilities != null then "${config.security.wrapperDir}/${daemon}" else "${cfg.package}/bin/${daemon}")
-            + lib.optionalString (args != "") " ${args}"
+            + lib.optionalString (cfg.args != "") " ${cfg.args}"
           ) // {
             User = "root";
             RuntimeDirectory = name;
