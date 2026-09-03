@@ -24,6 +24,12 @@
 # rolling download that changes under a machine.
 { lib, stdenv, stdenvNoCC, fetchurl, patchelf, gcc-unwrapped, libgcc }:
 
+# Captured before the argument set below shadows it: the caller's `patchelf` is
+# a bool and this one is the program. Nix does not warn about the collision —
+# it fails at build time with "Dependency is not of a valid type", pointing at
+# nativeBuildInputs rather than at the name.
+let patchelfPkg = patchelf; in
+
 # pname   the derivation name
 # hashes  path to hashes.json — { tag, version, <system>.<bin> = { asset, hash } }
 # patchelf  true for a dynamically linked release binary that expects an FHS
@@ -64,7 +70,7 @@ std.mkDerivation {
   dontBuild = true;
 
   # A newer patchelf than the pinned one, invoked explicitly. See above.
-  nativeBuildInputs = lib.optionals patchelf [ patchelf ];
+  nativeBuildInputs = lib.optionals patchelf [ patchelfPkg ];
   dontStrip = patchelf;
   dontPatchELF = patchelf;
 
