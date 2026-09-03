@@ -29,5 +29,8 @@
   outputs = { self, nixpkgs }: {
     lib.mkCloudApp = import ./lib/mk-cloud-app.nix;
     lib.mkService = import ./lib/service.nix;
+    # The published build, fetched not compiled — what every machine that is
+    # not the builder installs. `pkgs.callPackage cloud-apps.lib.mkPrebuilt {}`.
+    lib.mkPrebuilt = import ./lib/prebuilt.nix;
   };
 }
