@@ -13,12 +13,17 @@ on:
     branches: [main]
     paths:
       - 'da_watchdog/**'
+      # NEGATED HERE, not in paths-ignore: GitHub rejects a workflow that uses
+      # both keys for one event, and it rejects it as "a workflow file issue"
+      # with a 0-second run and the FILE PATH where the workflow name should
+      # be — no YAML error, because the YAML is fine. Three watchdog pushes
+      # built nothing before that was spotted.
+      #
+      # The exclusion matters: the pin job commits this file back after
+      # publishing, and without it every release would trigger the build that
+      # writes it, forever.
+      - '!da_watchdog/nix/hashes.json'
       - '.github/workflows/ship-my-watchdog.yml'
-    paths-ignore:
-      # The pin job below commits this back after publishing. Without the
-      # exclusion every release would trigger the build that writes it, and
-      # the workflow would ship forever.
-      - 'da_watchdog/nix/hashes.json'
   workflow_dispatch:
 
 permissions:
