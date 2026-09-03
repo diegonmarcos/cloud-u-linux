@@ -32,6 +32,16 @@ delivery paths a file takes:
    platform-specific: `mcp.json.tpl` (termux bans stdio MCP servers, desktop keeps
    three), `secrets.yaml` (different sops recipients), desktop's `mcp-local-launch.sh`.
 
+## Retired MCP servers
+
+`da_dtk/products/mcp-dtk` and `products/mcp-unix-api` are not used any more.
+They are absent from both `mcp.*.json.tpl`, from `~/.mcp.json` and from
+cloud-infra's declared services, and `test-claude-sot.sh` asserts they stay
+absent — absence is otherwise a decision nothing is holding, and the check
+directly above it ("every cloud-infra MCP is declared in the desktop
+template") pushes the other way for everything that IS declared. The source
+stays in da_dtk; only the wiring is gone.
+
 ## settings.json
 
 One base plus a per-platform overlay, merged with `lib.recursiveUpdate`.

@@ -136,6 +136,23 @@ check "every repo-scoped mirror agrees with the SoT ($(printf '%s' "$mirrors" | 
   "$(printf '%s' "$drifted" | wc -w | tr -d ' ')" 0
 [ -n "$drifted" ] && for d in $drifted; do echo "     drift: $d"; done
 
+# ── retired MCPs stay retired ────────────────────────────────────────────────
+# da_dtk ships two MCP products (products/mcp-dtk, products/mcp-unix-api) and
+# neither is used any more. They are not declared in either template, not in
+# ~/.mcp.json and not among cloud-infra's eleven build-*mcp*.json services — so
+# today they are off by ABSENCE, which is a decision nothing is holding.
+#
+# The check above ("every cloud-infra MCP is declared in the desktop template")
+# pushes in the opposite direction by design: anything cloud-infra declares
+# must appear client-side. This is the counterweight. A retired server that
+# quietly reappears in a template costs a tool-list slot and some eager context
+# on every session, and the reason it went away is not written anywhere the
+# next edit would look.
+for retired in mcp-dtk mcp-unix-api dtk-mcp; do
+  check "retired MCP '$retired' is not declared in either template" \
+    "$(grep -l "\"$retired\"" "$SOT/mcp.desktop.json.tpl" "$SOT/mcp.termux.json.tpl" 2>/dev/null | wc -l | tr -d ' ')" 0
+done
+
 # ── the container's fork is declared, and its provenance is not a dead path ──
 # a_solutions/user-ai_claude-superset-api ships its own claude-config: it has
 # no working checkout to read the SoT from and no home-manager to deploy it, so
