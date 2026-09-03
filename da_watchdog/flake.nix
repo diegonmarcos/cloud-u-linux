@@ -110,7 +110,17 @@
       #   inputs.my-watchdog.url = "github:diegonmarcos/cloud-u-linux?dir=da_watchdog";
       #   imports = [ inputs.my-watchdog.homeManagerModules.default ];
       #   services.my-watchdog = { enable = true; tray = true; };
-      homeManagerModules.default = import ./nix/hm-module.nix { inherit self; };
+      # ONE module, both trees. It works out whether it is being evaluated by
+      # NixOS or by home-manager and renders the same service description into
+      # systemd.services or systemd.user.services accordingly — see the header
+      # of nix/module.nix for why that is one `if` and not two products.
+      #
+      #   inputs.my-watchdog.url = "github:diegonmarcos/cloud-u-linux?dir=da_watchdog";
+      #   imports = [ inputs.my-watchdog.nixosModules.default ];        # or homeManagerModules
+      #   services.my-watchdog.enable = true;
+      homeManagerModules.default = import ./nix/module.nix { inherit self; };
       homeManagerModules.my-watchdog = self.homeManagerModules.default;
+      nixosModules.default = self.homeManagerModules.default;
+      nixosModules.my-watchdog = self.homeManagerModules.default;
     };
 }
