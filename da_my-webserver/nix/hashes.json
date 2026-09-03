@@ -1,0 +1,11 @@
+{
+  "_comment": "Written by ship-my-webserver-app.yml. Seeded from the values ba_flakes_desktop and bb_flakes_termux each carried their own copy of.",
+  "tag": "my-webserver-latest",
+  "version": "latest",
+  "x86_64-linux": {
+    "my-webserver": { "asset": "my-webserver-x86_64", "hash": "sha256-pZzhfITa6vIiuvp6rZgs/Dv2sbgWSzu+bIc5TwioPjE=" }
+  },
+  "aarch64-linux": {
+    "my-webserver": { "asset": "my-webserver-aarch64", "hash": "sha256-8hjxYzs1mxPItIyYe7OQwVo98mKqRJmhF9Wi/aWOK5g=" }
+  }
+}
