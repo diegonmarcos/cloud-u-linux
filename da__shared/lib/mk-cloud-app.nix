@@ -21,7 +21,7 @@
 # app would put the same description in four places, which is precisely the
 # failure mode both of this repo's recent outages had in common.
 { name, bins, daemon ? null, args ? "", hashes, policy ? null, source ? { }
-, description ? name, capabilities ? null }:
+, description ? name, capabilities ? null, memoryMax ? "96M" }:
 
 { self }:
 { config, options, lib, pkgs, ... }:
@@ -71,8 +71,17 @@ in
 
     memoryMax = lib.mkOption {
       type = lib.types.str;
-      default = "96M";
-      description = "MemoryMax, paired with MemorySwapMax=0 — capping one without the other pushes a leak into swap instead of killing it.";
+      default = memoryMax;
+      description = ''
+        MemoryMax, paired with MemorySwapMax=0 — capping one without the other
+        pushes a leak into swap instead of killing it, which starved gcp-proxy
+        for a day through io pressure that read as a disk problem.
+
+        The default comes from the APP, not from this library: 96M suits a
+        sampler written in std+libc and would OOM-kill a Node runtime whose
+        baseline is most of it. An app that does not say gets the careful
+        number, and a consumer can still raise it.
+      '';
     };
 
     startWith = lib.mkOption {

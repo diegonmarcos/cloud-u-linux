@@ -58,6 +58,10 @@
         bins = [ "my-webserver" ];
         daemon = "my-webserver";
         hashes = ./nix/hashes.json;
+        # A Node runtime's baseline is most of the 96M a std+libc sampler is
+        # capped at, so this app carries its own number rather than inheriting
+        # one that would OOM-kill it. Matches what vm-pilot already gives it.
+        memoryMax = "192M";
       } { inherit self; };
       homeManagerModules.my-webserver = self.homeManagerModules.default;
       nixosModules.default = self.homeManagerModules.default;
