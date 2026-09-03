@@ -1,5 +1,27 @@
 {
   "nodes": {
+    "cloud-apps": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "dir": "da__shared",
+        "lastModified": 1788432565,
+        "narHash": "sha256-3uW/vA+ASPrsgf0Cv/AIAfljpJ042EhLF0zipi1OrHI=",
+        "owner": "diegonmarcos",
+        "repo": "cloud-u-linux",
+        "rev": "4036ce870dd0114ee3f5c23f33e425ab236eaf84",
+        "type": "github"
+      },
+      "original": {
+        "dir": "da__shared",
+        "owner": "diegonmarcos",
+        "repo": "cloud-u-linux",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -36,6 +58,7 @@
     },
     "root": {
       "inputs": {
+        "cloud-apps": "cloud-apps",
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs"
       }

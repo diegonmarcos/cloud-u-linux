@@ -24,7 +24,7 @@
 #             the user unit cannot and does not pretend to.
 #   /run      RuntimeDirectory= belongs to a system unit. runtime_dir() prefers
 #             /run/my-watchdog when it exists.
-{ self }:
+{ self, mkService }:
 { config, options, lib, pkgs, ... }:
 
 let
@@ -44,8 +44,9 @@ let
     else self.packages.${system}.my-watchdog;
 
   # The one description, rendered by both branches and by the dist tarball's
-  # plain .service file. See nix/watchdog-service.nix.
-  service = exec: import ./watchdog-service.nix { inherit exec; inherit (cfg) memoryMax; };
+  # plain .service file — and it lives in da__shared, so every app in this repo
+  # renders the same [Service] block rather than four that happen to agree.
+  service = exec: mkService { inherit exec; inherit (cfg) memoryMax; };
 in
 {
   options.services.my-watchdog = {

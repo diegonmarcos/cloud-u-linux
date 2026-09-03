@@ -19,9 +19,15 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    # The [Service] block every app in this repo shares. An input, not a
+    # relative import: `import ../da__shared/…` reaches outside this flake's
+    # directory and works right up until this project is carved into its own
+    # repository, then silently does not.
+    cloud-apps.url = "github:diegonmarcos/cloud-u-linux?dir=da__shared";
+    cloud-apps.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, cloud-apps }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         pkgs = import nixpkgs { inherit system; };
@@ -81,6 +87,7 @@
         # a unit rendered from the same expression the modules render.
         packages.dist = pkgs.callPackage ./nix/dist.nix {
           inherit (self.packages.${system}) my-watchdog-bin;
+          inherit (cloud-apps.lib) mkService;
           policy = ./configs/watchdog-policy.json;
         };
         # The desktop build. Same source, same version, one feature more.
@@ -133,7 +140,10 @@
       # installs by DOING, and both are downstream of the same service
       # description so a Debian box and this laptop cannot end up running
       # different units.
-      homeManagerModules.default = import ./nix/watchdog-install.nix { inherit self; };
+      homeManagerModules.default = import ./nix/watchdog-install.nix {
+        inherit self;
+        inherit (cloud-apps.lib) mkService;
+      };
       homeManagerModules.my-watchdog = self.homeManagerModules.default;
       nixosModules.default = self.homeManagerModules.default;
       nixosModules.my-watchdog = self.homeManagerModules.default;

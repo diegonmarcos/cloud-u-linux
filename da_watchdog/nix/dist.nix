@@ -2,7 +2,7 @@
 #
 # It carries the published static binaries, the policy document, the shell
 # installer — and a my-watchdog.service that NIX RENDERED from
-# watchdog-service.nix, the same expression the NixOS and home-manager modules
+# da__shared/lib/service.nix, the same expression the NixOS and home-manager modules
 # render into their own namespaces.
 #
 # That last file is the point of this derivation existing at all. A tarball
@@ -12,10 +12,10 @@
 # deploys. `serviceConfig` on NixOS and `[Service]` in a file are the same
 # keys, so generating one from the other needs no translation layer and leaves
 # nowhere for them to drift.
-{ lib, runCommand, my-watchdog-bin, policy }:
+{ lib, runCommand, my-watchdog-bin, policy, mkService }:
 
 let
-  service = import ./watchdog-service.nix { exec = "@BIN@/watchdog-d --no-tray"; };
+  service = mkService { exec = "@BIN@/watchdog-d --no-tray"; };
 
   unit = lib.generators.toINI { } {
     Unit = {
