@@ -62,75 +62,54 @@ fn home() -> String {
     std::env::var("HOME").unwrap_or_else(|_| "/home/diego".into())
 }
 
-/// Is this a Nix machine? Decides which install route the page offers.
-///
-/// /etc/NIXOS is the file NixOS itself writes and every installer in this repo
-/// already tests for. `nix` being on PATH is not the same question — a Debian
-/// box with the package manager installed still wants the plain binary, since
-/// its systemd unit and its PATH are not managed by a generation.
-fn is_nixos() -> bool {
-    std::path::Path::new("/etc/NIXOS").exists()
-}
-
 /// The steps for one way.
 ///
 /// THE INSTALL WAY NEVER TOUCHES THE SYSTEM. It used to end in
 /// `build.sh switch`, which rebuilt NixOS to move a dashboard — so every fix
 /// to this panel was a system generation, and on an 8GB laptop six local
-/// evaluations OOM-froze the desktop. The app is its own artifact now: a flake
-/// to run, or a binary to place. Neither evaluates the machine it lands on.
+/// evaluations OOM-froze the desktop. The app is its own artifact now.
+///
+/// ONE STEP, AND IT IS build.sh. This page used to hand-roll the install: gh
+/// release download of two assets, an install -m755, a systemctl restart. All
+/// three were subtly wrong by the time anyone noticed.
+///
+///   · It downloaded `watchdog-d` and `watchdog-tui` — real assets, but not
+///     the pair `build.sh fetch` maintains, so an update through this page and
+///     an update through build.sh left the machine in different states.
+///   · It never re-granted capabilities. A file capability is an xattr on the
+///     INODE, so replacing the binary drops it: the firewall page went blank
+///     after an update and stayed blank, and per-process io went with it.
+///   · It never placed the policy document or the systemd unit, so the memory
+///     ceiling that keeps this sampler from becoming the load it reports was
+///     whatever an older install had left behind.
+///
+/// build.sh does all of it, and it is the same command the fleet runs. A
+/// second way to install one app is how you end up running a binary from three
+/// weeks ago through four green deploys — which is exactly what happened here.
+///
+/// The NixOS/other split is gone with it: `nix profile install` on this flake
+/// builds the crate FROM SOURCE on the machine you are updating, which is the
+/// one thing the whole design exists to prevent. The flake's `my-watchdog-bin`
+/// output is the download, and it is for consumers declaring this app in their
+/// own configuration — not for bringing this machine up to date.
 pub(crate) fn steps(way: Way) -> Vec<Step> {
     let h = home();
     match way {
-        Way::Install if is_nixos() => vec![
-            Step {
-                name: "nix",
-                why: "run the app's own flake — no system eval, no generation",
-                argv: vec![
-                    "nix".into(), "profile".into(), "install".into(),
-                    "--refresh".into(),
-                    "github:diegonmarcos/cloud-u-linux?dir=da_watchdog".into(),
-                ],
-                cwd: None,
-            },
-        ],
         Way::Install => vec![
             Step {
-                name: "fetch",
-                why: "the binaries CI built, from the rolling release",
-                argv: vec![
-                    "gh".into(), "release".into(), "download".into(), "my-watchdog-latest".into(),
-                    "--repo".into(), "diegonmarcos/cloud-u-linux".into(),
-                    "--pattern".into(), "watchdog-d".into(),
-                    "--pattern".into(), "watchdog-tui".into(),
-                    "--dir".into(), format!("{h}/.cache/my-watchdog-update"),
-                    "--clobber".into(),
-                ],
-                cwd: None,
-            },
-            Step {
                 name: "install",
-                why: "place them on PATH — mv, because a running binary cannot be written to",
+                // Short enough to survive the column this page draws it in —
+                // the long version is the module comment above, where it can
+                // be read without a terminal wide enough for it.
+                why: "build.sh — binaries, capabilities, policy, units, service",
                 argv: vec![
                     "sh".into(), "-c".into(),
                     format!(
-                        // mv, not cp: the daemon is RUNNING from that path and
-                        // writing to a running binary is ETXTBSY. A rename
-                        // swaps the directory entry and leaves the live process
-                        // on the old inode until it is restarted below.
-                        "set -e; d={h}/.cache/my-watchdog-update; \
-                         install -m755 $d/watchdog-d {h}/.local/bin/.watchdog-d.new; \
-                         mv -f {h}/.local/bin/.watchdog-d.new {h}/.local/bin/watchdog-d; \
-                         install -m755 $d/watchdog-tui {h}/.local/bin/watchdog-tui"
+                        // Named explicitly rather than relying on PATH: this
+                        // runs from inside the app, and the app may well be
+                        // the copy build.sh is about to replace.
+                        "exec {h}/git/cloud-u-linux/da_watchdog/build.sh install"
                     ),
-                ],
-                cwd: None,
-            },
-            Step {
-                name: "restart",
-                why: "the sampler, so it runs the code just installed",
-                argv: vec![
-                    "systemctl".into(), "--user".into(), "restart".into(), "my-watchdog.service".into(),
                 ],
                 cwd: None,
             },
@@ -139,7 +118,12 @@ pub(crate) fn steps(way: Way) -> Vec<Step> {
             let mut v = vec![];
             // Both repos: the declarations and the app are different trees and
             // updating half a pair is its own class of drift.
-            for repo in ["cloud", "cloud-u-linux"] {
+            //
+            // cloud-infra, not cloud: this repo was renamed in August 2026 and
+            // this list was not. `git -C ~/git/cloud pull` still succeeds —
+            // that checkout exists — which is why nobody noticed it had
+            // stopped being the repo that carries watchdog's declarations.
+            for repo in ["cloud-infra", "cloud-u-linux"] {
                 v.push(Step {
                     name: "sync",
                     why: "fast-forward this checkout",
