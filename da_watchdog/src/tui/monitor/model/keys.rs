@@ -148,6 +148,10 @@ pub(crate) const OTHER_KEYS: &[(&str, &str, &str)] = &[
     ("modal", "o", "in the detail view: open the binary's folder"),
     ("modal", ".", "in the files tab: show or hide dotfiles"),
     ("acting", "x", "system optimization — reclaim, cache, journal, docker, nix"),
+    // Shift, like its neighbours: E and A produce an artifact FROM the
+    // dashboard, and so does this. Lowercase c was the obvious key and is
+    // already the cpu sort — the collision test said so before a user could.
+    ("acting", "C", "copy what is on screen to the clipboard — OSC 52, so it works over ssh"),
     ("acting", "E", "export THIS machine — {host}-{user}-{time}.json, .yaml, .md"),
     ("acting", "A", "export all — the same, with every fleet peer folded in"),
     ("moving", "1-9", "jump to a sub-tab by the number the strip shows"),

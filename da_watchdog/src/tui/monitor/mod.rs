@@ -182,6 +182,10 @@ pub struct Monitor {
     sub: [usize; TABS.len()],
     /// The `:` command line's buffer, while it is open.
     cmd: String,
+    /// Raised by `c` / `:copy`, cleared by the frame on the next draw when it
+    /// hands back the screen. A bool rather than a call because the buffer
+    /// belongs to the frame — see Dashboard::wants_screen.
+    copy_req: bool,
     /// Which picker row is highlighted.
     cmd_sel: usize,
     box_sel: usize,
@@ -755,6 +759,7 @@ impl Monitor {
             tab: 0,
             sub: [0; TABS.len()],
             cmd: String::new(),
+            copy_req: false,
             cmd_sel: 0,
             box_sel: 0,
             tree: false,
@@ -1445,6 +1450,10 @@ impl Monitor {
             }
             cmd::Cmd::Quit => self.quit = true,
             cmd::Cmd::Export(all) => self.export_now(all),
+            // Nothing happens here. The screen this asks for does not exist
+            // until the next draw, and asking for the CURRENT one would copy
+            // the frame before whatever keystroke got us here.
+            cmd::Cmd::Copy => self.copy_req = true,
             cmd::Cmd::Units => {
                 self.units = !self.units;
                 self.msg = Some((
@@ -3836,6 +3845,26 @@ impl Dashboard for Monitor {
         self.quit
     }
 
+    fn wants_screen(&mut self) -> bool {
+        std::mem::take(&mut self.copy_req)
+    }
+
+    fn on_screen(&mut self, text: String) {
+        // Report the SIZE, not just success. "copied" is unfalsifiable; "158×43
+        // — 6.2 KB" is a claim you can check against the screen in front of
+        // you, and it is how you find out the capture ran a frame early and
+        // caught a modal that has since closed.
+        let lines = text.lines().count();
+        let cols = text.lines().map(|l| l.chars().count()).max().unwrap_or(0);
+        self.msg = Some(match crate::tui::clip::copy(&text) {
+            Ok(how) => (
+                format!("copied {cols}×{lines} — {} B — via {how}", text.len()),
+                false,
+            ),
+            Err(e) => (format!("copy failed: {e}"), true),
+        });
+    }
+
     fn claims(&self, k: KeyCode) -> bool {
         // A modal owns the whole keyboard: while one is up, q must close it
         // rather than close the program, and a stray 'c' must not re-sort the
@@ -4003,6 +4032,18 @@ impl Dashboard for Monitor {
             // first entry is "measure".
             KeyCode::Esc => {
                 self.overlay = Overlay::Help;
+                return;
+            }
+            // `C`, not `c` — lowercase is the cpu sort, and the collision
+            // test caught that before anyone typed it. Shift also puts it with
+            // E and A, the other two keys that produce an artifact FROM the
+            // dashboard rather than changing what it shows.
+            //
+            // It reaches on_key rather than claims(), so a modal still owns the
+            // keyboard while one is up and C cannot copy a half-drawn list out
+            // from under a menu.
+            KeyCode::Char('C') => {
+                self.copy_req = true;
                 return;
             }
             KeyCode::Char('m') => {

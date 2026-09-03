@@ -19,6 +19,7 @@
 // UI no headless VM will ever draw. So the fleet builds the daemon alone and a
 // desktop builds `--features tui`, from the same source.
 pub mod android_bridge;
+pub mod clip;
 pub mod frame;
 pub mod mesh;
 pub mod monitor;

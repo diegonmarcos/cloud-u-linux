@@ -28,6 +28,17 @@ pub trait Dashboard {
     /// a dashboard that says so gets the key instead of being closed under it.
     /// Ctrl-C and Ctrl-D are never offered here: they always quit.
     fn claims(&self, _k: KeyCode) -> bool { false }
+    /// A dashboard asking for WHAT IS ON SCREEN, in text.
+    ///
+    /// It cannot read that itself: the buffer belongs to the terminal, which
+    /// belongs to this loop, and a dashboard that kept its own copy would be
+    /// copying what it MEANT to draw rather than what is up — which is the
+    /// difference between a screenshot and a re-render, and the whole reason
+    /// to ask. So it raises a flag and gets the text back on the same pass,
+    /// after the draw that produced it.
+    fn wants_screen(&mut self) -> bool { false }
+    /// The screen it asked for, rows joined by newlines, right-trimmed.
+    fn on_screen(&mut self, _text: String) {}
     /// True once a dashboard's own UI has asked to exit — the Esc menu's
     /// "quit" item. Without it that item could only fake a keystroke, and the
     /// menu is the one place a claimed key can never reach the frame's quit.
@@ -48,6 +59,28 @@ pub fn now_hms() -> String {
         .unwrap_or_else(|| "--:--:--".into())
 }
 
+/// The rendered buffer as plain text — what a person would select with a
+/// mouse if the terminal let them.
+///
+/// Trailing spaces go: every row is padded to the terminal width, and pasting
+/// a screenful of them into a message or an issue is a wall of whitespace no
+/// reader wants. Nothing else is touched — the box-drawing characters and the
+/// braille sparklines are part of what is on screen, and a copy that quietly
+/// dropped them would not be a copy of this screen.
+fn screen_text(buf: &ratatui::buffer::Buffer) -> String {
+    let a = buf.area;
+    let mut out = String::with_capacity(a.width as usize * a.height as usize + a.height as usize);
+    for y in 0..a.height {
+        let mut row = String::with_capacity(a.width as usize);
+        for x in 0..a.width {
+            row.push_str(buf[(a.x + x, a.y + y)].symbol());
+        }
+        out.push_str(row.trim_end());
+        out.push('\n');
+    }
+    out
+}
+
 pub fn run(dash: &mut dyn Dashboard) -> std::io::Result<()> {
     let mut term = ratatui::init();
     let mut auto = true; // dashboards are labeled "(live)" — refresh without being asked
@@ -61,6 +94,14 @@ pub fn run(dash: &mut dyn Dashboard) -> std::io::Result<()> {
 
     let res = (|| -> std::io::Result<()> {
         loop {
+            // ASKED BEFORE THE DRAW, CAPTURED INSIDE IT. Terminal::draw swaps
+            // buffers when it is done, so by the time it returns
+            // current_buffer_mut() is the freshly reset back buffer — reading
+            // it there copies 43 blank lines, which is exactly what the first
+            // version of this did. The frame being drawn is only reachable
+            // from inside the closure.
+            let want_screen = dash.wants_screen();
+            let mut captured: Option<String> = None;
             term.draw(|f| {
                 let rows = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).split(f.area());
                 let auto_span = if auto {
@@ -77,7 +118,14 @@ pub fn run(dash: &mut dyn Dashboard) -> std::io::Result<()> {
                 ]);
                 f.render_widget(Paragraph::new(bar), rows[0]);
                 dash.render(f, rows[1]);
+                if want_screen {
+                    captured = Some(screen_text(f.buffer_mut()));
+                }
             })?;
+
+            if let Some(text) = captured {
+                dash.on_screen(text);
+            }
 
             if event::poll(Duration::from_millis(100))? {
                 if let Event::Key(k) = event::read()? {

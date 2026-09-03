@@ -21,6 +21,8 @@ pub(crate) enum Cmd {
     Open(Overlay),
     Quit,
     Export(bool),
+    /// Put what is on screen on the clipboard.
+    Copy,
     /// Append the declared units that are stopped or idle (the `v` toggle).
     Units,
     Err(String),
@@ -58,6 +60,7 @@ pub(crate) fn menu_cmd(i: usize) -> Cmd {
 /// options were reachable by key and by menu, and invisible to `:`.
 const VERBS: &[(&str, &str)] = &[
     ("units", "add or drop the declared units that are stopped or idle"),
+    ("copy", "put what is on screen on the clipboard — works over ssh"),
     ("export", "write this machine to ~/.watchdog"),
     ("export all", "the same, with every fleet peer folded in"),
 ];
@@ -192,6 +195,11 @@ pub(crate) fn resolve(line: &str, cur: usize) -> Cmd {
         // the old name, still typed by fingers that learned it
         "free" => return Cmd::Open(Overlay::Optimize),
         "units" | "v" => return Cmd::Units,
+        // NOT "c": that is the unambiguous prefix of `containers`, and a
+        // person typing `:c` for a tab they have reached that way for months
+        // should not suddenly get a clipboard instead. The KEY is c, where
+        // there is no prefix matching to be surprised by.
+        "copy" | "cp" => return Cmd::Copy,
         "e" | "export" => return Cmd::Export(false),
         "ea" | "export all" => return Cmd::Export(true),
         _ => {}
@@ -228,6 +236,18 @@ pub(crate) fn resolve(line: &str, cur: usize) -> Cmd {
 
 #[cfg(test)]
 mod tests {
+    // The picker LISTS :copy from VERBS; that is a different table from the
+    // one resolve() reads. A verb can be offered and not dispatch — which is
+    // the whole failure mode VERBS exists to prevent, one level up.
+    #[test]
+    fn copy_resolves_from_both_of_its_names() {
+        use super::{resolve, Cmd};
+        assert_eq!(resolve("copy", 0), Cmd::Copy);
+        assert_eq!(resolve("cp", 0), Cmd::Copy);
+        // `c` stays the containers prefix it has always been, not a clipboard.
+        assert!(!matches!(resolve("c", 0), Cmd::Copy));
+    }
+
     use super::*;
 
     #[test]
