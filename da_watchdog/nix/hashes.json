@@ -1,0 +1,13 @@
+{
+  "_comment": "Written by ship-my-watchdog.yml. The static musl assets, per arch — the pair a consumer installs without a compiler. Same convention as da_my-ai/nix/hashes.json.",
+  "tag": "my-watchdog-latest",
+  "version": "latest",
+  "x86_64-linux": {
+    "watchdog-d":   { "asset": "my-watchdog-x86_64",      "hash": "sha256-wi1Nj7kB9yaQFWWMWsR9qinVoDhnjRiVLFYVtXLLhFY=" },
+    "watchdog-tui": { "asset": "my-watchdog-tui-x86_64",  "hash": "sha256-+4EkQ2Po3N7cr+WLSXyk83AL4Qwh40UdPrw4SQq/0EA=" }
+  },
+  "aarch64-linux": {
+    "watchdog-d":   { "asset": "my-watchdog-aarch64",     "hash": "sha256-uHmaQghjdNJMaj6ks0D5IDB5Yin0NbLFU27/DUw2koI=" },
+    "watchdog-tui": { "asset": "my-watchdog-tui-aarch64", "hash": "sha256-1qM/bBPz/WlTEKrBzlxg637c1kSwWm9Lu7cbt1sPMSA=" }
+  }
+}

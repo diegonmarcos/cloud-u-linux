@@ -74,6 +74,9 @@
       {
         packages.default = crate;
         packages.my-watchdog = crate;
+        # The published static build, fetched not compiled — what every machine
+        # that is not the builder installs. See nix/prebuilt.nix.
+        packages.my-watchdog-bin = pkgs.callPackage ./nix/prebuilt.nix {};
         # The desktop build. Same source, same version, one feature more.
         packages.my-watchdog-tray = mkWatchdog { tray = true; };
 

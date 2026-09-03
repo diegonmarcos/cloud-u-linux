@@ -34,7 +34,14 @@ let
   # is needed, and nothing subtler would be readable at 3am.
   isHM = options ? home.homeDirectory;
 
-  pkgFor = system: if cfg.tray then self.packages.${system}.my-watchdog-tray else self.packages.${system}.my-watchdog;
+  # WHICH STORE PATH, and it is the difference between a deploy and a freeze.
+  # "prebuilt" is a download; "build" realises the crate here, which on a
+  # two-core VM with a 75%-full disk means a ~1.5 GB rustc closure and a
+  # compile — the shape of an outage, not of an update.
+  pkgFor = system:
+    if cfg.source == "prebuilt" then self.packages.${system}.my-watchdog-bin
+    else if cfg.tray then self.packages.${system}.my-watchdog-tray
+    else self.packages.${system}.my-watchdog;
 
   # The one description, rendered by both branches and by the dist tarball's
   # plain .service file. See nix/watchdog-service.nix.
@@ -49,6 +56,20 @@ in
       default = pkgFor pkgs.stdenv.hostPlatform.system;
       defaultText = lib.literalExpression "my-watchdog, or my-watchdog-tray when tray = true";
       description = "The build to install. Both binaries — watchdog-d and watchdog-tui — come from it.";
+    };
+
+    source = lib.mkOption {
+      type = lib.types.enum [ "prebuilt" "build" ];
+      default = if cfg.tray then "build" else "prebuilt";
+      defaultText = lib.literalExpression ''"build" when tray = true, else "prebuilt"'';
+      description = ''
+        Where the binaries come from. "prebuilt" fetches the published static
+        musl pair named in nix/hashes.json — no compiler enters the closure,
+        which is what lets a two-core VM run this at all. "build" compiles the
+        crate from source and belongs to the builder and to a developer.
+
+        There is no published tray asset, so tray = true implies "build".
+      '';
     };
 
     tray = lib.mkOption {
@@ -98,7 +119,15 @@ in
   # A plain `if`, not two mkIfs: the branch that does not apply is never
   # constructed, so home.packages is never mentioned inside a NixOS evaluation
   # and environment.etc is never mentioned inside a home-manager one.
-  config = lib.mkIf cfg.enable (
+  # Said once, at evaluation, rather than discovered as a missing icon.
+  # `assertions` exists in both module systems, which is the whole reason this
+  # file can be one file.
+  config = lib.mkIf cfg.enable (lib.mkMerge [ {
+    assertions = [{
+      assertion = !(cfg.source == "prebuilt" && cfg.tray);
+      message = "services.my-watchdog: tray = true needs source = \"build\" — the release publishes no tray asset (ksni is the one dependency that stops the binary being static).";
+    }];
+  } (
     if isHM then {
       # watchdog-d and watchdog-tui, on PATH, from the generation — which is
       # what makes `watchdog-tui` the CURRENT build rather than whatever a
@@ -155,5 +184,5 @@ in
         };
       };
     }
-  );
+  ) ]);
 }
