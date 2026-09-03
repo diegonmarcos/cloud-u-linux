@@ -6865,7 +6865,7 @@ impl Dashboard for Monitor {
                             // Reached and refused is not the same as not yet
                             // reached, and the reason is the useful part.
                             Some(Err(e)) => Span::styled(
-                                trunc(e, 20),
+                                trunc(e, 19),
                                 Style::default().fg(Color::Rgb(240, 160, 90)),
                             ),
                             _ if p.local => Span::styled("—".to_string(), Style::default().fg(LABEL)),
@@ -7022,7 +7022,9 @@ impl Dashboard for Monitor {
             let ftable = Table::new(
                 frows,
                 [
-                    // 157 columns of content plus 12 of spacing. These are
+                    // 156 columns of content plus 12 of spacing — the panel
+                    // border takes two of the terminal's, so the budget is the
+                    // frame's inside, not the screen's width. These are
                     // Lengths, so an over-wide table is not a scrollbar: the
                     // solver takes the deficit out of whichever columns it
                     // likes and the last ones silently lose their digits.
@@ -7030,7 +7032,7 @@ impl Dashboard for Monitor {
                     // and then cut off the right edge — so every width below
                     // is the width its cell actually prints, and the total
                     // fits the terminal this fleet is read on.
-                    Constraint::Length(47), // peer + address + status
+                    Constraint::Length(46), // peer + address + status
                     Constraint::Length(7),  // rtt
                     Constraint::Length(5),  // cpu
                     Constraint::Length(5),  // mem
