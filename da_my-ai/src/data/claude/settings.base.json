@@ -53,8 +53,10 @@
     "type": "command",
     "command": "bash @HOME@/.claude/statusline-command.sh"
   },
+  "_ENABLE_TOOL_SEARCH_comment": "auto, NOT true. Deferral is a CLIENT-SIDE decision (headroom proxy cannot reverse it — helpers.py:2858), so this env var is the ONLY lever; there is no per-server control (the alwaysLoad field in mcp.*.json.tpl is a DEAD annotation nothing reads, and Claude Code ignores defer_loading). 'true' force-defers EVERY MCP tool behind Tool Search unconditionally — which is why the always-resident Bash/grep always won and cloud-cgc-pub-mcp was never reached. 'auto' defers only once eager tool schemas exceed 10% of the context window (~20k tokens on 200k). The design math: cloud-services-mcp is the fat master-index aggregator kept DISABLED by default, so the eager set is just the lean detached servers (cgc-pub, mail, …) which fit under 20k and stay resident; enabling services-mcp (alone ~20k) crosses the cap and re-arms Tool Search. Do NOT unset it entirely — with a custom ANTHROPIC_BASE_URL, unset makes Claude Code materialize ALL schemas eagerly (helpers.py hint).",
   "env": {
-    "ENABLE_TOOL_SEARCH": "true",
+    "ENABLE_TOOL_SEARCH": "auto",
+    "MCP_CONNECT_TIMEOUT_MS": "30000",
     "AUTHELIA_OIDC_CLIENT_ID": "claude-admin",
     "AUTHELIA_TOKEN_URL": "https://auth.diegonmarcos.com/api/oidc/token",
     "GIT_BASE": "@HOME@/git",
@@ -63,6 +65,8 @@
     "AUTHELIA_OIDC_TOKENS_DIR": "@HOME@/git/cloud-vault/A0_keys/providers/authelia/signed-bearer_jwt/tokens"
   },
   "alwaysThinkingEnabled": true,
+
+  "_MCP_CONNECT_TIMEOUT_MS_comment": "Version-negotiation probe timeout; Claude Code defaults to 5000ms. Reconnection is already automatic (reconnectMcpServer), so this does not enable it — it widens the window a recovering backend gets to answer in. On 2026-08-28 a stopped docker.service on gcp-proxy took every HTTP MCP down and each was reported only as a 5000ms probe timeout, which reads as a client fault rather than a backend outage.",
 
   "_enableAllProjectMcpServers_comment": "Auto-trust a project's own .mcp.json servers instead of prompting per-server. The fleet's .mcp.json files are machine-derived from a_solutions/*/build.json (all our own servers), so blanket-trust is safe here. Mirrored into every repo's committed .claude/settings.json (0_apps/src/claude/settings.json) so fresh clones with no ~/.claude — CI, containers, Claude Code on the web — auto-load them too; this copy covers ~/.claude on home-manager machines.",
   "enableAllProjectMcpServers": true,
