@@ -96,4 +96,63 @@ else
   echo "skip — cloud-infra checkout not found at $INFRA"
 fi
 
+# ── the repo-scoped mirror agrees with the SoT ───────────────────────────────
+# 0_apps/src/claude/settings.json is committed into every repo under cloud so a
+# fresh clone — CI, a container, someone else's checkout — gets more than
+# Claude's stock defaults. It is a HAND-KEPT MIRROR of the machine-independent
+# half of settings.base.json, and its own _doc says why that is dangerous:
+# project settings merge OVER user settings, so a key that drifts here silently
+# overrides the SoT inside every repo. It was correct when this check was
+# written; nothing was making it stay correct.
+#
+# Only the keys the mirror deliberately carries. Everything with an @HOME@ path
+# is deliberately absent from it (a committed file has no substitution step),
+# and so is enabledPlugins — those are per-machine.
+MIRROR="$REPO/../cloud-infra/0_apps/src/claude/settings.json"
+if [ -f "$MIRROR" ]; then
+  for k in .alwaysThinkingEnabled .env.ENABLE_TOOL_SEARCH .disabledMcpjsonServers; do
+    check "repo-scoped mirror agrees with the SoT on $k" \
+      "$(jq -c "$k" "$MIRROR" 2>/dev/null)" "$(jq -c "$k" "$SOT/settings.base.json" 2>/dev/null)"
+  done
+else
+  echo "skip — repo-scoped mirror not found at $MIRROR"
+fi
+
+# ── the container's fork is declared, and its provenance is not a dead path ──
+# a_solutions/user-ai_claude-superset-api ships its own claude-config: it has
+# no working checkout to read the SoT from and no home-manager to deploy it, so
+# it COPIES. That fork is legitimate and it is also how config rots — its five
+# hook scripts each carried a "# Source:" header naming
+# .../src/modules/dotfiles/claude/, a directory that no longer exists anywhere,
+# because those hooks were superseded by the cloud-marketplace plugins in this
+# SoT and nobody told the copy.
+#
+# Two things are checked. The inventory, so a hook appearing or vanishing in
+# the fork is a visible diff rather than a surprise. And the provenance, so no
+# file may cite a Source: path that is not there — the specific way this one
+# went quiet.
+FORK="$REPO/../cloud-infra/a_solutions/user-ai_claude-superset-api/src/code/claude-config"
+if [ -d "$FORK" ]; then
+  check "the container fork holds the declared hook inventory" \
+    "$(ls "$FORK/hooks" 2>/dev/null | tr '\n' ' ')" \
+    "a-context-inject-memory.sh b-context-inject-prompt.sh c-context-inject-pretool.sh c-pretool-guard-blockers.sh c-pretool-guard-warning.sh "
+
+  dead=$(
+    grep -rhoE '^# Source: [^ ]+' "$FORK" 2>/dev/null | awk '{print $3}' | sort -u |
+      while read -r path; do
+        expanded=$(printf '%s' "$path" | sed "s|^~|$HOME|")
+        case "$expanded" in
+          *"{"*) expanded_a=$(printf '%s' "$expanded" | sed 's|{\([^,}]*\),[^}]*}|\1|')
+                 [ -e "$expanded_a" ] || echo "$path" ;;
+          *) [ -e "$expanded" ] || echo "$path" ;;
+        esac
+      done
+  )
+  check "no file in the container fork cites a Source: path that is gone" \
+    "$(printf '%s' "$dead" | grep -c . || true)" 0
+  [ -n "$dead" ] && echo "     dead provenance: $dead"
+else
+  echo "skip — container fork not found at $FORK"
+fi
+
 exit "$fail"

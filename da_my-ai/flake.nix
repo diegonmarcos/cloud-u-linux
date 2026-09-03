@@ -80,6 +80,20 @@
         #     because it is inert config the flakes must place in ~/.claude anyway.
         #     Shipping it through the binary would mean a GH release per asset edit.
         #
+        # WHO ACTUALLY USES THIS, as of 2026-09-03: nobody on the two machines.
+        # ba_flakes_desktop and bb_flakes_termux dropped inputs.my-ai-src.claudeAssets
+        # on 2026-08-12 and now copy from the working checkout at activation
+        # (home.activation.claudeAssets), because routing an asset edit through a
+        # push + `nix flake update` was the wrong loop for files edited daily.
+        #
+        # It is kept, not deleted, because that decision has one victim: a consumer
+        # with NO working checkout. user-ai_claude-superset-api is exactly that —
+        # a container that can reach neither this repo nor home-manager — so it
+        # vendored a copy, the copy's provenance header named a directory that has
+        # since ceased to exist, and nothing noticed for months. This output is the
+        # declarative way back for that class of consumer, and the reason to keep
+        # it pointed at the same directory the activation copy reads.
+        #
         # Plain files, identical on every machine, so this sits OUTSIDE
         # eachDefaultSystem — consumers use "${my-ai.claudeAssets}/agents", with no
         # system suffix.

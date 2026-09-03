@@ -53,13 +53,29 @@ byte-identical, termux differing only in `statusLine.command`, where the literal
 
 ## Editing loop
 
-`sot/` reaches a flake through a **remote** input, so changes must be pushed before a
-switch will see them:
+    edit here  →  build.sh (switch)
 
-    edit claude/sot/...  →  commit + push  →  nix flake update my-ai  →  build.sh
+That is the whole loop. Both flakes read this directory **from the working checkout at
+activation time** (`home.activation.claudeAssets`, overridable with `CLAUDE_SOT_DIR`),
+so no push and no `nix flake update` stands between an edit and the next switch.
 
-Nix 2.18 rejects a relative `path:` input ("relative path points outside of its
-parent's store path"), which is why this cannot be a local reference.
+It did not always work that way. Until 2026-08-12 `sot/` reached the flakes through
+`inputs.my-ai-src.claudeAssets`, which meant a commit, a push and a lock bump for every
+asset edit — the wrong loop for files edited daily, and until a lock bump happened the
+deployed copy was silently whatever the lock last pinned.
 
-Editing `sot-statusline/` is the slower loop — it needs a GHA release of the binary,
+The tradeoff is stated where it is made (`claude.nix`): `home.file` tracked these files
+and removed them when undeclared, a copy does not. `agents/` and `cloud-marketplace/`
+are therefore wiped-then-copied rather than merged; a removed single file must be
+deleted by hand.
+
+The other tradeoff is less obvious and cost something. A consumer with no working
+checkout — a container, CI, a fresh clone — cannot read this directory at all, and its
+only option is to vendor a copy. `user-ai_claude-superset-api` did, its copy's
+provenance header named a directory that later ceased to exist, and nothing noticed for
+months. `flake.nix` still exports `claudeAssets` for exactly that consumer, and
+`test-claude-sot.sh` now fails on any provenance header pointing at a path that is not
+there.
+
+`sot-statusline/` is the slower loop still — it needs a GHA release of the binary,
 because those files are compiled into it.
