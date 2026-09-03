@@ -118,7 +118,13 @@
       #   inputs.my-watchdog.url = "github:diegonmarcos/cloud-u-linux?dir=da_watchdog";
       #   imports = [ inputs.my-watchdog.nixosModules.default ];        # or homeManagerModules
       #   services.my-watchdog.enable = true;
-      homeManagerModules.default = import ./nix/module.nix { inherit self; };
+      #
+      # Named for its job, beside the one that does the same job without nix:
+      # nix/watchdog-install.nix installs by DESCRIBING, nix/watchdog-install.sh
+      # installs by DOING, and both are downstream of the same service
+      # description so a Debian box and this laptop cannot end up running
+      # different units.
+      homeManagerModules.default = import ./nix/watchdog-install.nix { inherit self; };
       homeManagerModules.my-watchdog = self.homeManagerModules.default;
       nixosModules.default = self.homeManagerModules.default;
       nixosModules.my-watchdog = self.homeManagerModules.default;
