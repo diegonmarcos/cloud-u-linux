@@ -1,6 +1,6 @@
 # Claude Code agents — fleet roster
 
-Mirrored from `unix/da_my-ai/src/data/claude/agents/`, which is the source of
+Mirrored from `unix/da_my-ai/data/claude/agents/`, which is the source of
 truth. Edit there, then re-copy here — not the other way round.
 
 Committed into every repo's `.claude/agents/` because `~/.claude/agents/` only

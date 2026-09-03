@@ -22,12 +22,12 @@ use std::path::{Path, PathBuf};
 
 /// (destination filename, contents, executable)
 const ASSETS: &[(&str, &str, bool)] = &[
-    ("statusline-command.sh", include_str!("../../src/data/statusline/statusline-command.sh"), true),
-    ("claude-mcp-status.sh", include_str!("../../src/data/statusline/claude-mcp-status.sh"), true),
-    ("claude-plugins-status.sh", include_str!("../../src/data/statusline/claude-plugins-status.sh"), true),
-    ("claude-hooks-status.sh", include_str!("../../src/data/statusline/claude-hooks-status.sh"), true),
-    ("claude-flags-status.sh", include_str!("../../src/data/statusline/claude-flags-status.sh"), true),
-    ("claude-pricing.json", include_str!("../../src/data/pricing.json"), false),
+    ("statusline-command.sh", include_str!("../../data/statusline/statusline-command.sh"), true),
+    ("claude-mcp-status.sh", include_str!("../../data/statusline/claude-mcp-status.sh"), true),
+    ("claude-plugins-status.sh", include_str!("../../data/statusline/claude-plugins-status.sh"), true),
+    ("claude-hooks-status.sh", include_str!("../../data/statusline/claude-hooks-status.sh"), true),
+    ("claude-flags-status.sh", include_str!("../../data/statusline/claude-flags-status.sh"), true),
+    ("claude-pricing.json", include_str!("../../data/pricing.json"), false),
 ];
 
 /// Where the assets are installed (`~/.claude`, or `$CLAUDE_CONFIG_DIR`).

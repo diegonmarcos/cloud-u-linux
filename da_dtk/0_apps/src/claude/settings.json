@@ -1,5 +1,5 @@
 {
-  "_doc": "PROJECT-scoped Claude Code settings, committed into every repo under cloud. Mirrors the machine-independent half of unix/da_my-ai/src/data/claude/settings.base.json + settings.desktop.json, which is the source of truth for ~/.claude/settings.json — edit there, then re-copy here.",
+  "_doc": "PROJECT-scoped Claude Code settings, committed into every repo under cloud. Mirrors the machine-independent half of unix/da_my-ai/data/claude/settings.base.json + settings.desktop.json, which is the source of truth for ~/.claude/settings.json — edit there, then re-copy here.",
 
   "_why_committed": "~/.claude/settings.json only exists where unix's home-manager has run. A fresh clone — CI, a container, Claude Code on the web, a second machine, someone else's checkout — has no user config, so without this the repo gets Claude's stock defaults: no thinking, no tool search, no agents. Project settings merge OVER user settings, so on a home-manager machine these keys are already what ~/.claude sets and the merge is a no-op.",
 

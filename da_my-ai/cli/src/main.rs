@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-const HELP: &str = include_str!("../../src/data/help.txt");
+const HELP: &str = include_str!("../../data/help.txt");
 
 /// Exec the internal TUI engine (my-ai-dash, fetched into $STORE — never on
 /// PATH; there is no standalone `my-ai-dash` command). `--help`/`-h`/no-args/

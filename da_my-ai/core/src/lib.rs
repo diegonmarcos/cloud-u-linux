@@ -12,8 +12,8 @@ pub mod scripts_assets;
 pub mod statusline_assets;
 pub mod usage;
 
-/// Endpoints are compiled in from src/data/endpoints.json (data-driven, single source).
-pub const ENDPOINTS_JSON: &str = include_str!("../../src/data/endpoints.json");
+/// Endpoints are compiled in from data/endpoints.json (data-driven, single source).
+pub const ENDPOINTS_JSON: &str = include_str!("../../data/endpoints.json");
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Ports {

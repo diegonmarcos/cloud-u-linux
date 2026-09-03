@@ -71,7 +71,7 @@
         #
         # Ownership is split by WHO CAN CHANGE A FILE AT RUNTIME:
         #
-        #   statusline family (src/data/statusline)  →  embedded in the BINARY
+        #   statusline family (data/statusline)  →  embedded in the BINARY
         #     (core/src/statusline_assets.rs) and written by the daemon at startup.
         #     A flake must never declare those: home.file lays a second copy on top,
         #     which is how the deployed status line sat 141 lines stale for 8 days.
@@ -103,6 +103,6 @@
         # with lib.recursiveUpdate. Verified: base ⊕ overlay reproduces each
         # machine's previous settings.json (desktop byte-identical; termux differs
         # only in statusLine.command, where the literal $HOME is now pre-expanded).
-        claudeAssets = ./src/data/claude;
+        claudeAssets = ./data/claude;
       };
 }

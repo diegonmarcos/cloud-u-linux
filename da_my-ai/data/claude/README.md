@@ -4,8 +4,8 @@ Symlinks only. Nothing here is a real file; edit through the links.
 
 | Link             | Target                              | Holds                                                          |
 |------------------|-------------------------------------|----------------------------------------------------------------|
-| `sot/`           | `da_my-ai/src/data/claude`          | Config SHARED by both machines — edit here                       |
-| `sot-statusline/`| `da_my-ai/src/data/statusline`      | Status line + `claude-*-status.sh`, embedded in the my-ai binary |
+| `sot/`           | `da_my-ai/data/claude`          | Config SHARED by both machines — edit here                       |
+| `sot-statusline/`| `da_my-ai/data/statusline`      | Status line + `claude-*-status.sh`, embedded in the my-ai binary |
 | `termux/`        | `bb_flakes_termux/src/claude`       | `claude.nix` + termux-only assets                                |
 | `desktop/`       | `ba_flakes_desktop/src/claude`      | `claude.nix` + desktop-only assets                               |
 

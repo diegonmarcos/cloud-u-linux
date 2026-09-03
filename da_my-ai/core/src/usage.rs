@@ -14,9 +14,9 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Bundled fallback pricing (src/data/pricing.json), used when the user has no
+/// Bundled fallback pricing (data/pricing.json), used when the user has no
 /// `~/.claude/claude-pricing.json`.
-pub const DEFAULT_PRICING_JSON: &str = include_str!("../../src/data/pricing.json");
+pub const DEFAULT_PRICING_JSON: &str = include_str!("../../data/pricing.json");
 
 /// ccusage block size: 5 hours, in milliseconds.
 pub const BLOCK_MS: i64 = 5 * 3_600_000;
@@ -228,7 +228,7 @@ pub struct Pricing {
 
 impl Pricing {
     /// `~/.claude/claude-pricing.json` if present and valid, else the bundled
-    /// default table (src/data/pricing.json).
+    /// default table (data/pricing.json).
     pub fn load() -> Self {
         let user_path = crate::home().join(".claude").join("claude-pricing.json");
         let text = fs::read_to_string(&user_path).ok();

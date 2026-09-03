@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # claude-flags-status.sh — Full vs Lean context-profile segment, sourced from
-# da_my-ai's claude_profiles (src/data/endpoints.json). Data-driven: add a
+# da_my-ai's claude_profiles (data/endpoints.json). Data-driven: add a
 # profile there, it shows up here — no edits needed in this script.
 #
 # Active profile is inferred from env (DISABLE_WORKFLOWS is lean's marker,
@@ -12,7 +12,7 @@
 set -u
 
 fmt="ansi"; [ "${1:-}" = "--format" ] && fmt="${2:-ansi}"
-JSON="$HOME/git/cloud-u-linux/da_my-ai/src/data/endpoints.json"
+JSON="$HOME/git/cloud-u-linux/da_my-ai/data/endpoints.json"
 
 command -v jq >/dev/null 2>&1 || exit 0
 [ -f "$JSON" ] || exit 0
