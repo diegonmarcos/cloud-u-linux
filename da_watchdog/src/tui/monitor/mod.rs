@@ -6848,10 +6848,10 @@ impl Dashboard for Monitor {
                     // address, because a value that fills its field leaves no
                     // separator behind it. The width has to exceed the longest
                     // name, not equal it.
-                    format!("{}{:<18}", if fsel { "▶" } else { " " }, trunc(&p.alias, 17)),
+                    format!("{}{:<14}", if fsel { "▶" } else { " " }, trunc(&p.alias, 13)),
                     base.fg(if p.local { Color::Rgb(120, 200, 255) } else { Color::White }),
                 );
-                let addr = Span::styled(format!("{:<16}", p.ip), base.fg(DIM));
+                let addr = Span::styled(format!("{:<12}", p.ip), base.fg(DIM));
                 let Some(v) = snap else {
                     // Reachable but not yet collected, or not reachable at all
                     // — two different states and they must not read the same.
@@ -6865,7 +6865,7 @@ impl Dashboard for Monitor {
                             // Reached and refused is not the same as not yet
                             // reached, and the reason is the useful part.
                             Some(Err(e)) => Span::styled(
-                                trunc(e, 74),
+                                trunc(e, 20),
                                 Style::default().fg(Color::Rgb(240, 160, 90)),
                             ),
                             _ if p.local => Span::styled("—".to_string(), Style::default().fg(LABEL)),
@@ -6873,7 +6873,7 @@ impl Dashboard for Monitor {
                                 Span::styled("probing…".to_string(), Style::default().fg(LABEL))
                             }
                             _ if p.up => Span::styled(
-                                "reachable · collecting…".to_string(),
+                                "collecting…".to_string(),
                                 Style::default().fg(LABEL),
                             ),
                             _ => Span::styled(
@@ -6897,9 +6897,9 @@ impl Dashboard for Monitor {
                     Cell::from(if p.local {
                         format!("{:>7}", "here")
                     } else if p.up {
-                        format!("{:>6.0}ms", p.rtt_ms)
+                        format!("{:>5.0}ms", p.rtt_ms)
                     } else {
-                        format!("{:>7}", "down")
+                        format!("{:>6}", "down")
                     })
                     .style(base.fg(DIM)),
                     pct(g("cpu")),
@@ -6930,7 +6930,7 @@ impl Dashboard for Monitor {
                             ),
                         ]))
                     },
-                    Cell::from(fmt_mem_cell(num(&v, "mem_detail.total") * 1_073_741_824.0)).style(base.fg(Color::Gray)),
+                    Cell::from(format!("{:>7}", fmt_gib(num(&v, "mem_detail.total")))).style(base.fg(Color::Gray)),
                     // btrfs allocates in chunks and df cannot see that, so on a
                     // machine that publishes storage the pool figure is the
                     // true one; peers fall back to their own df.
@@ -6947,11 +6947,11 @@ impl Dashboard for Monitor {
                     // — so the two columns can never disagree.
                     Cell::from(match arr(&v, "storage").first() {
                         Some(st) if num(st, "dev_size") > 0.0 => {
-                            format!("{:>7}", fmt_g(num(st, "alloc_used")))
+                            format!("{:>6}", fmt_g(num(st, "alloc_used")))
                         }
                         _ => match arr(&v, "disks").first() {
-                            Some(dk) => format!("{:>6.1}G", num(dk, "used_gib")),
-                            None => format!("{:>7}", "-"),
+                            Some(dk) => format!("{:>5.1}G", num(dk, "used_gib")),
+                            None => format!("{:>6}", "-"),
                         },
                     })
                     .style(base.fg(Color::Gray)),
@@ -6959,10 +6959,11 @@ impl Dashboard for Monitor {
                     // a spike from a machine that has been buried for an hour.
                     Cell::from(Line::from(vec![
                         Span::styled(format!("{l1:>5.2}"), Style::default().fg(grad(l1 / ncpu))),
-                        Span::styled(
-                            format!(" {:>5.2} {:>5.2}", g("load5"), g("load15")),
-                            Style::default().fg(Color::Gray),
-                        ),
+                        // load15 went to pay for memory's psi bands: 158
+                        // columns do not hold every figure, and the 15-minute
+                        // average was the one nobody acts on — 1 and 5 already
+                        // separate a spike from a machine that has been buried.
+                        Span::styled(format!(" {:>5.2}", g("load5")), Style::default().fg(Color::Gray)),
                     ])),
                     Cell::from(format!("{:>4.0}", ncpu)).style(base.fg(DIM)),
                     // some-cpu, full-io, then BOTH bands for memory at 10s.
@@ -6992,7 +6993,7 @@ impl Dashboard for Monitor {
                             Style::default().fg(grad(g("psi.memory.full10") / 20.0)),
                         ),
                     ])),
-                    Cell::from(format!("{:>6}", arr(&v, "proc_table").len())).style(base.fg(DIM)),
+                    Cell::from(format!("{:>5}", arr(&v, "proc_table").len())).style(base.fg(DIM)),
                 ])
                 // THE SELECTION BAR LIVES HERE, not on the cells.
                 //
@@ -7021,19 +7022,27 @@ impl Dashboard for Monitor {
             let ftable = Table::new(
                 frows,
                 [
-                    Constraint::Length(56), // peer + address + status
-                    Constraint::Length(8),  // rtt
+                    // 157 columns of content plus 12 of spacing. These are
+                    // Lengths, so an over-wide table is not a scrollbar: the
+                    // solver takes the deficit out of whichever columns it
+                    // likes and the last ones silently lose their digits.
+                    // That is what hid memory's psi bands — they were declared
+                    // and then cut off the right edge — so every width below
+                    // is the width its cell actually prints, and the total
+                    // fits the terminal this fleet is read on.
+                    Constraint::Length(47), // peer + address + status
+                    Constraint::Length(7),  // rtt
                     Constraint::Length(5),  // cpu
                     Constraint::Length(5),  // mem
                     Constraint::Length(5),  // swap
-                    Constraint::Length(12), // vram d/s
-                    Constraint::Length(12), // ram total
+                    Constraint::Length(11), // vram d/s
+                    Constraint::Length(7),  // ram total
                     Constraint::Length(5),  // disk %
-                    Constraint::Length(7),  // disk used
-                    Constraint::Length(17), // load 1/5/15
+                    Constraint::Length(6),  // disk used
+                    Constraint::Length(11), // load 1/5
                     Constraint::Length(4),  // cores
-                    Constraint::Length(20), // psi cpu/io/mem
-                    Constraint::Length(6),  // procs
+                    Constraint::Length(27), // psi cpu/io/mem-some/mem-full
+                    Constraint::Length(5),  // procs
                 ],
             )
             // WHICH COLUMN IS RANKED HAS TO BE VISIBLE, or ←→ moves something
@@ -7042,19 +7051,19 @@ impl Dashboard for Monitor {
             // a digit off the end — so the header LIGHTS UP instead, and the
             // hint along the bottom edge names the column and the direction.
             .header(Row::new(vec![
-                fh("PEER              ADDRESS", "PEER"),
-                fh("     RTT", "RTT"),
+                fh("PEER          ADDRESS", "PEER"),
+                fh("    RTT", "RTT"),
                 fh(" CPU%", "CPU%"),
                 fh(" MEM%", "MEM%"),
                 fh("SWAP%", "SWAP%"),
-                fh("VRAM-d VRAM-s", ""),
-                fh("         RAM", "RAM"),
+                fh("VRAMd VRAMs", ""),
+                fh("    RAM", "RAM"),
                 fh("DISK%", "DISK%"),
-                fh("   DISK", "DISK%"),
-                fh(" LOAD  1     5   15", "LOAD"),
+                fh("  DISK", "DISK%"),
+                fh("LOAD 1    5", "LOAD"),
                 fh("CPUS", "CPUS"),
                 fh("PSI cpu     io mem-s  mem-f", "PSI"),
-                fh(" PROCS", "PROCS"),
+                fh("PROCS", "PROCS"),
             ]));
             f.render_widget(ftable, fin);
             let status = Line::from(Span::styled(
