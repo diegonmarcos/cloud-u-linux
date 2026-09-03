@@ -40,19 +40,19 @@
           iproute2   # the network box
         ];
 
-        crate = pkgs.rustPlatform.buildRustPackage {
-          pname = "my-watchdog";
+        # One recipe, two builds. `tui` is what produces the panel binary at
+        # all — watchdog-tui declares required-features = ["tui"], so a default
+        # build silently ships the daemon alone. `tray` is the one that must
+        # stay optional: a headless fleet member has no session bus for ksni to
+        # sit on, and a tray it cannot draw is weight it carries to every VM.
+        mkWatchdog = { tray }: pkgs.rustPlatform.buildRustPackage {
+          pname = if tray then "my-watchdog-tray" else "my-watchdog";
           version = "0.1.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
 
-          # `tui` is what builds the panel binary at all: watchdog-tui
-          # declares required-features = ["tui"], so a default build silently
-          # produces the daemon alone. The tray is left OUT — ksni links
-          # libdbus, and this package must build on a headless fleet member
-          # that has no session bus to talk to.
           buildNoDefaultFeatures = true;
-          buildFeatures = [ "tui" ];
+          buildFeatures = [ "tui" ] ++ pkgs.lib.optional tray "tray";
 
           nativeBuildInputs = [ pkgs.pkg-config ];
 
@@ -68,10 +68,14 @@
             mainProgram = "watchdog-tui";
           };
         };
+
+        crate = mkWatchdog { tray = false; };
       in
       {
         packages.default = crate;
         packages.my-watchdog = crate;
+        # The desktop build. Same source, same version, one feature more.
+        packages.my-watchdog-tray = mkWatchdog { tray = true; };
 
         # `nix run github:diegonmarcos/cloud-u-linux?dir=da_watchdog` opens the
         # panel. The panel rather than the daemon, because a person running
@@ -91,5 +95,22 @@
           packages = rustToolchain ++ runtimeDeps ++ (with pkgs; [ pkg-config dbus sass esbuild ]);
           RUST_BACKTRACE = "1";
         };
-      });
+      })
+    // {
+      # HOW IT RUNS, published beside WHAT IT IS.
+      #
+      # Until now this flake stopped at the binary, so every consumer wrote the
+      # rest itself: vm-pilot retypes the unit as a heredoc, my-konsole's
+      # build.sh writes a launcher, build.sh install copies a .service. Three
+      # descriptions written apart drift apart — they disagreed on the binary's
+      # own name, and a laptop ran a three-week-old daemon through four green
+      # deploys because nothing joined them. Importing this module is the join:
+      # the ExecStart and the file on PATH are one store path by construction.
+      #
+      #   inputs.my-watchdog.url = "github:diegonmarcos/cloud-u-linux?dir=da_watchdog";
+      #   imports = [ inputs.my-watchdog.homeManagerModules.default ];
+      #   services.my-watchdog = { enable = true; tray = true; };
+      homeManagerModules.default = import ./nix/hm-module.nix { inherit self; };
+      homeManagerModules.my-watchdog = self.homeManagerModules.default;
+    };
 }
