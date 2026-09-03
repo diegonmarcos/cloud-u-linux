@@ -9,7 +9,7 @@
     },
     "watchdog-tui": {
       "asset": "my-watchdog-tui-x86_64",
-      "hash": "sha256-9026/4nSO8O6d/nB2hJR5LTiUmIoMyf37LpMZ7SY1So="
+      "hash": "sha256-fkNpHAJVGJ0om63mKYhe5cGojm+E+auNEMp0ae+g3nU="
     }
   },
   "aarch64-linux": {
@@ -19,7 +19,7 @@
     },
     "watchdog-tui": {
       "asset": "my-watchdog-tui-aarch64",
-      "hash": "sha256-OjCqZaA7KgY/mluLeuZxRs3MTwCNYdQ1nSjieimuUQo="
+      "hash": "sha256-RnRWWbZlKyftVKj1MJA94esyzYIq5CupS/V9DMEJTn0="
     }
   }
 }
