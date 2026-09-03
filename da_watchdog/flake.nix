@@ -77,6 +77,12 @@
         # The published static build, fetched not compiled — what every machine
         # that is not the builder installs. See nix/prebuilt.nix.
         packages.my-watchdog-bin = pkgs.callPackage ./nix/prebuilt.nix {};
+        # Tier 3: what a Debian box downloads. Binaries, policy, installer and
+        # a unit rendered from the same expression the modules render.
+        packages.dist = pkgs.callPackage ./nix/dist.nix {
+          inherit (self.packages.${system}) my-watchdog-bin;
+          policy = ./configs/watchdog-policy.json;
+        };
         # The desktop build. Same source, same version, one feature more.
         packages.my-watchdog-tray = mkWatchdog { tray = true; };
 
