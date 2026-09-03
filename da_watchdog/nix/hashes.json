@@ -3,11 +3,23 @@
   "tag": "my-watchdog-latest",
   "version": "latest",
   "x86_64-linux": {
-    "watchdog-d":   { "asset": "my-watchdog-x86_64",      "hash": "sha256-wi1Nj7kB9yaQFWWMWsR9qinVoDhnjRiVLFYVtXLLhFY=" },
-    "watchdog-tui": { "asset": "my-watchdog-tui-x86_64",  "hash": "sha256-+4EkQ2Po3N7cr+WLSXyk83AL4Qwh40UdPrw4SQq/0EA=" }
+    "watchdog-d": {
+      "asset": "my-watchdog-x86_64",
+      "hash": "sha256-wi1Nj7kB9yaQFWWMWsR9qinVoDhnjRiVLFYVtXLLhFY="
+    },
+    "watchdog-tui": {
+      "asset": "my-watchdog-tui-x86_64",
+      "hash": "sha256-9026/4nSO8O6d/nB2hJR5LTiUmIoMyf37LpMZ7SY1So="
+    }
   },
   "aarch64-linux": {
-    "watchdog-d":   { "asset": "my-watchdog-aarch64",     "hash": "sha256-uHmaQghjdNJMaj6ks0D5IDB5Yin0NbLFU27/DUw2koI=" },
-    "watchdog-tui": { "asset": "my-watchdog-tui-aarch64", "hash": "sha256-1qM/bBPz/WlTEKrBzlxg637c1kSwWm9Lu7cbt1sPMSA=" }
+    "watchdog-d": {
+      "asset": "my-watchdog-aarch64",
+      "hash": "sha256-uHmaQghjdNJMaj6ks0D5IDB5Yin0NbLFU27/DUw2koI="
+    },
+    "watchdog-tui": {
+      "asset": "my-watchdog-tui-aarch64",
+      "hash": "sha256-OjCqZaA7KgY/mluLeuZxRs3MTwCNYdQ1nSjieimuUQo="
+    }
   }
 }
