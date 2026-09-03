@@ -97,6 +97,28 @@ case "${1:-fetch}" in
     # to update, and a capability that survives installation but not updates is
     # one nobody has for long.
     grant_caps ""
+    # THE UNITS, from the same tarball, because they are generated. They used
+    # to be two files checked in beside this script, and they had drifted from
+    # the expression nix renders — RestartSec 3 against 5, Nice 5 against 10,
+    # and no MemoryMax or MemorySwapMax at all, so the desktop ran the one
+    # flavour with no memory ceiling. Two descriptions of one service is the
+    # failure this project keeps paying for; fetching them means there is one.
+    #
+    # Best-effort: a release without the tarball is an older release, not a
+    # broken one, and the units already installed keep working.
+    dist_tmp="$(mktemp -d)"
+    if gh release download "$TAG" --repo "$REPO" --pattern my-watchdog-dist.tar.gz \
+         --output "$dist_tmp/d.tar.gz" --clobber 2>/dev/null; then
+      tar -xzf "$dist_tmp/d.tar.gz" -C "$dist_tmp" 2>/dev/null || true
+      for u in user-my-watchdog.service user-my-watchdog-headless.service; do
+        [ -f "$dist_tmp/my-watchdog/$u" ] && install -m644 "$dist_tmp/my-watchdog/$u" "$DEST/$u"
+      done
+      say "units: $DEST/user-my-watchdog{,-headless}.service"
+    else
+      say "no dist tarball in $TAG — keeping the units already installed"
+    fi
+    rm -rf "$dist_tmp"
+
     # The policy travels with the binary. One source of truth means every
     # machine resolves the same document, so it has to actually arrive on
     # every machine.
@@ -111,11 +133,17 @@ case "${1:-fetch}" in
     # and the second one should be asked for.
     "$0" fetch
     mkdir -p "$HOME/.config/systemd/user"
-    unit=my-watchdog.service
+    unit=user-my-watchdog.service
     # A headless box has no graphical-session.target to hang off, and a unit
     # that WantedBy a target which never activates simply never starts.
-    [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || unit=my-watchdog-headless.service
-    install -m644 "$(dirname "$0")/$unit" "$HOME/.config/systemd/user/my-watchdog.service"
+    [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || unit=user-my-watchdog-headless.service
+    # From $DEST, written by fetch above — NOT from beside this script. There
+    # is no copy beside this script any more, on purpose.
+    if [ -f "$DEST/$unit" ]; then
+      install -m644 "$DEST/$unit" "$HOME/.config/systemd/user/my-watchdog.service"
+    else
+      say "no $unit in $DEST — the release carried no dist tarball; unit left as-is"
+    fi
     systemctl --user daemon-reload
     grant_caps ""
     systemctl --user enable --now my-watchdog.service
