@@ -36,22 +36,9 @@ let
 
   pkgFor = system: if cfg.tray then self.packages.${system}.my-watchdog-tray else self.packages.${system}.my-watchdog;
 
-  # THE SERVICE, described once. Both branches below render this; neither
-  # invents a field of its own.
-  common = {
-    Restart = "always";
-    RestartSec = 5;
-    # A monitor that competes with what it monitors is the problem it exists to
-    # report — this fleet has already had a freeze caused by a watchdog that
-    # became the load.
-    Nice = 10;
-    IOSchedulingClass = "idle";
-    MemoryMax = cfg.memoryMax;
-    # MemoryMax WITHOUT this pushes a leak into swap instead of killing it:
-    # an 11M-RSS process sat on 450M of swap and starved the box through io
-    # pressure that read as a disk problem. Cap both or cap neither.
-    MemorySwapMax = "0";
-  };
+  # The one description, rendered by both branches and by the dist tarball's
+  # plain .service file. See nix/watchdog-service.nix.
+  service = exec: import ./watchdog-service.nix { inherit exec; inherit (cfg) memoryMax; };
 in
 {
   options.services.my-watchdog = {
@@ -127,12 +114,9 @@ in
           Description = "my-watchdog — machine sampler";
           After = [ cfg.startWith ];
         };
-        Service = common // {
-          Type = "simple";
-          # The store path, not a name in ~/.local/bin. A generation that says
-          # what it starts is a generation you can read the answer off.
-          ExecStart = "${cfg.package}/bin/watchdog-d" + lib.optionalString (!cfg.tray) " --no-tray";
-        };
+        # The store path, not a name in ~/.local/bin. A generation that says
+        # what it starts is a generation you can read the answer off.
+        Service = service ("${cfg.package}/bin/watchdog-d" + lib.optionalString (!cfg.tray) " --no-tray");
         Install.WantedBy = [ cfg.startWith ];
       };
     } else {
@@ -158,11 +142,9 @@ in
         description = "my-watchdog — machine sampler";
         wantedBy = [ cfg.startWith ];
         after = [ "network.target" ];
-        serviceConfig = common // {
-          Type = "simple";
-          # The wrapper, not the store path: the store copy has no capabilities
-          # and would sample exactly as blindly as a user-level daemon.
-          ExecStart = "${config.security.wrapperDir}/watchdog-d --no-tray";
+        # The wrapper, not the store path: the store copy has no capabilities
+        # and would sample exactly as blindly as a user-level daemon.
+        serviceConfig = service "${config.security.wrapperDir}/watchdog-d --no-tray" // {
           User = "root";
           # /proc/<pid>/io is readable only for your own processes. Root is not
           # a convenience here — it is the difference between a process table
