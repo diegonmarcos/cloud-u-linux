@@ -22,13 +22,24 @@
 # hashes.json is the seam: written by the app's ship workflow, committed, so
 # an update is a flake.lock bump you can review and roll back rather than a
 # rolling download that changes under a machine.
-{ lib, stdenv, stdenvNoCC, fetchurl, autoPatchelfHook, gcc-unwrapped, libgcc }:
+{ lib, stdenv, stdenvNoCC, fetchurl, patchelf, gcc-unwrapped, libgcc }:
 
 # pname   the derivation name
 # hashes  path to hashes.json — { tag, version, <system>.<bin> = { asset, hash } }
 # patchelf  true for a dynamically linked release binary that expects an FHS
 #           interpreter (/lib64/ld-linux-*.so) which a nix store does not have.
 #           A static musl build needs none — there is no interpreter to rewrite.
+#
+#           NOT autoPatchelfHook, and stripping OFF. Both were tried here and
+#           the result dumped core on the first run. autoPatchelfHook reaches
+#           for stdenv's pinned patchelf, which SIGABRTs ("Assertion
+#           !section.empty() failed") replacing a different-length PT_INTERP on
+#           a large binary; and stdenv's fixupPhase strips unless told not to,
+#           which corrupts a Node SEA's injected blob sections into "no version
+#           information available" and undefined symbols. ba_flakes_desktop
+#           root-caused both in August 2026 and the knowledge lived only in
+#           that module's comments — this is it moved somewhere every app
+#           inherits it.
 { pname, hashes, patchelf ? false, meta ? { } }:
 
 let
@@ -52,12 +63,25 @@ std.mkDerivation {
   dontUnpack = true;
   dontBuild = true;
 
-  nativeBuildInputs = lib.optionals patchelf [ autoPatchelfHook ];
-  buildInputs = lib.optionals patchelf [ std.cc.libc gcc-unwrapped.lib libgcc ];
+  # A newer patchelf than the pinned one, invoked explicitly. See above.
+  nativeBuildInputs = lib.optionals patchelf [ patchelf ];
+  dontStrip = patchelf;
+  dontPatchELF = patchelf;
 
-  installPhase = ''
+  installPhase = let
+    libs = lib.makeLibraryPath [ stdenv.cc.libc gcc-unwrapped.lib libgcc ];
+    fix = b: lib.optionalString patchelf ''
+      patchelf \
+        --set-interpreter "$(cat "$NIX_BINTOOLS/nix-support/dynamic-linker")" \
+        --set-rpath "${libs}" \
+        $out/bin/${b}
+    '';
+  in ''
     runHook preInstall
-    ${lib.concatMapStringsSep "\n" (b: ''install -Dm755 ${get b} $out/bin/${b}'') bins}
+    ${lib.concatMapStringsSep "\n" (b: ''
+      install -Dm755 ${get b} $out/bin/${b}
+      ${fix b}
+    '') bins}
     runHook postInstall
   '';
 
