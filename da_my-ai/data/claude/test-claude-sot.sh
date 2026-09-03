@@ -108,15 +108,33 @@ fi
 # Only the keys the mirror deliberately carries. Everything with an @HOME@ path
 # is deliberately absent from it (a committed file has no substitution step),
 # and so is enabledPlugins — those are per-machine.
-MIRROR="$REPO/../cloud-infra/0_apps/src/claude/settings.json"
-if [ -f "$MIRROR" ]; then
+# EVERY copy, not one. This checked only cloud-infra's, and there are
+# seventeen: one .claude/settings.json per repo, plus the 0_apps source they
+# are generated from. Three had drifted the first time it looked — da_dtk and
+# ac_cloud-vault were forcing ENABLE_TOOL_SEARCH to "true", which defers every
+# MCP tool behind Tool Search unconditionally instead of past the 10% mark, for
+# anyone working in those repos. Checking one copy of a file that exists
+# seventeen times is not a gate.
+#
+# I_cloud is skipped: it is the `cloud` repo vendored as a submodule inside two
+# others, pinned to a commit by design, so it lags on purpose and its parent's
+# pre-push hook rebases it. Failing on a pinned submodule would make this
+# permanently red for something that is not a bug.
+GITBASE="$(cd "$REPO/.." && pwd)"
+mirrors=$(find "$GITBASE" -maxdepth 4 \
+  \( -path '*/.claude/settings.json' -o -path '*/0_apps/src/claude/settings.json' \) \
+  -not -path '*/.git/*' -not -path '*z_archive*' -not -path '*/I_cloud/*' 2>/dev/null | sort)
+drifted=""
+for m in $mirrors; do
   for k in .alwaysThinkingEnabled .env.ENABLE_TOOL_SEARCH .disabledMcpjsonServers; do
-    check "repo-scoped mirror agrees with the SoT on $k" \
-      "$(jq -c "$k" "$MIRROR" 2>/dev/null)" "$(jq -c "$k" "$SOT/settings.base.json" 2>/dev/null)"
+    if [ "$(jq -c "$k" "$m" 2>/dev/null)" != "$(jq -c "$k" "$SOT/settings.base.json" 2>/dev/null)" ]; then
+      drifted="$drifted ${m#"$GITBASE"/}:$k"
+    fi
   done
-else
-  echo "skip — repo-scoped mirror not found at $MIRROR"
-fi
+done
+check "every repo-scoped mirror agrees with the SoT ($(printf '%s' "$mirrors" | grep -c . ) checked)" \
+  "$(printf '%s' "$drifted" | wc -w | tr -d ' ')" 0
+[ -n "$drifted" ] && for d in $drifted; do echo "     drift: $d"; done
 
 # ── the container's fork is declared, and its provenance is not a dead path ──
 # a_solutions/user-ai_claude-superset-api ships its own claude-config: it has
