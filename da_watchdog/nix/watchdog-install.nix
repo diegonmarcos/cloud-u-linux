@@ -92,7 +92,7 @@ in
 
     policy = lib.mkOption {
       type = lib.types.nullOr lib.types.path;
-      default = ../configs/watchdog-policy.json;
+      default = ../data/watchdog-policy.json;
       description = ''
         The protected-slices document. Installed to
         ~/.config/my-watchdog/watchdog-policy.json under home-manager and to

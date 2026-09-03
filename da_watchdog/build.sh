@@ -123,7 +123,7 @@ case "${1:-fetch}" in
     # machine resolves the same document, so it has to actually arrive on
     # every machine.
     mkdir -p "$HOME/.config/my-watchdog"
-    install -m644 "$(dirname "$0")/configs/watchdog-policy.json" \
+    install -m644 "$(dirname "$0")/data/watchdog-policy.json" \
       "$HOME/.config/my-watchdog/watchdog-policy.json" 2>/dev/null || true
     say "Fetched → $DEST/$BIN (restart my-watchdog to load it)"
     ;;
@@ -225,7 +225,7 @@ EOF
       # Same policy document to every peer — that is what makes it one source
       # of truth rather than one file per machine that happens to agree today.
       ssh -o BatchMode=yes "$h" 'mkdir -p ~/.config/my-watchdog' </dev/null
-      scp -q "$(dirname "$0")/configs/watchdog-policy.json" "$h:.config/my-watchdog/watchdog-policy.json"
+      scp -q "$(dirname "$0")/data/watchdog-policy.json" "$h:.config/my-watchdog/watchdog-policy.json"
       rm -f "$tmp"
       grant_caps "$h" || say "$h: capability grant failed, continuing"
       say "$h ($arch): installed"

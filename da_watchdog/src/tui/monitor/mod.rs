@@ -5558,7 +5558,7 @@ impl Dashboard for Monitor {
             al.push(kv2("watchdog binary", format!("{repo}/releases/tag/my-watchdog-latest")));
             al.push(kv2(
                 "policy source",
-                format!("{repo}/blob/main/da_watchdog/configs/watchdog-policy.json"),
+                format!("{repo}/blob/main/da_watchdog/data/watchdog-policy.json"),
             ));
             al.push(kv2(
                 "publisher",

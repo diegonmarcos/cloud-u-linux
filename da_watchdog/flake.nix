@@ -88,7 +88,7 @@
         packages.dist = pkgs.callPackage ./nix/dist.nix {
           inherit (self.packages.${system}) my-watchdog-bin;
           inherit (cloud-apps.lib) mkService;
-          policy = ./configs/watchdog-policy.json;
+          policy = ./data/watchdog-policy.json;
         };
         # The desktop build. Same source, same version, one feature more.
         packages.my-watchdog-tray = mkWatchdog { tray = true; };
