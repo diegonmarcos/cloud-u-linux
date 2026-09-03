@@ -6,64 +6,56 @@
       "url": "https://mcp.diegonmarcos.com/c3-infra-mcp/mcp",
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      },
-      "alwaysLoad": false
+      }
     },
     "cloud-cgc-pub-mcp": {
       "type": "http",
       "url": "https://mcp.diegonmarcos.com/cloud-cgc-pub-mcp/mcp",
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      },
-      "alwaysLoad": false
+      }
     },
     "cloud-drive-mcp": {
       "type": "http",
       "url": "https://mcp.diegonmarcos.com/cloud-drive-mcp/mcp",
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      },
-      "alwaysLoad": false
+      }
     },
     "cloud-services-mcp": {
       "type": "http",
       "url": "https://mcp.diegonmarcos.com/c3-services-mcp/mcp",
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      },
-      "alwaysLoad": false
+      }
     },
     "cloud-mail-mcp": {
       "type": "http",
       "url": "https://mcp.diegonmarcos.com/mail-mcp/mcp",
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      },
-      "alwaysLoad": false
+      }
     },
     "cloud-mattermost-mcp": {
       "type": "http",
       "url": "https://mcp.diegonmarcos.com/mattermost-mcp/mcp",
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      },
-      "alwaysLoad": false
+      }
     },
     "google-workspace-mcp": {
       "type": "http",
       "url": "https://mcp.diegonmarcos.com/g-workspace/mcp",
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      },
-      "alwaysLoad": false
+      }
     },
     "google-personal-mcp": {
       "type": "http",
       "url": "https://mcp.diegonmarcos.com/g-personal/mcp",
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      },
-      "alwaysLoad": false
+      }
     }
   }
 }
