@@ -47,6 +47,12 @@ on:
     branches: [main]
     paths:
       - 'da_my-webserver/**'
+      # The pin job commits this back after publishing; without the exclusion
+      # every release triggers the build that writes it, forever. Negated
+      # inside paths rather than a paths-ignore key: GitHub rejects a workflow
+      # that uses both for one event, with a 0-second run and no readable
+      # error.
+      - '!da_my-webserver/nix/hashes.json'
       - '.github/workflows/ship-my-webserver-app.yml'
   workflow_dispatch:
 
@@ -126,3 +132,64 @@ jobs:
             --target "$GITHUB_SHA" 2>/dev/null || true
           gh release upload my-webserver-latest \
             my-webserver-x86_64 my-webserver-aarch64 --clobber
+
+  # ── the pin ──────────────────────────────────────────────────────────────
+  # WITHOUT THIS THE NIX PATH BREAKS ON THE NEXT RELEASE, LOUDLY.
+  #
+  # da_my-webserver/nix/hashes.json is what ba_flakes_desktop and
+  # bb_flakes_termux now fetch through — they each used to carry their own copy
+  # of the fetch derivation AND their own hashes.json, and both were deleted in
+  # favour of this one. fetchurl pins a hash, the release tag is rolling, so a
+  # publish that does not write the new hash leaves every consumer fetching a
+  # changed asset against a stale hash: a hash mismatch, which reads as
+  # corruption rather than as a missing step.
+  #
+  # my-ai has had this job for months (ship-my-ai-app.yml, update-hashes). Same
+  # shape, one difference: no nix on the runner, because an SRI hash is just
+  # base64 of the raw sha256 digest and sha256sum+xxd+base64 are already here.
+  pin:
+    name: Update nix/hashes.json
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Hash the published assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          sri() {
+            gh release download my-webserver-latest --repo "$GITHUB_REPOSITORY" \
+              --pattern "$1" --output "/tmp/$1" --clobber
+            h="$(sha256sum "/tmp/$1" | cut -d' ' -f1)"
+            printf 'sha256-%s' "$(printf '%s' "$h" | xxd -r -p | base64 -w0)"
+          }
+          jq -n \
+            --arg x64 "$(sri my-webserver-x86_64)" \
+            --arg a64 "$(sri my-webserver-aarch64)" \
+            '{
+              _comment: "Written by ship-my-webserver-app.yml. The per-arch Node SEA binaries — what ba_flakes_desktop and bb_flakes_termux install through da_my-webserver'"'"'s flake, with no compiler and no second copy of this fetch.",
+              tag: "my-webserver-latest",
+              version: "latest",
+              "x86_64-linux":  { "my-webserver": { asset: "my-webserver-x86_64",  hash: $x64 } },
+              "aarch64-linux": { "my-webserver": { asset: "my-webserver-aarch64", hash: $a64 } }
+            }' > da_my-webserver/nix/hashes.json
+
+      - name: Commit the pin
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Only this path: other jobs and other sessions share this branch.
+          git add da_my-webserver/nix/hashes.json
+          git diff --cached --quiet && { echo "pin unchanged"; exit 0; }
+          git commit -m "da_my-webserver: pin the published assets [ci skip]"
+          git pull --rebase origin main
+          git push origin HEAD:main
