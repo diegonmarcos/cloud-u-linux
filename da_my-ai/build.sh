@@ -101,6 +101,92 @@ cmd_stage() {
 cmd_dev()   { icon; nix_dev default cargo tauri dev; }
 cmd_clean() { rm -rf target src-tauri/icons dist-assets; }
 
+# ── assets ──────────────────────────────────────────────────────────────────
+# data/claude/ → ~/.claude/, for a host with NO home-manager.
+#
+# On nix this is unnecessary: the flakes read this same directory at activation
+# (home.activation.claudeAssets, CLAUDE_SOT_DIR-overridable) and do the settings
+# merge and the ~/.claude.json keys themselves. Everywhere else — a container,
+# CI, a fresh clone, Claude Code on the web — nothing did, so the SoT was
+# unreachable in precisely the environments that cannot be fixed by hand
+# afterwards. flake.nix has exported `claudeAssets` for that consumer all along;
+# this is the same assets with an engine in front of them instead of a nix eval.
+#
+# The same THREE steps the flake performs, in the same order, so the two paths
+# cannot come to mean different things:
+#   1. inert assets copied in
+#   2. settings.json = base ⊕ overlay, @HOME@ substituted
+#   3. ~/.claude.json keys applied one at a time, atomically
+#
+# OVERLAY defaults to `cloud`: a host running this INSTEAD of home-manager is by
+# definition neither the desktop nor the termux box. MY_AI_CLAUDE_OVERLAY
+# overrides it.
+cmd_assets() {
+  local sot="$HERE/data/claude"
+  local dest="${CLAUDE_ASSETS_DEST:-$HOME/.claude}"
+  local overlay="${MY_AI_CLAUDE_OVERLAY:-cloud}"
+  [ -d "$sot" ] || die "no SoT at $sot"
+  mkdir -p "$dest"
+
+  # 1. Inert assets. Directories are wiped-then-copied for the reason the flake
+  #    states: a plain copy cannot notice a file REMOVED upstream.
+  local d f
+  for d in agents cloud-marketplace; do
+    [ -d "$sot/$d" ] || continue
+    rm -rf "${dest:?}/$d"; command cp -r "$sot/$d" "$dest/$d"
+  done
+  for f in claude-plugins.json claude-flags.json rgignore mcp-auth-headers.sh; do
+    [ -f "$sot/$f" ] && command cp -f "$sot/$f" "$dest/$f"
+  done
+  [ -f "$dest/mcp-auth-headers.sh" ] && chmod +x "$dest/mcp-auth-headers.sh"
+
+  # 2. settings.json = base ⊕ overlay with @HOME@ resolved — the same recursive
+  #    merge and the same placeholder the flake uses. NOT a literal $HOME:
+  #    Claude Code stores env values verbatim, so one would leak the string
+  #    "$HOME/git" into GIT_BASE.
+  local base="$sot/settings.base.json" ov="$sot/settings.$overlay.json" tmp
+  if [ -f "$base" ]; then
+    [ -f "$ov" ] || { say "no settings.$overlay.json — base only"; ov="$base"; }
+    tmp="$dest/settings.json.tmp.$$"
+    # `*`, not a hand-rolled recursion: jq's multiply already deep-merges two
+    # objects and REPLACES arrays, which is the semantic the flake's
+    # lib.recursiveUpdate has. The hand-rolled version this replaces walked
+    # keys_unsorted into settings.cloud.json's _required_env array, where the
+    # keys are indices, and died on "Cannot index object with number".
+    if jq -s --arg home "$HOME" '
+          .[0] * .[1]
+          | walk(if type == "string" then gsub("@HOME@"; $home) else . end)
+        ' "$base" "$ov" > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+      mv -f "$tmp" "$dest/settings.json"
+      say "settings.json = base ⊕ $overlay (@HOME@ -> $HOME)"
+    else
+      rm -f "$tmp"; die "settings merge failed"
+    fi
+  fi
+
+  # 3. ~/.claude.json — a DIFFERENT file with different rules: large mutable
+  #    runtime state (auth, project history, onboarding flags), so it is never
+  #    written whole. One key, temp file, atomic mv, exactly as claude.nix's
+  #    claudeJsonKeys. No file yet = nothing to patch before first run.
+  local decl="$sot/claude-json.json" cj="$HOME/.claude.json" key want cur
+  if [ -f "$decl" ] && [ -f "$cj" ]; then
+    for key in $(jq -r '.keys | keys[]' "$decl" 2>/dev/null); do
+      want="$(jq -c ".keys.\"$key\"" "$decl")"
+      cur="$(jq -c ".\"$key\"" "$cj" 2>/dev/null || echo null)"
+      [ "$cur" = "$want" ] && continue
+      [ "$cur" = "null" ] && cur="unset"
+      tmp="$cj.myai.$$"
+      if jq ".\"$key\" = $want" "$cj" > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+        mv -f "$tmp" "$cj"; say "~/.claude.json $key: $cur -> $want"
+      else
+        rm -f "$tmp"; say "jq failed on $key; ~/.claude.json untouched"
+      fi
+    done
+  fi
+
+  say "assets deployed -> $dest (overlay: $overlay)"
+}
+
 # Fetch the CI-built binaries for THIS arch from the rolling GH release.
 cmd_fetch() {
   local dir="${1:-$HOME/$(J .runtime.bin_dir)}"; mkdir -p "$dir"
@@ -263,6 +349,7 @@ case "${1:-build}" in
   run)     shift; cmd_run "$@" ;;
   fetch)   shift; cmd_fetch "$@" ;;
   install) cmd_install ;;
+  assets)  cmd_assets ;;
   clean)   cmd_clean ;;
   *) die "unknown verb: ${1:-} (check|build|stage|dev|run|fetch|install|clean)" ;;
 esac
