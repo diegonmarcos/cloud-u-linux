@@ -1,0 +1,62 @@
+{
+  "_doc": "Platform policy for the Claude MCP client lists. The HTTP set is DERIVED from cloud-infra/1_cloud-configs/dist/mcp.json (url + headersHelper); this file holds only what that derivation cannot know: endpoints reached directly rather than through the public proxy, and the stdio servers that are desktop-only. Regenerate with gen-mcp-tpl.sh.",
+  "auth_header": {
+    "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
+  },
+  "auth_host": "mcp.diegonmarcos.com",
+  "direct_http": {
+    "cloud-cgc-pvt-mcp": {
+      "type": "http",
+      "url": "http://10.0.0.6:3107/mcp"
+    }
+  },
+  "stdio_extras": {
+    "cloud-cgc-pub-mcp-local": {
+      "type": "stdio",
+      "command": "/home/diego/.claude/mcp-local-launch.sh",
+      "args": [
+        "/home/diego/git/cloud-infra/a_solutions/user-ai_cloud-cgc-pub-mcp/src/code/index.ts"
+      ],
+      "env": {
+        "NODE_PATH": "/home/diego/.node_modules/node_modules",
+        "CONFIG_PATH": "/home/diego/git/cloud-infra/config.json",
+        "GIT_ROOT": "/home/diego/git"
+      }
+    },
+    "cloud-vault-mcp": {
+      "type": "stdio",
+      "command": "/home/diego/.claude/mcp-local-launch.sh",
+      "args": [
+        "/home/diego/git/cloud-infra/a_solutions/infra-api_cloud-vault-mcp/src/index.ts"
+      ],
+      "env": {
+        "NODE_PATH": "/home/diego/.node_modules/node_modules",
+        "VAULT_PATH": "/home/diego/git/cloud-vault",
+        "CONFIG_PATH": "/home/diego/git/cloud-infra/config.json"
+      }
+    },
+    "cloud-superapp-mcp": {
+      "type": "stdio",
+      "command": "/home/diego/.claude/mcp-local-launch.sh",
+      "args": [
+        "/home/diego/git/cloud-infra/a_solutions/infra-api_cloud-superapp-mcp/cloud-superapp-mcp/src/index.ts"
+      ],
+      "env": {
+        "NODE_PATH": "/home/diego/.node_modules/node_modules",
+        "SUPERAPP_HOSTS": "phone,phone-v6,phone-pub",
+        "SUPERAPP_FLEET_TOKEN": "${SUPERAPP_FLEET_TOKEN}"
+      }
+    }
+  },
+  "platforms": {
+    "termux": {
+      "http": true,
+      "stdio": false,
+      "_doc": "HTTP-ONLY by decree (2026-08-08): each stdio/tsx spawn transpiles TypeScript through proot-taxed IO and cost 30s+ of claude startup."
+    },
+    "desktop": {
+      "http": true,
+      "stdio": true
+    }
+  }
+}
