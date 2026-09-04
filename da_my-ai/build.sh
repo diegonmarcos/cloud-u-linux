@@ -118,13 +118,25 @@ cmd_clean() { rm -rf target src-tauri/icons dist-assets; }
 #   2. settings.json = base ⊕ overlay, @HOME@ substituted
 #   3. ~/.claude.json keys applied one at a time, atomically
 #
-# OVERLAY defaults to `cloud`: a host running this INSTEAD of home-manager is by
-# definition neither the desktop nor the termux box. MY_AI_CLAUDE_OVERLAY
-# overrides it.
+# OVERLAY is DETECTED, and only falls back to `cloud`. The premise that "a host
+# running this instead of home-manager is neither the desktop nor the termux
+# box" is wrong about termux: the phone HAS home-manager and still needs this
+# engine, because nothing there ever runs the applier — which is the very reason
+# remoteControlAtStartup sat declared-but-unapplied for weeks. Running it bare
+# on termux therefore merged settings.cloud.json, the REMOTE CONTAINER overlay,
+# over a termux box: effortLevel went xhigh -> max and the env block was
+# replaced wholesale. A destructive default nobody asked for.
+# MY_AI_CLAUDE_OVERLAY still overrides, for a container that reports as neither.
 cmd_assets() {
   local sot="$HERE/data/claude"
   local dest="${CLAUDE_ASSETS_DEST:-$HOME/.claude}"
-  local overlay="${MY_AI_CLAUDE_OVERLAY:-cloud}"
+  local overlay="${MY_AI_CLAUDE_OVERLAY:-}"
+  if [ -z "$overlay" ]; then
+    case "$(uname -o 2>/dev/null)/${PREFIX:-}" in
+      *[Aa]ndroid*|*com.termux*) overlay=termux ;;
+      *)                         overlay=cloud ;;
+    esac
+  fi
   [ -d "$sot" ] || die "no SoT at $sot"
   mkdir -p "$dest"
 

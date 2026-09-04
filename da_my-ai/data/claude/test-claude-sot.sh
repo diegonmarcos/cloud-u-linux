@@ -145,10 +145,37 @@ fi
 # others, pinned to a commit by design, so it lags on purpose and its parent's
 # pre-push hook rebases it. Failing on a pinned submodule would make this
 # permanently red for something that is not a bug.
+#
+# A mirror is a copy some repo OWNS. The bare path walk also matched three
+# kinds of file that no repo owns, and they held eighteen drifts nobody could
+# act on — a permanently red gate is a gate that gets ignored, which is how the
+# real drift below stayed unnoticed:
+#   $GITBASE/.claude/           an abandoned CLAUDE_CONFIG_DIR, littered with
+#                               .hm-bak-2026* files, whose own settings.json
+#                               points at $HOME/.claude — these keys are never
+#                               read by anything.
+#   _legacy-*/…                 a pre-move archive, same story.
+#   <repo>/cloud, <repo>/IV_cloud-configs, <repo>/V_front-configs
+#                               untracked, gitignored STALE CLONES of OTHER
+#                               repos (cloud pinned at c307b98 / d8a0dde55,
+#                               diegonmarcos.github.io at b3111d73) sitting
+#                               inside a repo that does not track them. Their
+#                               "drift" is their upstream's content from weeks
+#                               ago; ~/git/cloud and ~/git/front are green at
+#                               HEAD, so `git pull` in the clone is the fix and
+#                               an edit here would be fiction.
+# Keep only files whose OWN git toplevel is a direct child of $GITBASE: a real
+# checkout, editable, and the copy a commit here would actually change. The
+# first two resolve to $HOME (a repo of its own, one level too high) and the
+# clones resolve to themselves at depth two, so all five drop out.
 GITBASE="$(cd "$REPO/.." && pwd)"
 mirrors=$(find "$GITBASE" -maxdepth 4 \
   \( -path '*/.claude/settings.json' -o -path '*/0_apps/src/claude/settings.json' \) \
-  -not -path '*/.git/*' -not -path '*z_archive*' -not -path '*/I_cloud/*' 2>/dev/null | sort)
+  -not -path '*/.git/*' -not -path '*z_archive*' -not -path '*/I_cloud/*' 2>/dev/null |
+  while read -r m; do
+    top=$(git -C "$(dirname "$m")" rev-parse --show-toplevel 2>/dev/null) || continue
+    if [ "$(dirname "$top")" = "$GITBASE" ]; then printf '%s\n' "$m"; fi
+  done | sort)
 drifted=""
 for m in $mirrors; do
   for k in .alwaysThinkingEnabled .env.ENABLE_TOOL_SEARCH .disabledMcpjsonServers; do
@@ -241,6 +268,98 @@ if [ -d "$STATUSLINE_SOT" ] && [ -d "$CLAUDE_DIR" ]; then
   [ -n "$stale" ] && echo "     stale in $CLAUDE_DIR:$stale — run 'my-ai usage --daemon' to reinstall"
 else
   echo "skip — no deployed statusline to compare at $CLAUDE_DIR"
+fi
+
+# ── the DEPLOYED mcp client list matches the platform template ───────────────
+# gen-mcp-tpl.sh --check compares the two templates against the derivation and
+# stops there. Nothing compared them against what a session actually LOADS, and
+# that is exactly the gap: today both templates were correct while ~/.mcp.json
+# was a month old, so a restart bound the stale server list and --check still
+# printed OK.
+#
+# NOT byte equality, deliberately. ~/.mcp.json legitimately differs from the
+# tpl: the live file carries headersHelper (a script that mints a bearer per
+# session) where the tpl carries a static ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}
+# that NIX renders at switch time. Writing the tpl through verbatim would leave
+# that literal string in place and break auth on every gated server. So compare
+# the axis that goes stale — which servers exist, where they point, and how they
+# are reached. Auth delivery is the deployer's business; wiring is the SoT's.
+AXIS='.mcpServers | with_entries(.value |= {type: (.type // "http"), url: .url, command: .command})'
+case "$(uname -o 2>/dev/null)/${PREFIX:-}" in
+  *[Aa]ndroid*|*com.termux*) PLAT=termux ;;
+  *)                         PLAT=desktop ;;
+esac
+if [ -f "$HOME/.mcp.json" ]; then
+  live=$(jq -S "$AXIS" "$HOME/.mcp.json" 2>/dev/null || echo '"UNREADABLE"')
+  want=$(jq -S "$AXIS" "$SOT/mcp.$PLAT.json.tpl")
+  check "deployed ~/.mcp.json matches mcp.$PLAT.json.tpl (servers, urls, transport)" \
+    "$([ "$live" = "$want" ] && echo yes || echo no)" yes
+  if [ "$live" != "$want" ]; then
+    echo "     want (tpl) vs got (~/.mcp.json) — re-run the home-manager switch:"
+    diff <(printf '%s\n' "$want") <(printf '%s\n' "$live") | sed 's/^/     /' || true
+  fi
+else
+  echo "skip — no deployed ~/.mcp.json to compare"
+fi
+
+# ── every repo's committed .mcp.json carries the derived HTTP set ────────────
+# A different deploy path from ~/.mcp.json: deploy-dotfiles.sh copies
+# cloud-infra's derive output (1_cloud-configs/dist/mcp.json) to <repo>/.mcp.json
+# so a clone with no home-manager still gets servers. Same rot, one tier down —
+# front-data and git-repos-master were still shipping the seven PRE-RENAME
+# server names, which is the failure the header of this file describes.
+#
+# Presence, url and transport of the derived set, not equality: a repo may
+# legitimately carry MORE (cloud-infra-desktop ships the desktop tpl, stdio
+# extras and the mesh-direct endpoint included). What must never happen is a
+# derived server going missing or pointing somewhere else.
+DERIVE="$REPO/../cloud-infra/1_cloud-configs/dist/mcp.json"
+if [ -f "$DERIVE" ]; then
+  behind=""; nrepo=0
+  for f in "$GITBASE"/*/.mcp.json; do
+    [ -f "$f" ] || continue
+    nrepo=$((nrepo + 1))
+    miss=$(jq -r -n --slurpfile want "$DERIVE" --slurpfile got "$f" '
+      ($got[0].mcpServers // {}) as $g
+      | [ $want[0].mcpServers | to_entries[]
+          | select(($g[.key] | not)
+                   or $g[.key].url != .value.url
+                   or ($g[.key].type // "http") != (.value.type // "http"))
+          | .key ] | join(",")' 2>/dev/null) || miss="UNREADABLE"
+    [ -n "$miss" ] && behind="$behind ${f#"$GITBASE"/}[$miss]"
+  done
+  check "every repo .mcp.json carries the derived HTTP set ($nrepo checked)" \
+    "$(printf '%s' "$behind" | wc -w | tr -d ' ')" 0
+  [ -n "$behind" ] && for b in $behind; do echo "     stale: $b"; done
+else
+  echo "skip — cloud-infra derive output not found at $DERIVE"
+fi
+
+# ── the enforced ~/.claude.json keys are actually enforced ───────────────────
+# ~/.claude.json is Claude Code's OTHER config file, and claude-json.json
+# declares the keys the SoT owns in it. The applier is `my-ai build.sh assets`,
+# which runs on desktop and never on termux — so remoteControlAtStartup was
+# declared true here and simply ABSENT from the live file, indefinitely.
+#
+# That is the third instance of one pattern (statusline assets, ~/.mcp.json,
+# now this): the SoT declares correctly, the applier only runs on one platform,
+# and the other silently freezes. Declaring without checking is what makes the
+# freeze silent, so each declared key is compared to the deployed value.
+CJ="$SOT/claude-json.json"
+if [ -f "$CJ" ] && [ -f "$HOME/.claude.json" ]; then
+  unapplied=0
+  for k in $(jq -r '.keys | keys[]' "$CJ"); do
+    want=$(jq -c --arg k "$k" '.keys[$k]' "$CJ")
+    got=$(jq -c --arg k "$k" '.[$k]' "$HOME/.claude.json" 2>/dev/null || echo null)
+    if [ "$want" != "$got" ]; then
+      unapplied=$((unapplied + 1))
+      echo "     unapplied: $k — want $want, deployed $got"
+    fi
+  done
+  check "every enforced ~/.claude.json key is applied" "$unapplied" 0
+  [ "$unapplied" -gt 0 ] && echo "     run 'MY_AI_CLAUDE_OVERLAY=<platform> my-ai/build.sh assets' to apply"
+else
+  echo "skip — no deployed ~/.claude.json to compare"
 fi
 
 exit "$fail"
