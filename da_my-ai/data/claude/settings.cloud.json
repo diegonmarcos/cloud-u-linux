@@ -1,0 +1,23 @@
+{
+  "_doc": "Overlay for a REMOTE CONTAINER session — Claude Code on the web, a cloud runner, CI. Third sibling of settings.{desktop,termux}.json, and the only one no flake deploys: a container runs no home-manager, so nothing merges this file for you. It is the DECLARATION of what such an environment must provide, kept here so the list has one owner and test-claude-sot.sh can check it, and so the values below can be pasted into the remote environment's variable config rather than rediscovered each time.",
+
+  "_doc_why_not_the_vault": "settings.base.json points AUTHELIA_OIDC_{TOKENS,CREDENTIALS}_DIR at @HOME@/git/cloud-vault. A container has no vault checkout and no way to get one before startup — MCP servers bind at process start, so a repo cloned during the session is already too late. Both are blanked here rather than left inherited: an empty value makes mcp-auth-headers.sh skip a path that cannot exist, so the failure it reports is the real one instead of a missing file two directories deep.",
+
+  "_doc_the_secret": "AUTHELIA_OIDC_CLIENT_SECRET is NOT in this file and must never be — this is a public repo. It is injected by the remote environment's own variable config, which is the only carrier that exists before the process starts. With it, mcp-auth-headers.sh source 2 mints a short-lived token per session via client_credentials; without it the helper emits {} and c3-infra-mcp gets an honest 403.",
+
+  "_doc_client_id": "Inherited from settings.base.json, which is claude-admin — full admin, valid into 2036. Minting already improves on exporting that token directly (what sits at rest is a secret scoped to a client, and the bearer it produces is short-lived), but the client itself is still the wrong size for a container. Narrow it to a per-purpose Authelia client and set AUTHELIA_OIDC_CLIENT_ID here to override the base.",
+
+  "_doc_the_other_six": "Only c3-infra-mcp is reachable this way. c3-services-mcp, cloud-cgc-mcp, g-personal, g-workspace, mail-mcp and mattermost-mcp sit behind the WireGuard gate (@wg), not the bearer gate, so they fail from a container with CLIENT_HTTP_UNEXPECTED_CONTENT no matter what token is presented. That is mesh connectivity, not auth, and no setting here fixes it.",
+
+  "env": {
+    "AUTHELIA_OIDC_TOKENS_DIR": "",
+    "AUTHELIA_OIDC_CREDENTIALS_DIR": ""
+  },
+
+  "_doc_required_env": "What the remote environment must set, because no flake delivers settings.base.json to a container either:",
+  "_required_env": [
+    "AUTHELIA_TOKEN_URL=https://auth.diegonmarcos.com/api/oidc/token",
+    "AUTHELIA_OIDC_CLIENT_ID=<narrow client, not claude-admin>",
+    "AUTHELIA_OIDC_CLIENT_SECRET=<from the vault, injected by the environment config>"
+  ]
+}

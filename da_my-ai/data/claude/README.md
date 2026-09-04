@@ -42,6 +42,30 @@ directly above it ("every cloud-infra MCP is declared in the desktop
 template") pushes the other way for everything that IS declared. The source
 stays in da_dtk; only the wiring is gone.
 
+## mcp-auth-headers.sh
+
+Owned here, like everything else in `sot/`. `.mcp.json` names it as `headersHelper`
+for `c3-infra-mcp` — the one MCP endpoint reachable off the WireGuard mesh, gated by
+Caddy on an Authelia bearer (`@wg → @bearer → 403`). `.mcp.json` is committed verbatim
+into every repo under cloud, so the token cannot live in it; the helper reads one at
+connection time instead and prints `{}` when it finds none, which is a 403 rather than
+a broken config.
+
+Sources, first hit wins: `AUTHELIA_BEARER_TOKEN` → **client_credentials mint** →
+`$AUTHELIA_OIDC_TOKENS_DIR` → `<repo>/IV_vault` → `~/git/cloud-vault`.
+
+The mint is what makes a container work. Every source but the first two needs a vault
+checkout, and a container has none and cannot get one in time — MCP servers bind at
+process start, so a repo cloned during the session is already too late. Source 1 alone
+would work, but it only accepts a finished bearer, so in practice it means exporting
+`claude-admin` (full admin, into 2036) into an environment every session can read.
+Minting takes an id and a secret instead and produces a short-lived token per session.
+
+`cloud-infra/0_apps/src/claude/` carries a copy for the dotfiles build. That copy is a
+consumer, not a second owner — the two drifted once already (it still called the server
+`cloud-infra-mcp` after the rename to `c3-infra-mcp`), which is the failure mode the
+provenance-header check at the bottom of `test-claude-sot.sh` exists to catch.
+
 ## settings.json
 
 One base plus a per-platform overlay, merged with `lib.recursiveUpdate`.
