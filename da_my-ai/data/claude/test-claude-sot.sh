@@ -215,4 +215,32 @@ else
   echo "skip — container fork not found at $FORK"
 fi
 
+# ── the deployed statusline assets match the SoT ─────────────────────────────
+# The status line is owned by the my-ai BINARY: statusline_assets.rs embeds
+# data/statusline/ and install() writes it into ~/.claude on every daemon start,
+# which is what makes the dependency self-healing. That guarantee is only as
+# good as the daemon actually running, and on termux nothing runs it — no
+# systemd, no service, so install() never fires. The deployed copy froze a month
+# behind the SoT and quietly lost the 7d reset countdown; the settings were
+# identical the whole time, so every settings-level check stayed green.
+#
+# Content-compare the deployed copy against the SoT. Absent = skip (CI and the
+# container have no ~/.claude); present-and-different = the installer has not
+# run here, and `my-ai usage --daemon` is what repairs it.
+STATUSLINE_SOT="$SOT/../statusline"
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+if [ -d "$STATUSLINE_SOT" ] && [ -d "$CLAUDE_DIR" ]; then
+  stale=""
+  for f in "$STATUSLINE_SOT"/*.sh; do
+    n=$(basename "$f")
+    [ -f "$CLAUDE_DIR/$n" ] || continue
+    cmp -s "$f" "$CLAUDE_DIR/$n" || stale="$stale $n"
+  done
+  check "every deployed statusline asset matches the SoT" \
+    "$(printf '%s' "$stale" | wc -w | tr -d ' ')" 0
+  [ -n "$stale" ] && echo "     stale in $CLAUDE_DIR:$stale — run 'my-ai usage --daemon' to reinstall"
+else
+  echo "skip — no deployed statusline to compare at $CLAUDE_DIR"
+fi
+
 exit "$fail"
