@@ -15,6 +15,10 @@
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
       }
     },
+    "cloud-cgc-pvt-mcp": {
+      "type": "http",
+      "url": "http://10.0.0.6:3107/mcp"
+    },
     "cloud-drive-mcp": {
       "type": "http",
       "url": "https://mcp.diegonmarcos.com/cloud-drive-mcp/mcp",
