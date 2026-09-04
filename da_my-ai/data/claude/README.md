@@ -28,7 +28,24 @@ delivery paths a file takes:
    config the flakes must place in `~/.claude` anyway; routing it through the binary
    instead would mean a GH release for every asset edit.
 
-3. **Flake-local** — `termux/assets/`, `desktop/assets/`. Only what is genuinely
+3. **Repo-scoped copy** — `agents/`, `settings.project.json`,
+   `mcp-auth-headers.sh`. Read by cloud-infra's
+   `9_others/src/deploy-dotfiles.sh`, which refreshes `0_apps/src/claude/` from
+   here and then deploys it to `<repo>/.claude/` in every repo. This is the path
+   for a consumer with **no home-manager**: a fresh clone, CI, Claude Code on
+   the web. `settings.project.json` is renamed to `settings.json` on the way in
+   — here it needs a suffix to sit beside `settings.base.json`, there Claude
+   Code will only read that one name.
+
+   Not symlinks. A cross-repo link resolves on one laptop and dangles in every
+   clone; two dangling `.mcp.json` links from that attempt still sit in
+   cloud-infra-desktop. Real files, regenerated at build time, and
+   `test-claude-sot.sh` fails if the generated copy is not byte-identical.
+
+   The refresh **skips** when this checkout is absent, so cloud-infra alone
+   still builds — it just deploys the copies already committed there.
+
+4. **Flake-local** — `termux/assets/`, `desktop/assets/`. Only what is genuinely
    platform-specific: `mcp.json.tpl` (termux bans stdio MCP servers, desktop keeps
    three), `secrets.yaml` (different sops recipients), desktop's `mcp-local-launch.sh`.
 
@@ -64,7 +81,9 @@ Minting takes an id and a secret instead and produces a short-lived token per se
 `cloud-infra/0_apps/src/claude/` carries a copy for the dotfiles build. That copy is a
 consumer, not a second owner — the two drifted once already (it still called the server
 `cloud-infra-mcp` after the rename to `c3-infra-mcp`), which is the failure mode the
-provenance-header check at the bottom of `test-claude-sot.sh` exists to catch.
+provenance-header check at the bottom of `test-claude-sot.sh` exists to catch. It is now
+regenerated from here by `deploy-dotfiles.sh` (delivery path 3 above) rather than
+hand-copied, and `test-claude-sot.sh` fails if it is not byte-identical.
 
 ## settings.json
 

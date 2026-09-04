@@ -23,12 +23,14 @@ check() { if [ "$2" = "$3" ]; then echo "ok   — $1"; else echo "FAIL — $1: g
 
 # ── the SoT holds what it claims to hold ─────────────────────────────────────
 for f in settings.base.json settings.desktop.json settings.termux.json \
-         mcp.desktop.json.tpl mcp.termux.json.tpl mcp-local-launch.sh; do
+         settings.project.json mcp.desktop.json.tpl mcp.termux.json.tpl \
+         mcp-local-launch.sh mcp-auth-headers.sh; do
   check "the SoT holds $f" "$([ -f "$SOT/$f" ] && echo yes || echo no)" yes
 done
 
 for f in settings.base.json settings.desktop.json settings.termux.json \
-         mcp.desktop.json.tpl mcp.termux.json.tpl claude-plugins.json; do
+         settings.project.json mcp.desktop.json.tpl mcp.termux.json.tpl \
+         claude-plugins.json; do
   check "$f is valid JSON" "$(jq -e . "$SOT/$f" >/dev/null 2>&1 && echo yes || echo no)" yes
 done
 
@@ -94,6 +96,29 @@ if [ -d "$INFRA" ]; then
   [ -n "$missing" ] && echo "     undeclared: $missing"
 else
   echo "skip — cloud-infra checkout not found at $INFRA"
+fi
+
+# ── cloud-infra's repo-scoped copy is GENERATED, and has been regenerated ────
+# 0_apps/src/claude/ is what deploy-dotfiles.sh copies into every repo's
+# .claude/. It used to be a second hand-kept copy of agents/ plus its own
+# settings.json whose _doc read "edit there, then re-copy here" — and the two
+# agents/README.md had already diverged, each describing itself as the same
+# file. deploy-dotfiles.sh now refreshes that directory from this one, so the
+# committed copy must be byte-identical or the refresh was never run.
+#
+# Byte-identical, not key-sampled like the seventeen-mirror check below: this
+# is the ONE copy that is machine-generated, so anything less than equality
+# means a hand edit landed in the generated tree and will be silently reverted.
+INFRA_CLAUDE="$REPO/../cloud-infra/0_apps/src/claude"
+if [ -d "$INFRA_CLAUDE" ]; then
+  check "cloud-infra's generated agents/ matches the SoT" \
+    "$(diff -rq "$SOT/agents" "$INFRA_CLAUDE/agents" >/dev/null 2>&1 && echo yes || echo no)" yes
+  check "cloud-infra's generated settings.json is settings.project.json verbatim" \
+    "$(cmp -s "$SOT/settings.project.json" "$INFRA_CLAUDE/settings.json" && echo yes || echo no)" yes
+  check "cloud-infra's generated mcp-auth-headers.sh matches the SoT" \
+    "$(cmp -s "$SOT/mcp-auth-headers.sh" "$INFRA_CLAUDE/mcp-auth-headers.sh" && echo yes || echo no)" yes
+else
+  echo "skip — cloud-infra 0_apps/src/claude not found at $INFRA_CLAUDE"
 fi
 
 # ── the repo-scoped mirror agrees with the SoT ───────────────────────────────
