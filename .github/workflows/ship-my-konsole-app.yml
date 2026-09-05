@@ -17,7 +17,7 @@ on:
     paths:
       - 'da__my-konsole/**'
       # my-konsole compiles the shared sampler from here.
-      - 'da_watchdog/**'
+      - 'da_c3-watchdog/**'
       - '.github/workflows/ship-my-konsole-app.yml'
   workflow_dispatch:
 

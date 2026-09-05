@@ -1,0 +1,68 @@
+[package]
+name = "c3-watchdog"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "c3_watchdog"
+path = "src/lib.rs"
+
+# NAMED FOR WHAT SHOWS UP IN ps.
+#
+# The panel builds its process table from /proc/<pid>/cmdline, so a process is
+# called whatever its FILE is called — argv is the truth and comm is only right
+# for kernel threads. Both halves were "c3-watchdog" and "c3-watchdog-tui",
+# which share a prefix, truncate alike, and read as one thing running twice.
+# Worse on Android, where they ship as libmywatchdog.so and libmywatchdogtui.so
+# and comm cuts both at 15 characters.
+#
+# -d for the daemon, the convention every other resident process on the box
+# already follows. Distinct at a glance from the KERNEL's own watchdogd thread,
+# which is also in that table and is not ours.
+[[bin]]
+name = "c3-watchdog-d"
+path = "src/main.rs"
+
+# The panel, as its own binary and only when asked for. Two binaries rather
+# than one with a subcommand, because the daemon ships to every box in the
+# fleet and most of them are headless: linking ratatui into the thing that has
+# to stay small, to carry a UI no server will draw, is the wrong trade.
+[[bin]]
+name = "c3-watchdog-tui"
+path = "src/bin/c3-watchdog-tui.rs"
+required-features = ["tui"]
+
+[dependencies]
+# The sampler is pure std + libc: every figure comes out of /proc, /sys and
+# cgroupfs, and nothing here needs a JSON crate because the snapshot is
+# written by hand. That is why this extracts from my-konsole cleanly.
+libc = "0.2"
+# ksni, not tray-icon: on Linux tray-icon drops the tooltip entirely, and a
+# watchdog whose tray cannot say what it is watching is not much of a tray.
+# Same choice my-konsole already made, for the same reason.
+#
+# OPTIONAL, and that is what makes this deployable to the fleet. A headless VM
+# has no tray and no D-Bus session to put one on, and ksni links libdbus —
+# which is exactly the dependency that stops a build being statically linked.
+# Without it the crate is std + libc, which cross-compiles to a static musl
+# binary that runs on any Linux of that architecture regardless of its libc.
+ksni = { version = "0.3", features = ["blocking"], optional = true }
+
+# The panel's crates, all optional for the same reason ksni is: they are what
+# separates an 800KB static musl sampler from a 2MB one carrying a terminal UI.
+# The daemon itself still writes its snapshot by hand and parses nothing.
+ratatui = { version = "0.28", optional = true }
+crossterm = { version = "0.28", optional = true }
+serde_json = { version = "1", optional = true }
+
+[features]
+# The fleet builds neither: `--no-default-features` gives the bare sampler.
+default = ["tray"]
+tray = ["dep:ksni"]
+tui = ["dep:ratatui", "dep:crossterm", "dep:serde_json"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

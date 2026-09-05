@@ -1,0 +1,47 @@
+# c3-watchdog as a service, for a machine that runs containers and nothing else
+# you can rely on.
+#
+# WHAT IT NEEDS, AND WHY EACH ONE
+# The sampler's whole job is to describe the HOST, so a container that can only
+# see itself would publish a snapshot of an empty box. Everything below is the
+# minimum that makes the numbers true rather than a description of this
+# container.
+services:
+  c3-watchdog:
+    image: ghcr.io/diegonmarcos/c3-watchdog:latest
+    container_name: c3-watchdog
+    restart: unless-stopped
+
+    # The host's processes, so the process table is the machine's and not a
+    # single PID 1. Without this every reading is technically correct and
+    # completely useless.
+    pid: host
+
+    # Read-only host /proc and /sys. The sampler never writes to either; it is
+    # a reader, and mounting them writable would let a bug in a dashboard
+    # change the machine it is describing.
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
+      # Where the snapshot is published, and the ONLY writable path. The panel
+      # — on the host, in a terminal, or on a phone over ssh — reads this file,
+      # so it has to outlive the container and be visible outside it.
+      - watchdog-run:/run/user/1000
+
+    environment:
+      # The sampler resolves XDG_RUNTIME_DIR first and falls back to
+      # /run/user/$uid. Set explicitly so the published path is the one the
+      # volume above exposes rather than whatever the image's uid happens to
+      # make it.
+      - XDG_RUNTIME_DIR=/run/user/1000
+
+    # Enough to read the host, and nothing more. SYS_PTRACE is what lets it
+    # read other processes' /proc entries; without it the table is this
+    # container's own processes wearing the host's PID numbers.
+    cap_drop: [ALL]
+    cap_add: [SYS_PTRACE, DAC_READ_SEARCH]
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  watchdog-run:
