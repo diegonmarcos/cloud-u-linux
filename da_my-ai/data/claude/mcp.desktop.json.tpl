@@ -1,22 +1,11 @@
 {
+  "_doc": "stdio DISABLED (2026-09-05) so both platforms derive from exactly the same HTTP set and the two templates are byte-identical. Termux was already HTTP-only by decree; desktop being the odd one out is what made the lists diverge. The flag is kept rather than deleted so the split is a visible, deliberate 'false' instead of a silently absent feature.",
   "mcpServers": {
     "cloud-cgc-pub-mcp": {
       "type": "http",
       "url": "https://mcp.diegonmarcos.com/cloud-cgc-pub-mcp/mcp",
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      }
-    },
-    "cloud-cgc-pub-mcp-local": {
-      "type": "stdio",
-      "command": "/home/diego/.claude/mcp-local-launch.sh",
-      "args": [
-        "/home/diego/git/cloud-infra/a_solutions/user-ai_cloud-cgc-pub-mcp/src/code/index.ts"
-      ],
-      "env": {
-        "NODE_PATH": "/home/diego/.node_modules/node_modules",
-        "CONFIG_PATH": "/home/diego/git/cloud-infra/config.json",
-        "GIT_ROOT": "/home/diego/git"
       }
     },
     "cloud-cgc-pvt-mcp": {
@@ -59,27 +48,17 @@
       }
     },
     "cloud-superapp-mcp": {
-      "type": "stdio",
-      "command": "/home/diego/.claude/mcp-local-launch.sh",
-      "args": [
-        "/home/diego/git/cloud-infra/a_solutions/infra-api_cloud-superapp-mcp/cloud-superapp-mcp/src/index.ts"
-      ],
-      "env": {
-        "NODE_PATH": "/home/diego/.node_modules/node_modules",
-        "SUPERAPP_HOSTS": "phone,phone-v6,phone-pub",
-        "SUPERAPP_FLEET_TOKEN": "${SUPERAPP_FLEET_TOKEN}"
+      "type": "http",
+      "url": "https://mcp.diegonmarcos.com/cloud-superapp-mcp/mcp",
+      "headers": {
+        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
       }
     },
     "cloud-vault-mcp": {
-      "type": "stdio",
-      "command": "/home/diego/.claude/mcp-local-launch.sh",
-      "args": [
-        "/home/diego/git/cloud-infra/a_solutions/infra-api_cloud-vault-mcp/src/index.ts"
-      ],
-      "env": {
-        "NODE_PATH": "/home/diego/.node_modules/node_modules",
-        "VAULT_PATH": "/home/diego/git/cloud-vault",
-        "CONFIG_PATH": "/home/diego/git/cloud-infra/config.json"
+      "type": "http",
+      "url": "https://mcp.diegonmarcos.com/cloud-vault-mcp/mcp",
+      "headers": {
+        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
       }
     },
     "google-personal-mcp": {

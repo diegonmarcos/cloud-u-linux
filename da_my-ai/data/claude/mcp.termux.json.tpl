@@ -47,6 +47,20 @@
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
       }
     },
+    "cloud-superapp-mcp": {
+      "type": "http",
+      "url": "https://mcp.diegonmarcos.com/cloud-superapp-mcp/mcp",
+      "headers": {
+        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
+      }
+    },
+    "cloud-vault-mcp": {
+      "type": "http",
+      "url": "https://mcp.diegonmarcos.com/cloud-vault-mcp/mcp",
+      "headers": {
+        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
+      }
+    },
     "google-personal-mcp": {
       "type": "http",
       "url": "https://mcp.diegonmarcos.com/g-personal/mcp",
