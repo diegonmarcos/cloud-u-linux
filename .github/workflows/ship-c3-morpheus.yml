@@ -1,0 +1,85 @@
+name: ship-c3-morpheus
+# Build c3-morpheus — the cloud's workflow orchestrator. The crate has NO
+# dependencies (it shells out to curl, jq and gh, which every box already has),
+# so this is stable rust and nothing else: no D-Bus headers, no nix, no node.
+#
+# Deliberately simpler than ship-my-watchdog.yml: no pin job, no dist tarball,
+# no container. This v1 has no nix module and no systemd unit to keep in sync
+# with a hash, so adding that machinery now would be scaffolding around
+# nothing. Add each leg when something actually consumes it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'da_morpheus/**'
+      - '.github/workflows/ship-c3-morpheus.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Native runners, no QEMU: cross-compiling a musl target is a linker
+          # flag, and emulating a toolchain to avoid one is a bad trade.
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            asset: c3-morpheus-x86_64
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            asset: c3-morpheus-aarch64
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: da_morpheus
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: da_morpheus
+
+      - name: musl toolchain
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq musl-tools
+
+      - name: Compile-verify
+        run: |
+          cargo fmt --check || true
+          cargo clippy --release --all-targets -- -D warnings
+          # The tests assert the thing this product must never get wrong:
+          # `run` cannot report success while starting nothing, and paca stays
+          # declared mesh-only so a probe does not call a healthy service down.
+          cargo test --release
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Confirm it is actually static
+        # A dynamically linked "static" build fails on the first peer with a
+        # different libc, and it fails there rather than here — so check here.
+        run: |
+          f="target/${{ matrix.target }}/release/c3-morpheus"
+          file "$f"
+          file "$f" | grep -q 'static' || { echo "NOT static — it would not run on the fleet" >&2; exit 1; }
+
+      - name: Publish to the rolling release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release view c3-morpheus-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create c3-morpheus-latest \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "c3-morpheus (rolling)" \
+              --notes "The cloud's workflow orchestrator. Rebuilt on every push to da_morpheus/."
+          cp "target/${{ matrix.target }}/release/c3-morpheus" "${{ matrix.asset }}"
+          gh release upload c3-morpheus-latest "${{ matrix.asset }}" \
+            --repo "$GITHUB_REPOSITORY" --clobber

@@ -1,0 +1,31 @@
+{
+  "name": "c3-morpheus",
+  "description": "c3-morpheus — the cloud's workflow orchestrator. Holds the workflow inventory (Dagu + GitHub Actions), the probe registry that declares what 'healthy' means fleet-wide, and the entry points to the fleet control panel and the PM board. c3-watchdog keeps what is running alive; c3-morpheus decides what runs.",
+  "_doc_split": "The line between the two products, because they will keep being confused. c3-watchdog is REACTIVE: it samples ONE machine's vitals — cpu, memory, swap, PSI, the process table — and kills or restarts locally so a server does not freeze. c3-morpheus is INTENTIONAL: it asks fleet-wide questions (is this service serving, is this endpoint answering, is this workflow green), owns the probe declarations, and is where a run is started from. Neither substitutes for the other, and a per-machine sampler is not a fleet health system.",
+  "app": {
+    "identifier": "com.diegonmarcos.c3-morpheus",
+    "bin": "c3-morpheus"
+  },
+  "build": {
+    "engine": "cargo build --release",
+    "remote": true,
+    "_remote_note": "Built on GHA and published to the rolling release, fetched by build.sh. Never compiled locally — same freeze-guard reason da_watchdog states.",
+    "release_tag": "c3-morpheus-latest",
+    "repo": "diegonmarcos/cloud-u-linux",
+    "subdir": "da_morpheus"
+  },
+  "reuses": {
+    "_doc": "What this product CONSUMES rather than reimplements. Listed here because every one of these is a thing that would silently diverge if copied, and the copy is always the one that goes stale.",
+    "dagu": "https://workflows.diegonmarcos.com — the workflow engine. Status words are mirrored from ab_cloud-libs-shared/libs/ops/.../dagu/DaguModels.kt so the CLI and the phone agree.",
+    "gha": "gh run list, per repo. No second GitHub client.",
+    "probes": "cloud-infra/1_cicd/src/ops/cloud-health-*.sh, scheduled by Dagu. data/probes.json is an INVENTORY of them, never a reimplementation.",
+    "ntfy_topics": "cloud-infra/a_solutions/infra-obs_ntfy/src/build.json::topics[] — the only thing that can tell you a probe's alerts are reaching a subscriber, because ntfy answers 200 for an unregistered topic.",
+    "paca": "https://paca.diegonmarcos.com — the PM board IS the Paca app. It has no board API (every route 404s or 302s to Authelia), so the app renders the real SPA inline. There is nothing here wrapping an API that does not exist.",
+    "triggering": "ab_cloud-libs-shared/libs/ops — Dagu POST /api/v1/dags/{name}/start with a fresh client_credentials token per run, plus server-side GHA dispatch. NOT reimplemented here; `c3-morpheus run` says it is not wired rather than shipping a second client to keep in sync with Authelia."
+  },
+  "runtime": {
+    "_doc": "Nothing resident. v1 is a command you run; there is no daemon, no snapshot file and no mailbox. When it grows one, that is the moment to add the paths — inventing them now would be inventing a contract nothing has agreed to.",
+    "probes": "data/probes.json, embedded in the binary; MORPHEUS_PROBES overrides",
+    "tools": ["curl", "jq", "gh"]
+  }
+}
