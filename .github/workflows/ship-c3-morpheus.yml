@@ -19,7 +19,32 @@ permissions:
   contents: write
 
 jobs:
+  # THE ROLLING RELEASE, CREATED ONCE, BEFORE ANYTHING UPLOADS.
+  #
+  # It used to be create-or-view inside each matrix leg, and the two legs raced
+  # on the very first run: x86_64 created c3-morpheus-latest, aarch64 had
+  # already checked and found nothing, so its `gh release create` came second
+  # and GitHub answered HTTP 422 "Published releases must have a valid tag".
+  # The whole run went red while both binaries had compiled, tested and passed
+  # the static-link check — a publish race reported as a build failure.
+  #
+  # One job, not a retry loop: a retry makes the race less likely and keeps it.
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure the rolling release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release view c3-morpheus-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && exit 0
+          gh release create c3-morpheus-latest \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "c3-morpheus (rolling)" \
+            --notes "The cloud's workflow orchestrator. Rebuilt on every push to da_morpheus/."
+
   build:
+    needs: release
     strategy:
       fail-fast: false
       matrix:
@@ -75,11 +100,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          gh release view c3-morpheus-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
-            gh release create c3-morpheus-latest \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "c3-morpheus (rolling)" \
-              --notes "The cloud's workflow orchestrator. Rebuilt on every push to da_morpheus/."
+          # Upload only. The release is guaranteed to exist by the `release`
+          # job above, and each leg uploads a DISTINCT asset name, so --clobber
+          # here can never delete the other architecture's binary.
           cp "target/${{ matrix.target }}/release/c3-morpheus" "${{ matrix.asset }}"
           gh release upload c3-morpheus-latest "${{ matrix.asset }}" \
             --repo "$GITHUB_REPOSITORY" --clobber
