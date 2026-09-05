@@ -8,6 +8,10 @@
     "cloud-cgc-pvt-mcp": {
       "type": "http",
       "url": "http://10.0.0.6:3107/mcp"
+    },
+    "cloud-vault-mcp": {
+      "type": "http",
+      "url": "http://10.0.0.6:3111/mcp"
     }
   },
   "_doc_stdio_extras": "EMPTY BY DESIGN (2026-09-05). This held three stdio servers that made desktop's list differ from termux's forever, which is the drift the user ruled against: 'NO MCP SHOULD BE ABSENT — THE MCP LIST MUST BE SAME EVERYWHERE'. All three are gone because the reason for each disappeared: cloud-vault-mcp and cloud-superapp-mcp were given a real StreamableHTTPServerTransport and now arrive through the DERIVED set for both platforms (verified live: POST /mcp returns 200 with serverInfo for each); cloud-cgc-pub-mcp-local ran the very same src/code/index.ts that the HTTP cloud-cgc-pub-mcp already serves, so it was a duplicate transport, not a distinct capability. Every entry also hardcoded /home/diego/... paths, which resolve on exactly one laptop and dangle everywhere else — the same machine-specific-path reason derive-mcp-json.ts skips stdio in the first place. Do NOT re-add a platform carve-out here: if a server cannot be reached over HTTP, fix the SERVICE so the deriver can see it, rather than re-splitting the lists.",

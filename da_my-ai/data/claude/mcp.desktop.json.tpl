@@ -56,10 +56,7 @@
     },
     "cloud-vault-mcp": {
       "type": "http",
-      "url": "https://mcp.diegonmarcos.com/cloud-vault-mcp/mcp",
-      "headers": {
-        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      }
+      "url": "http://10.0.0.6:3111/mcp"
     },
     "google-personal-mcp": {
       "type": "http",
