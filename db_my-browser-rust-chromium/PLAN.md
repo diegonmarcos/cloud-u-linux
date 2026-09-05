@@ -80,7 +80,7 @@ Taken so the goal is stated honestly. Python is **not** the bottleneck:
 | RSS | 223 MB / 10 procs (98 MB renderers, 125 MB main = Python **+ Qt + WebEngine browser proc**) |
 | GPU on qute today | already accelerated — `type=gpu-process` live, Intel i915/crocus |
 | qutebrowser source / this fork's own code | 59,336 LOC / ~1,324 LOC |
-| Rust already in the fleet | 18,455 LOC (`da_watchdog`, `da__my-konsole`, `da_my-ai`) |
+| Rust already in the fleet | 18,455 LOC (`da_c3-watchdog`, `da__my-konsole`, `da_my-ai`) |
 
 So this project is **not** justified by speed, and GPU is not a problem to solve
 — qute already has it. The justification is the one in `README.md`: **TLS

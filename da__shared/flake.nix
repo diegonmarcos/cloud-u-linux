@@ -3,7 +3,7 @@
 
   # WHY THIS EXISTS
   #
-  # da_watchdog, da_my-ai, da_my-webserver and da_dtk are the same product
+  # da_c3-watchdog, da_my-ai, da_my-webserver and da_dtk are the same product
   # shape wearing different toolchains: something you run in a terminal,
   # usually a daemon behind it, a tray entry hosted by da__my-konsole, shipped
   # by one CI runner to machines that must never compile.

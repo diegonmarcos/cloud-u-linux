@@ -9,7 +9,7 @@ section is still open.
 One named-field struct, destructured at the top of `render()`. Field order can
 no longer be silently wrong: adding a figure is one struct line plus a compiler
 error at each of the 5 sites. (The count below said 43; it was measured at 37.)
-`da_watchdog/src/watchdog.rs::render()` takes **43 positional args** across 5
+`da_c3-watchdog/src/watchdog.rs::render()` takes **43 positional args** across 5
 call sites (one-shot, daemon loop, 3 snapshot tests). Any new field means
 editing all five in lockstep. This broke twice in one session: CI caught a
 test-arity failure, then a scripted insertion desynced the sites (43/41/40) and

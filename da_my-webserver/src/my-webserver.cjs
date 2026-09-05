@@ -172,7 +172,7 @@ const MIME = {
 const APPS = (() => {
   const home = process.env.HOME || '.';
   const apps = {
-    watchdog: join(home, 'git/cloud-u-linux/da_watchdog/web/dist'),
+    watchdog: join(home, 'git/cloud-u-linux/da_c3-watchdog/web/dist'),
   };
   for (const pair of (process.env.MY_WEBSERVER_APPS || '').split(',')) {
     const i = pair.indexOf('=');
