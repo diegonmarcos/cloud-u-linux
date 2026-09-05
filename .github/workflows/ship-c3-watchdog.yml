@@ -312,7 +312,14 @@ jobs:
       - name: Publish to GHCR
         uses: ./.github/actions/ghcr-publish
         with:
-          image: c3-watchdog
+          # -server, NOT c3-watchdog. cloud-u-android ships the phone app as an
+          # OCI artifact to ghcr.io/diegonmarcos/c3-watchdog, and GHCR package
+          # names are per-account, not per-repo: before the rebrand these were
+          # my-watchdog and cloud-watchdog and could not collide, but rebranding
+          # both to c3-watchdog put a Docker image and an APK in one package,
+          # where whichever shipped last owned :latest. The updater pulls that
+          # tag expecting an APK.
+          image: c3-watchdog-server
           namespace: diegonmarcos
           context: da_c3-watchdog
           file: da_c3-watchdog/Dockerfile

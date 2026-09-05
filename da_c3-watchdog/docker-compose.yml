@@ -8,7 +8,7 @@
 # container.
 services:
   c3-watchdog:
-    image: ghcr.io/diegonmarcos/c3-watchdog:latest
+    image: ghcr.io/diegonmarcos/c3-watchdog-server:latest
     container_name: c3-watchdog
     restart: unless-stopped
 
