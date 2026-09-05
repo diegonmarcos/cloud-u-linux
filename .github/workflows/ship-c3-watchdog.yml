@@ -31,7 +31,37 @@ permissions:
   packages: write   # ghcr.io/diegonmarcos/c3-watchdog
 
 jobs:
+  # THE ROLLING RELEASE, CREATED ONCE, BEFORE ANYTHING UPLOADS.
+  #
+  # It was create-or-view in THREE places — the `build` job plus both `fleet`
+  # matrix legs — all racing on the same tag. Whichever looked first found
+  # nothing, and by the time it created, another had already won: GitHub
+  # answers the loser HTTP 422 "Published releases must have a valid tag" and
+  # the run goes red with every binary compiled, clippy clean, tests passed and
+  # the static-link check passed. A publish race reported as a build failure.
+  #
+  # This survived only because c3-watchdog-latest already existed, so the
+  # `view` short-circuited and the create never ran. It was one deleted release
+  # away from firing. ship-c3-morpheus.yml hit exactly this on its first run
+  # (cloud-u-linux run 33986750962) — that is not a hypothetical.
+  #
+  # One job, not a retry loop: a retry makes the race less likely and keeps it.
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure the rolling release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release view c3-watchdog-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && exit 0
+          gh release create c3-watchdog-latest \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "c3-watchdog (rolling)" \
+            --notes "The machine sampler and its panel. Rebuilt on every push to da_c3-watchdog/."
+
   build:
+    needs: release
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -82,11 +112,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view c3-watchdog-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
-            gh release create c3-watchdog-latest \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "c3-watchdog (rolling)" \
-              --notes "The machine sampler and its panel. Rebuilt on every push to da_c3-watchdog/."
           # The phone app's UI, generated from the same template as the
           # report and carried inside the APK. Emitted here rather than
           # fetched at runtime: an app that downloads its own interface
@@ -121,6 +146,7 @@ jobs:
   # per architecture runs on Ubuntu, Fedora and NixOS alike, which is what this
   # fleet actually is.
   fleet:
+    needs: release
     strategy:
       fail-fast: false
       matrix:
@@ -185,11 +211,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cp target/${{ matrix.target }}/release/c3-watchdog-d ${{ matrix.asset }}
-          gh release view c3-watchdog-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
-            gh release create c3-watchdog-latest \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "c3-watchdog (rolling)" \
-              --notes "The machine sampler and its panel. Rebuilt on every push to da_c3-watchdog/."
           gh release upload c3-watchdog-latest \
             ${{ matrix.asset }} \
             --repo "$GITHUB_REPOSITORY" --clobber

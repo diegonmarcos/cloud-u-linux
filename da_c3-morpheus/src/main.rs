@@ -73,7 +73,7 @@ fn require(tools: &[&str]) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!(
-            "missing on PATH: {} — install them or use `nix develop` in da_morpheus",
+            "missing on PATH: {} — install them or use `nix develop` in da_c3-morpheus",
             missing.join(", ")
         ))
     }
