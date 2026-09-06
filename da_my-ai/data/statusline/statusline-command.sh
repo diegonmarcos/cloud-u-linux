@@ -99,20 +99,19 @@ session_short="${session_id:0:8}"
 # the last-seen values to disk per session and fall back to them when the
 # current payload is silent, so the row stays up between real updates.
 # The cache is SHARED, not per-session: both limits are account-wide, so a
-# per-session file let each session stick to whatever it first saw. Three
-# concurrent sessions held 7d = 4, 62 and 63.1 against the SAME resets_at.
+# per-session file let each session stick to whatever it first saw.
 #
-# Within one window (same resets_at) 7d usage only ever climbs, so a lower
-# reading is bad data, not a recovery — keep the high-water mark and let a
-# changed resets_at reset it. That is what made it read 4% at 60%+.
+# It is a LAST-SEEN cache, deliberately NOT a high-water mark. A max() was
+# added here once on the theory that a lower reading must be bad data; it was
+# wrong and it is the reason this row got stuck reading 60%+ for days. A
+# latched value never falls until the weekly reset, so one bad sample pins the
+# display for the rest of the window. Verified 2026-09-06 against Claude Code's
+# own source: GET /api/oauth/usage returned five_hour 17 / seven_day 46 while
+# this cache held 16 / 45 — the plain last-seen value tracks the API, and
+# seven_day here is exactly what /usage prints as "Current week (all models)".
+# Do not re-add the max().
 rl_sticky="/tmp/statusline_rl.cache"
 if [ -n "$rl_5h" ] || [ -n "$rl_7d" ]; then
-    if [ -f "$rl_sticky" ]; then
-        { read -r _p5h; read -r _p7d; read -r _prst; } < "$rl_sticky" 2>/dev/null
-        if [ -n "$rl_7d" ] && [ -n "$_p7d" ] && [ "$rl_7d_reset" = "$_prst" ]; then
-            rl_7d=$(awk -v a="$rl_7d" -v b="$_p7d" 'BEGIN{print (a+0>b+0)?a:b}')
-        fi
-    fi
     printf '%s\n%s\n%s\n' "$rl_5h" "$rl_7d" "$rl_7d_reset" > "$rl_sticky" 2>/dev/null
 elif [ -f "$rl_sticky" ]; then
     { read -r rl_5h; read -r rl_7d; read -r rl_7d_reset; } < "$rl_sticky" 2>/dev/null
