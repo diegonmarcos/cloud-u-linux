@@ -66,6 +66,9 @@
   },
   "alwaysThinkingEnabled": true,
 
+  "_remoteControlAtStartup_comment": "Arm Remote Control on every session instead of having to remember `claude rc` per chat. Requires feature-flag evaluation, which is why CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC was dropped from settings.termux.json. It also requires api.anthropic.com, so sessions started with CLAUDE_SUPERSET_MODE=remote (ANTHROPIC_BASE_URL at the claude-api-superset proxy) still cannot use it — this only makes it the default wherever it is possible at all.",
+  "remoteControlAtStartup": true,
+
   "_MCP_CONNECT_TIMEOUT_MS_comment": "Version-negotiation probe timeout; Claude Code defaults to 5000ms. Reconnection is already automatic (reconnectMcpServer), so this does not enable it — it widens the window a recovering backend gets to answer in. On 2026-08-28 a stopped docker.service on gcp-proxy took every HTTP MCP down and each was reported only as a 5000ms probe timeout, which reads as a client fault rather than a backend outage.",
 
   "_enableAllProjectMcpServers_comment": "Auto-trust a project's own .mcp.json servers instead of prompting per-server. The fleet's .mcp.json files are machine-derived from a_solutions/*/build.json (all our own servers), so blanket-trust is safe here. Mirrored into every repo's committed .claude/settings.json (0_apps/src/claude/settings.json) so fresh clones with no ~/.claude — CI, containers, Claude Code on the web — auto-load them too; this copy covers ~/.claude on home-manager machines.",

@@ -4,8 +4,8 @@
     "refreshInterval": 5
   },
   "env": {
-    "MCP_TIMEOUT": "10000",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+    "MCP_TIMEOUT": "10000"
   },
+  "_env_comment": "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC removed 2026-09-07: it also disables feature-flag evaluation, and Remote Control (`claude rc`) refuses to start without it. Saving a little background traffic is not worth losing rc on the phone, which is the machine that needs it most.",
   "effortLevel": "xhigh"
 }
