@@ -1,4 +1,5 @@
 {
+  "_warning": "GENERATED — DO NOT EDIT. Derived from cloud-infra/1_cloud-configs/dist/mcp.json + mcp-policy.json by cloud-u-linux da_my-ai/data/claude/gen-mcp-tpl.sh. Hand-editing this file is the bug it exists to prevent: edit the service declaration or mcp-policy.json and regenerate.",
   "_doc": "stdio DISABLED (2026-09-05) so both platforms derive from exactly the same HTTP set and the two templates are byte-identical. Termux was already HTTP-only by decree; desktop being the odd one out is what made the lists diverge. The flag is kept rather than deleted so the split is a visible, deliberate 'false' instead of a silently absent feature.",
   "mcpServers": {
     "cloud-cgc-pub-mcp": {

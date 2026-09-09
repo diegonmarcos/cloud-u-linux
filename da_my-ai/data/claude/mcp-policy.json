@@ -1,5 +1,5 @@
 {
-  "_doc": "Platform policy for the Claude MCP client lists. The HTTP set is DERIVED from cloud-infra/1_cloud-configs/dist/mcp.json (url + headersHelper); this file holds only what that derivation cannot know: endpoints reached directly rather than through the public proxy, and the stdio servers that are desktop-only. Regenerate with gen-mcp-tpl.sh.",
+  "_doc": "Platform policy for the Claude MCP client lists. The HTTP set is DERIVED from cloud-infra/1_cloud-configs/dist/mcp.json (url + headersHelper); this file holds only what that derivation cannot know: endpoints reached directly rather than through the public proxy, the stdio servers that are desktop-only, and the per-platform rendering differences. Regenerate with gen-mcp-tpl.sh.",
   "auth_header": {
     "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
   },
@@ -26,6 +26,16 @@
       "http": true,
       "stdio": false,
       "_doc": "stdio DISABLED (2026-09-05) so both platforms derive from exactly the same HTTP set and the two templates are byte-identical. Termux was already HTTP-only by decree; desktop being the odd one out is what made the lists diverge. The flag is kept rather than deleted so the split is a visible, deliberate 'false' instead of a silently absent feature."
+    },
+    "container": {
+      "http": true,
+      "stdio": false,
+      "auth_header": {
+        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE_ADMIN}"
+      },
+      "output": "cloud-u-containers/user-ai_my-ai_claude-api/src/code/claude-config/mcp.tpl.json",
+      "_doc": "The my-ai_claude-api agent runner on oci-apps. It gets the SAME derived HTTP set as the two human machines — a headless agent that cannot reach the code graph reasons blind, which is exactly what a shorter list here caused. TWO declared exceptions, and no others:\n  1. auth_header uses AUTHELIA_OIDC_TOKEN_CLAUDE_ADMIN with an UNDERSCORE. The container is      rendered by render-mcp.mjs, which does a literal replaceAll of that exact string at boot;      desktop and termux are rendered by nix, which substitutes the hyphenated spelling. Neither      renderer recognises the other's placeholder, so one shared spelling would silently ship an      unexpanded literal as the bearer token and 403 every gated server.\n  2. output points OUT of this repository. The container image is built from a cloud-u-containers      build context that cannot reach this checkout, so its copy has to be committed there;      generating it directly is what keeps it from becoming a second hand-maintained list again.      The path is relative to ${GIT_BASE:-$HOME/git}. When that checkout is absent — cloud-infra's      lint-pipeline clones only cloud-u-linux — this platform is SKIPPED rather than failed, and      cloud-u-containers' own test-mcp-contract.sh asserts the same equality from its side."
     }
-  }
+  },
+  "_doc_auth_header": "The DEFAULT placeholder written into every proxy-hosted entry. A platform may override it, because the placeholder is not read by Claude Code alone — whoever renders the template has to recognise the exact string. Nix substitutes it on desktop and termux; the container has its own renderer with its own convention."
 }

@@ -13,7 +13,7 @@
       "Read(**/*.webp)",
       "Read(**/*.bmp)"
     ],
-    "_allow_comment": "Read-only inspection commands that prompted repeatedly across the last 50 sessions (2026-08-20 transcript scan of 64k tool calls). Only non-mutating forms are listed: systemctl/journalctl QUERY subcommands (is-active/show/cat/status/list-units, -u/-b/-k log reads) and `gh run watch`. Deliberately NOT here: systemctl start/stop/restart, gh workflow run, gh release download, docker pull, nix build, and any interpreter or `env`/`bash`/`python3` form, since a wildcard on those is arbitrary code execution. 2026-08-23: added `mcp__cloud-infra` - a SERVER-WIDE grant on the c3-infra-mcp server (Claude Code MCP rules take `mcp__<server>` for all tools or `mcp__<server>__<tool>` for one; `mcp__<server>__*` is NOT a supported form). This is deliberately broader than the Bash policy above and does cover mutating verbs (devops_service_start, devops_container_restart, devops_docker_compose_up, devops_build_ship, devops_vm_stop, devops_secrets_set). Rationale: every fleet repair routed through this server was being denied one tool at a time, and the server is our own authenticated infra API behind Authelia bearer + the wg mesh gate - not arbitrary code execution. Narrow it back to per-tool entries if that trust boundary ever changes. Commands Claude Code already auto-allows (cat/ls/head/tail/grep/rg/jq/find/sed/ps/git read-only/gh view+list/docker ps) are intentionally omitted - they never prompt and an entry would be dead weight. 2026-08-23: listed twice as mcp__cloud-infra AND mcp__c3-infra-mcp - the tool prefix follows the MCP server key, and this one server is keyed cloud-infra in the user config but c3-infra-mcp in cloud's .mcp.json, so a single name silently fails to grant under the other. Note mcp__<server>__* is NOT a supported wildcard form; the bare mcp__<server> entry IS the server-wide grant.",
+    "_allow_comment": "Read-only inspection commands that prompted repeatedly across the last 50 sessions (2026-08-20 transcript scan of 64k tool calls). Only non-mutating forms are listed: systemctl/journalctl QUERY subcommands (is-active/show/cat/status/list-units, -u/-b/-k log reads) and `gh run watch`. Deliberately NOT here: systemctl start/stop/restart, gh workflow run, gh release download, docker pull, nix build, and any interpreter or `env`/`bash`/`python3` form, since a wildcard on those is arbitrary code execution. 2026-08-23: added `mcp__cloud-infra` - a SERVER-WIDE grant on the c3-infra-mcp server (Claude Code MCP rules take `mcp__<server>` for all tools or `mcp__<server>__<tool>` for one; `mcp__<server>__*` is NOT a supported form). This is deliberately broader than the Bash policy above and does cover mutating verbs (devops_service_start, devops_container_restart, devops_docker_compose_up, devops_build_ship, devops_vm_stop, devops_secrets_set). Rationale: every fleet repair routed through this server was being denied one tool at a time, and the server is our own authenticated infra API behind Authelia bearer + the wg mesh gate - not arbitrary code execution. Narrow it back to per-tool entries if that trust boundary ever changes. Commands Claude Code already auto-allows (cat/ls/head/tail/grep/rg/jq/find/sed/ps/git read-only/gh view+list/docker ps) are intentionally omitted - they never prompt and an entry would be dead weight. 2026-09-09: ONE entry, mcp__cloud-infra-mcp. It was listed twice - as mcp__cloud-infra AND mcp__c3-infra-mcp - because the same server was keyed differently in each client list, and the second name was added to cover whichever list the session happened to load. Neither name granted anything: the generated list (and every .mcp.json derived from it) keys this server cloud-infra-mcp, c3-infra-mcp is only the URL path, and cloud-infra was the container's own invention. Every client list is now generated from cloud-infra/1_cloud-configs/dist/mcp.json by gen-mcp-tpl.sh, so there is exactly one key per server and a second spelling would be a bug rather than insurance. Note mcp__<server>__* is NOT a supported wildcard form; the bare mcp__<server> entry IS the server-wide grant.",
     "allow": [
       "Bash(gh run watch *)",
       "Bash(systemctl --user is-active *)",
@@ -37,8 +37,7 @@
       "mcp__google-workspace__search_drive_files",
       "mcp__cloud-cgc-pub-mcp__cgc_octocode_search",
       "mcp__cloud-cgc-pvt-mcp__cgc_octocode_search",
-      "mcp__cloud-infra",
-      "mcp__c3-infra-mcp"
+      "mcp__cloud-infra-mcp"
     ]
   },
   "_extraKnownMarketplaces_comment": "Registers the cloud-marketplace plugin dir. 2026-08-12: this existed ONLY in the runtime ~/.claude/settings.json and was declared nowhere, so every switch wiped it — home.activation.claudeSettings rebuilds the file from source and preserves exactly one runtime key (effortLevel). The value is fully derivable (@HOME@/.claude/cloud-marketplace, deployed by this same module), so it belongs in the declaration rather than depending on Claude Code re-registering it after each rebuild.",
@@ -66,18 +65,15 @@
     "AUTHELIA_OIDC_TOKENS_DIR": "@HOME@/git/cloud-vault/A0_keys/providers/authelia/signed-bearer_jwt/tokens"
   },
   "alwaysThinkingEnabled": true,
-
   "_remoteControlAtStartup_comment": "Arm Remote Control on every session instead of having to remember `claude rc` per chat. Requires feature-flag evaluation, which is why CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC was dropped from settings.termux.json. It also requires api.anthropic.com, so sessions started with CLAUDE_SUPERSET_MODE=remote (ANTHROPIC_BASE_URL at the claude-api-superset proxy) still cannot use it — this only makes it the default wherever it is possible at all.",
   "remoteControlAtStartup": true,
-
   "_MCP_CONNECT_TIMEOUT_MS_comment": "Version-negotiation probe timeout; Claude Code defaults to 5000ms. Reconnection is already automatic (reconnectMcpServer), so this does not enable it — it widens the window a recovering backend gets to answer in. On 2026-08-28 a stopped docker.service on gcp-proxy took every HTTP MCP down and each was reported only as a 5000ms probe timeout, which reads as a client fault rather than a backend outage.",
-
   "_enableAllProjectMcpServers_comment": "Auto-trust a project's own .mcp.json servers instead of prompting per-server. The fleet's .mcp.json files are machine-derived from a_solutions/*/build.json (all our own servers), so blanket-trust is safe here. Mirrored into every repo's committed .claude/settings.json (0_apps/src/claude/settings.json) so fresh clones with no ~/.claude — CI, containers, Claude Code on the web — auto-load them too; this copy covers ~/.claude on home-manager machines.",
   "enableAllProjectMcpServers": true,
-
   "_disabledMcpjsonServers_comment": "Default-OFF the ONE remaining FAT aggregator so the ENABLE_TOOL_SEARCH=auto 10% cap (~20k tok) is spent on the lean, most-used DETACHED servers (cgc-pub/pvt, mail, drive, …) which then stay eager — cgc-pub always resident. cloud-services-mcp (≈139 tools) is the master index re-proxying everything; eager it is ~20k and forces most things to defer. Re-enable it on demand with /mcp (or drop it from this list) when you actually need the aggregated index. disabledMcpjsonServers wins over enableAllProjectMcpServers above. cloud-infra-mcp used to be here too — settings.project.json carries the full account of why it left (it is the only MCP reachable off the mesh, and disabling it defeated the whole off-mesh auth chain); this file must stay in step with that list or every repo-scoped mirror re-disables it.",
-  "disabledMcpjsonServers": ["cloud-services-mcp"],
-
+  "disabledMcpjsonServers": [
+    "cloud-services-mcp"
+  ],
   "_skillOverrides_comment": [
     "Suppresses the recurring 'Teach auto mode about your environment?' prompt.",
     "2026-08-22: it had fired 12 times (projectOnboardingSeenCount=12 for /home/diego)",

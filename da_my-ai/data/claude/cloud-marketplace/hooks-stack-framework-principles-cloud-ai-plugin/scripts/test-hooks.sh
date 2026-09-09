@@ -112,11 +112,12 @@ echo "## every mcp__ reference names a server in the generated MCP list ##"
 # bare server PREFIX (mcp__cloud-cgc, which spans both cgc servers on purpose), so
 # a reference passes when its server part is a prefix of at least one known name.
 #
-# A failure naming a server that IS live but is keyed differently in the container
-# list (cloud-u-containers/.../claude-config/mcp.tpl.json calls the same servers
-# cloud-infra, cloud-services, mattermost) is a TRUE positive: that second list is
-# hand-written and its keys have drifted from the generated ones. Fix the drift,
-# do not widen this check to hide it.
+# A failure naming a server that IS live but is keyed differently in some other
+# client list is a TRUE positive, not a gap in this check. It used to happen with
+# the container list, which was hand-written and keyed the same servers
+# cloud-infra / cloud-services / mattermost; that list is now generated too (see
+# the assertion below), so every list keys a server exactly one way. Fix a drift,
+# never widen this check to hide it.
 SOT_DIR="$(cd "$HERE/../../.." 2>/dev/null && pwd)"
 known=""
 for tpl in "$SOT_DIR/mcp.termux.json.tpl" "$SOT_DIR/mcp.desktop.json.tpl"; do
@@ -134,6 +135,57 @@ if [ -n "$known" ]; then
     else bad "mcp__ reference(s) name no server in the generated list:$unknown (known: $(printf '%s' "$known" | tr '\n' ' '))"; fi
 else
     echo "  (mcp.*.json.tpl not beside this marketplace — skipping)"
+fi
+
+echo "## every client MCP list carries the same servers, modulo declared overrides ##"
+# The complement of the assertion above. That one asks whether an mcp__ name in
+# this marketplace matches SOME live server; this one asks whether every client
+# gets the same servers in the first place. The container list failed only the
+# second question and it was the expensive failure: it named seven servers where
+# the canonical set has eleven, so every headless agent was ordered by these very
+# hooks to consult the PRIVATE code graph over a server its client had never been
+# offered. Nothing errored — an unoffered server is indistinguishable from a tool
+# the model simply did not reach for — so agents grepped and guessed for weeks.
+#
+# Compared on the axis that goes stale: which servers exist, where they point,
+# and how they are reached. Headers are excluded because they are the ONE thing a
+# platform is allowed to differ on, and only by declaring auth_header in
+# mcp-policy.json — a difference nobody declared would show up as a different url
+# or a missing key, which this does catch. A platform whose list lives outside
+# this repository is skipped when that checkout is absent (cloud-infra's
+# lint-pipeline clones only cloud-u-linux); its own repo asserts the same
+# equality from the other side.
+POLICY="$SOT_DIR/mcp-policy.json"
+AXIS='.mcpServers | with_entries(.value |= {type: (.type // "http"), url: .url})'
+if [ -f "$POLICY" ] && [ -f "$SOT_DIR/mcp.desktop.json.tpl" ]; then
+    want="$(jq -S "$AXIS" "$SOT_DIR/mcp.desktop.json.tpl")"
+    for plat in $(jq -r '.platforms | keys[]' "$POLICY"); do
+        out="$(jq -r --arg p "$plat" '.platforms[$p].output // ""' "$POLICY")"
+        if [ -n "$out" ]; then
+            list="${GIT_BASE:-$HOME/git}/$out"
+        else
+            list="$SOT_DIR/mcp.$plat.json.tpl"
+        fi
+        if [ ! -f "$list" ]; then
+            echo "  ($plat list not present at $list — skipping)"
+            continue
+        fi
+        got="$(jq -S "$AXIS" "$list" 2>/dev/null || echo '"UNREADABLE"')"
+        if [ "$got" = "$want" ]; then ok
+        else
+            bad "$plat MCP list disagrees with the canonical one ($list)"
+            diff <(printf '%s\n' "$want") <(printf '%s\n' "$got") | sed 's/^/       /' || true
+        fi
+        # An undeclared auth header is the other half of the same drift: it renders
+        # as a literal ${...} the platform's renderer does not recognise, so the
+        # server loads and 403s rather than being absent, which reads as an outage.
+        hdr="$(jq -S '[.mcpServers[]?.headers // empty] | unique' "$list" 2>/dev/null || echo '"UNREADABLE"')"
+        declared="$(jq -S --arg p "$plat" '[.platforms[$p].auth_header // .auth_header]' "$POLICY")"
+        if [ "$hdr" = "[]" ] || [ "$hdr" = "$declared" ]; then ok
+        else bad "$plat auth header is not the one mcp-policy.json declares for it"; fi
+    done
+else
+    echo "  (mcp-policy.json not beside this marketplace — skipping)"
 fi
 
 echo

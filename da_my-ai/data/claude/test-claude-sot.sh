@@ -206,19 +206,25 @@ for retired in mcp-dtk mcp-unix-api dtk-mcp; do
 done
 
 # ── the container's fork is declared, and its provenance is not a dead path ──
-# a_solutions/user-ai_claude-superset-api ships its own claude-config: it has
-# no working checkout to read the SoT from and no home-manager to deploy it, so
-# it COPIES. That fork is legitimate and it is also how config rots — its five
-# hook scripts each carried a "# Source:" header naming
-# .../src/modules/dotfiles/claude/, a directory that no longer exists anywhere,
-# because those hooks were superseded by the cloud-marketplace plugins in this
-# SoT and nobody told the copy.
+# my-ai_claude-api ships its own claude-config: it has no working checkout to
+# read the SoT from and no home-manager to deploy it, so it COPIES. That fork is
+# legitimate and it is also how config rots — its five hook scripts each carried
+# a "# Source:" header naming .../src/modules/dotfiles/claude/, a directory that
+# no longer exists anywhere, because those hooks were superseded by the
+# cloud-marketplace plugins in this SoT and nobody told the copy.
 #
 # Two things are checked. The inventory, so a hook appearing or vanishing in
 # the fork is a visible diff rather than a surprise. And the provenance, so no
 # file may cite a Source: path that is not there — the specific way this one
 # went quiet.
-FORK="$REPO/../cloud-infra/a_solutions/user-ai_claude-superset-api/src/code/claude-config"
+#
+# The path itself is the third instance of the same rot. It named
+# cloud-infra/a_solutions/user-ai_claude-superset-api, where this service used to
+# live before it moved to cloud-u-containers and was renamed; the directory then
+# stopped existing, the check took the "skip" branch on every run, and the fork it
+# guards drifted to a hand-written seven-server MCP list under invented keys with
+# nothing complaining. A skip that can never become a check is not a check.
+FORK="$REPO/../cloud-u-containers/user-ai_my-ai_claude-api/src/code/claude-config"
 if [ -d "$FORK" ]; then
   check "the container fork holds the declared hook inventory" \
     "$(ls "$FORK/hooks" 2>/dev/null | tr '\n' ' ')" \
@@ -238,6 +244,14 @@ if [ -d "$FORK" ]; then
   check "no file in the container fork cites a Source: path that is gone" \
     "$(printf '%s' "$dead" | grep -c . || true)" 0
   [ -n "$dead" ] && echo "     dead provenance: $dead"
+
+  # The fork's MCP list is the one file in it that is NOT a copy: it is
+  # generated straight into the fork by gen-mcp-tpl.sh (the `output` platform in
+  # mcp-policy.json), so it cannot be a fork at all. Assert the generator's own
+  # --check rather than restating the expected servers here — restating them is
+  # the failure this whole file is about.
+  check "the container's MCP list is generated, not hand-written" \
+    "$("$SOT/gen-mcp-tpl.sh" --check >/dev/null 2>&1 && echo ok || echo drifted)" ok
 else
   echo "skip — container fork not found at $FORK"
 fi

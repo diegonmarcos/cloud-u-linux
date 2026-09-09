@@ -49,6 +49,46 @@ delivery paths a file takes:
    platform-specific: `mcp.json.tpl` (termux bans stdio MCP servers, desktop keeps
    three), `secrets.yaml` (different sops recipients), desktop's `mcp-local-launch.sh`.
 
+## The MCP client lists
+
+`mcp-policy.json` + `gen-mcp-tpl.sh` generate **every** client list from
+cloud-infra's derived server set (`1_cloud-configs/dist/mcp.json`). Three
+platforms, one set of servers:
+
+| Platform   | Written to                                                            |
+|------------|-----------------------------------------------------------------------|
+| `termux`   | `mcp.termux.json.tpl` (here)                                           |
+| `desktop`  | `mcp.desktop.json.tpl` (here)                                          |
+| `container`| `cloud-u-containers/user-ai_my-ai_claude-api/src/code/claude-config/mcp.tpl.json` |
+
+The container's list writes **out of this repository** because the image is
+built from a cloud-u-containers build context that cannot read this checkout —
+its copy has to be committed there. That is the `output` field on the platform,
+resolved against `${GIT_BASE:-$HOME/git}`, and it is skipped rather than failed
+when that checkout is absent (cloud-infra's lint-pipeline clones only
+cloud-u-linux). cloud-u-containers' own `src/test-mcp-contract.sh` asserts the
+same equality from the other side, so one of the two always runs.
+
+A platform may differ from the others **only** through a field it declares in
+`mcp-policy.json`. Today exactly one platform declares one: the container
+overrides `auth_header` because `render-mcp.mjs` substitutes the placeholder by
+literal string match at container boot, while nix substitutes the hyphenated
+spelling at switch time — neither renderer recognises the other's, so a shared
+spelling would ship an unexpanded `${...}` as the bearer token.
+
+This was hand-maintained until 2026-09-09 and it cost the most on the container,
+which listed seven servers under keys of its own invention (`cloud-infra`,
+`cloud-services`, `mattermost`). `cloud-cgc-pvt-mcp` — the private code graph the
+hooks order every agent to consult before reasoning about architecture — was not
+in that list at all. The tool could not be called because the server was never
+offered, which is invisible: an unoffered server looks exactly like a tool the
+model did not reach for. Fixing the tool NAMES (#172) could not have fixed it.
+
+Grants follow the same rule. `render-mcp.mjs` derives the container's
+`mcp__<server>` permission entries from the same list at boot instead of
+restating them in `settings.json`, because a grant list that can disagree with
+the server list will.
+
 ## Retired MCP servers
 
 `da_dtk/products/mcp-dtk` and `products/mcp-unix-api` are not used any more.

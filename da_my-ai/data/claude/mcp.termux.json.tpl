@@ -1,4 +1,5 @@
 {
+  "_warning": "GENERATED — DO NOT EDIT. Derived from cloud-infra/1_cloud-configs/dist/mcp.json + mcp-policy.json by cloud-u-linux da_my-ai/data/claude/gen-mcp-tpl.sh. Hand-editing this file is the bug it exists to prevent: edit the service declaration or mcp-policy.json and regenerate.",
   "_doc": "HTTP-ONLY by decree (2026-08-08): each stdio/tsx spawn transpiles TypeScript through proot-taxed IO and cost 30s+ of claude startup.",
   "mcpServers": {
     "cloud-cgc-pub-mcp": {

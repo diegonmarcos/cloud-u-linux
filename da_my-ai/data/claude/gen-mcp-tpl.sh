@@ -9,20 +9,31 @@
 #        |
 #        v
 #   mcp.termux.json.tpl    HTTP only
-#   mcp.desktop.json.tpl   HTTP + stdio extras
+#   mcp.desktop.json.tpl   HTTP only
+#   ../../../../cloud-u-containers/.../claude-config/mcp.tpl.json   the agent runner
 #
-# Both tpls were hand-maintained until now, which is why cloud-cgc-pvt-mcp sat
-# routed-but-unreachable for six weeks: cloud-infra declared it on 2026-08-23 and
-# only the desktop list was ever updated by hand. Deriving both closes that gap —
-# a new HTTP service now reaches every platform without anyone remembering to.
+# All three were hand-maintained at some point, which is why cloud-cgc-pvt-mcp sat
+# routed-but-unreachable: cloud-infra declared it and only one list was ever updated
+# by hand. The container list was the last one still hand-written and it cost the
+# most — it named SEVEN servers under keys of its own invention, so every headless
+# agent on the fleet was told to consult the code graph over a private server its
+# client had never been offered. Deriving all three closes that gap: a new HTTP
+# service now reaches every platform without anyone remembering to.
+#
+# A platform's list may differ from the others ONLY through a field it declares in
+# mcp-policy.json. Everything else is the same derived set for everyone.
 #
 # Usage: ./gen-mcp-tpl.sh [--check]
-#   --check  exit 1 if the committed tpls differ from what this would generate
+#   --check  exit 1 if a committed list differs from what this would generate
 set -euo pipefail
 
 SOT="$(cd "$(dirname "$0")" && pwd)"
 DIST="${CLOUD_INFRA_DIR:-$HOME/git/cloud-infra}/1_cloud-configs/dist/mcp.json"
 POLICY="$SOT/mcp-policy.json"
+# Where a platform's `output` path is anchored. Same variable settings.base.json
+# exports, so a machine with a non-default checkout layout relocates every
+# out-of-repo target at once.
+GIT_BASE="${GIT_BASE:-$HOME/git}"
 
 [ -f "$DIST" ]   || { echo "missing derived HTTP set: $DIST" >&2; exit 1; }
 [ -f "$POLICY" ] || { echo "missing policy: $POLICY" >&2; exit 1; }
@@ -30,68 +41,96 @@ POLICY="$SOT/mcp-policy.json"
 CHECK=0
 [ "${1:-}" = "--check" ] && CHECK=1
 
-python3 - "$DIST" "$POLICY" "$SOT" "$CHECK" <<'PY'
+python3 - "$DIST" "$POLICY" "$SOT" "$CHECK" "$GIT_BASE" <<'PY'
 import json, sys, collections, os
 
-dist_p, pol_p, sot, check = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1"
+dist_p, pol_p, sot, check, git_base = (
+    sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1", sys.argv[5])
 dist = json.load(open(dist_p))["mcpServers"]
 pol = json.load(open(pol_p))
 
-auth = pol["auth_header"]
+WARNING = ("GENERATED — DO NOT EDIT. Derived from cloud-infra/1_cloud-configs/dist/mcp.json "
+           "+ mcp-policy.json by cloud-u-linux da_my-ai/data/claude/gen-mcp-tpl.sh. "
+           "Hand-editing this file is the bug it exists to prevent: edit the service "
+           "declaration or mcp-policy.json and regenerate.")
 
-# HTTP set: the derived url, plus concrete auth headers on everything served by
-# the public MCP proxy — that whole vhost is behind the Authelia bearer gate.
+# The HTTP set for one platform: the derived url, plus concrete auth headers on
+# everything served by the public MCP proxy — that whole vhost is behind the
+# Authelia bearer gate.
 #
 # Deliberately NOT keyed on the deriver's headersHelper field: only one entry
 # carries it, while eight of nine endpoints genuinely need the header, so using
 # it as the gate silently strips auth from seven working servers.
 auth_host = pol["auth_host"]
-http = collections.OrderedDict()
-for name in sorted(dist):
-    src = dist[name]
-    entry = collections.OrderedDict([("type", src.get("type", "http")), ("url", src["url"])])
-    if auth_host in src["url"]:
-        entry["headers"] = auth
-    http[name] = entry
 
-# Endpoints the proxy-based deriver cannot express (reached by direct mesh IP).
-for name, entry in pol.get("direct_http", {}).items():
-    http[name] = entry
 
-http = collections.OrderedDict(sorted(http.items()))
+def http_set(auth):
+    servers = collections.OrderedDict()
+    for name in sorted(dist):
+        src = dist[name]
+        entry = collections.OrderedDict([("type", src.get("type", "http")), ("url", src["url"])])
+        if auth_host in src["url"]:
+            entry["headers"] = auth
+        servers[name] = entry
+    # Endpoints the proxy-based deriver cannot express (reached by direct mesh IP).
+    for name, entry in pol.get("direct_http", {}).items():
+        servers[name] = entry
+    return collections.OrderedDict(sorted(servers.items()))
+
+
 stdio = pol.get("stdio_extras", {})
+written, skipped, count = [], [], 0
 
-written = []
 for plat, rules in pol["platforms"].items():
-    servers = collections.OrderedDict(http)
+    # A platform writes beside this script unless it declares somewhere else.
+    # `output` is for a consumer that cannot read this checkout at all — the
+    # container image is built from a context in another repository — so its
+    # copy has to be committed there rather than fetched from here.
+    out_path = rules.get("output")
+    if out_path:
+        target = os.path.join(git_base, out_path)
+        if not os.path.isdir(os.path.dirname(target)):
+            skipped.append(f"{plat} ({os.path.dirname(out_path)} not checked out)")
+            continue
+    else:
+        target = os.path.join(sot, f"mcp.{plat}.json.tpl")
+
+    servers = http_set(rules.get("auth_header", pol["auth_header"]))
     if rules.get("stdio"):
         servers.update(stdio)
-    out = collections.OrderedDict()
+    count = len(servers)
+
+    out = collections.OrderedDict([("_warning", WARNING)])
     if rules.get("_doc"):
         out["_doc"] = rules["_doc"]
     out["mcpServers"] = collections.OrderedDict(sorted(servers.items()))
+    label = os.path.relpath(target, sot)
 
-    target = os.path.join(sot, f"mcp.{plat}.json.tpl")
     new = json.dumps(out, indent=2, ensure_ascii=False) + "\n"
     old = open(target).read() if os.path.exists(target) else None
 
     if check:
         if old != new:
-            print(f"::error::{os.path.basename(target)} is stale — run gen-mcp-tpl.sh")
-            o = set(json.loads(old)["mcpServers"]) if old else set()
+            print(f"::error::{label} is stale — run gen-mcp-tpl.sh")
+            o = set(json.loads(old).get("mcpServers", {})) if old else set()
             n = set(out["mcpServers"])
             if n - o:
                 print("    missing:", ", ".join(sorted(n - o)))
             if o - n:
                 print("    extra:  ", ", ".join(sorted(o - n)))
+            if o == n and old is not None:
+                print("    same servers, different content (url, headers or shape)")
             sys.exit(1)
-    else:
-        if old != new:
-            open(target, "w").write(new)
-            written.append(f"{os.path.basename(target)} ({len(out['mcpServers'])} servers)")
+    elif old != new:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        open(target, "w").write(new)
+        written.append(f"{label} ({count} servers)")
+
+for s in skipped:
+    print(f"skipped: {s}")
 
 if check:
-    print(f"OK: both tpls match the derived HTTP set ({len(http)} http servers)")
+    print(f"OK: every generated list matches the derived HTTP set ({count} http servers)")
 else:
     print("regenerated:", ", ".join(written) if written else "nothing changed")
 PY
