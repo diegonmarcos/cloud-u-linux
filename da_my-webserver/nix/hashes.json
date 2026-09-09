@@ -1,7 +1,7 @@
 {
-  "_comment": "Written by ship-my-webserver-app.yml. The per-arch Node SEA binaries — what ba_flakes_desktop and bb_flakes_termux install through da_my-webserver's flake, with no compiler and no second copy of this fetch.",
-  "tag": "my-webserver-latest",
-  "version": "latest",
+  "_comment": "Written by ship-my-webserver-app.yml. The per-arch Node SEA binaries — what ba_flakes_desktop and bb_flakes_termux install through da_my-webserver's flake, with no compiler and no second copy of this fetch. The tag is immutable: consumers bump it by bumping their flake.lock, and an older lock stays buildable forever.",
+  "tag": "my-webserver-721ed987",
+  "version": "721ed987",
   "x86_64-linux": {
     "my-webserver": {
       "asset": "my-webserver-x86_64",
