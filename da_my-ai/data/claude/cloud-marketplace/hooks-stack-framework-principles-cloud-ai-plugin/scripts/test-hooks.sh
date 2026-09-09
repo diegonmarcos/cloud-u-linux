@@ -71,7 +71,7 @@ for i in 1 2 3 4; do
 done
 [ -n "$(nfire Read | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null)" ] && ok || bad "nudge did not fire on 5th read"
 nfire Read >/dev/null; nfire Read >/dev/null
-nfire mcp__cloud-cgc-mcp__cgc_octocode_search >/dev/null
+nfire mcp__cloud-cgc-pub-mcp__cgc_octocode_search >/dev/null
 [ -z "$(nfire Read | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null)" ] && ok || bad "nudge not reset by cloud-cgc call"
 rm -f "$ST"
 

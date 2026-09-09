@@ -7,7 +7,7 @@
 
   "_doc_client_id": "Inherited from settings.base.json, which is claude-admin — full admin, valid into 2036. Minting already improves on exporting that token directly (what sits at rest is a secret scoped to a client, and the bearer it produces is short-lived), but the client itself is still the wrong size for a container. Narrow it to a per-purpose Authelia client and set AUTHELIA_OIDC_CLIENT_ID here to override the base.",
 
-  "_doc_the_other_six": "Only c3-infra-mcp is reachable this way. c3-services-mcp, cloud-cgc-mcp, g-personal, g-workspace, mail-mcp and mattermost-mcp sit behind the WireGuard gate (@wg), not the bearer gate, so they fail from a container with CLIENT_HTTP_UNEXPECTED_CONTENT no matter what token is presented. That is mesh connectivity, not auth, and no setting here fixes it.",
+  "_doc_the_other_six": "Only c3-infra-mcp is reachable this way. c3-services-mcp, cloud-cgc-pub-mcp, g-personal, g-workspace, mail-mcp and mattermost-mcp sit behind the WireGuard gate (@wg), not the bearer gate, so they fail from a container with CLIENT_HTTP_UNEXPECTED_CONTENT no matter what token is presented. That is mesh connectivity, not auth, and no setting here fixes it.",
 
   "env": {
     "AUTHELIA_OIDC_TOKENS_DIR": "",

@@ -4,7 +4,7 @@
 - Fix the engine, never hack/bypass a problem.
 - Secrets via sops only — never plaintext, never `git add -f`.
 - ASK, don't assume — confirm before destructive/ambiguous actions.
-- Use cloud-cgc-mcp before reasoning about architecture — don't read-N-files-and-guess.
+- Use cloud-cgc-* before reasoning about architecture — don't read-N-files-and-guess.
 - Work on `main` only — no branches/PRs, direct commit + push.
 - Dead shell? CWD deleted → `Write` a dummy file there, then use absolute paths.
 - Forbidden: `nix-env -i`, imperative npm/pip/apt/docker installs outside the flake, `sops -d -i`, `git add -f`.

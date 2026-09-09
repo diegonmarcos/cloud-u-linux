@@ -9,4 +9,4 @@
 7A. SECRETS = SOPS. src/secrets.yaml encrypted; dist/.secrets gitignored. Never inline credentials.
 7B. NEVER git add .env/.key/.pem/.age/*secret*/dist/.secrets. secrets.yaml needs sops marker. Vault is the only carve-out.
 8. ASK, DON'T ASSUME — clarify unclear intent/architecture/requirements before any tool call. No silent guesses.
-9. NEVER GUESS ARCHITECTURE — cloud-cgc-mcp is ONLINE; use octocode_search / octocode_graphrag + knowledge_* / c3_* to read the real code, runners, and topology BEFORE acting. Don't read-5-files-and-guess-the-6th.
+9. NEVER GUESS ARCHITECTURE — cloud-cgc-* is ONLINE; use octocode_search / octocode_graphrag + knowledge_* / c3_* to read the real code, runners, and topology BEFORE acting. Don't read-5-files-and-guess-the-6th.

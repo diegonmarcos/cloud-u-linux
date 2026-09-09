@@ -109,7 +109,7 @@ Irreversible rules (audit-first when relaxing anything):
 
 | id | category | reversibility | event | pattern / handler | reason | alt |
 |---|---|---|---|---|---|---|
-| `graph-nudge` | arch-guessing | advisory | PostToolUse | `handler:graph_nudge` | consecutive file reads/searches with no cloud-cgc-mcp query — use octocode_graphrag/search before reasoning about architecture | octocode_graphrag / octocode_search / knowledge_* / c3_* |
+| `graph-nudge` | arch-guessing | advisory | PostToolUse | `handler:graph_nudge` | consecutive file reads/searches with no cloud-cgc-* query — use octocode_graphrag/search before reasoning about architecture | octocode_graphrag / octocode_search / knowledge_* / c3_* |
 
 ## INJECT — context prose by tier
 

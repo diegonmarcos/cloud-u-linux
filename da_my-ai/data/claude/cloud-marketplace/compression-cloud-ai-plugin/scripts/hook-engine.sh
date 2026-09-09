@@ -55,7 +55,7 @@ if [ "$MODE" = "inject" ]; then
     fi
 
     emit_fallback() {
-        printf '## CORE PRINCIPLES (fallback)\n\n1. FULLY DECLARATIVE. 2. DATA-DRIVEN. 5. FIX THE ENGINE, NO HACKS. 7. USE SOPS. 8. ASK, DONT ASSUME. 9. USE cloud-cgc-mcp — never guess architecture.\n'
+        printf '## CORE PRINCIPLES (fallback)\n\n1. FULLY DECLARATIVE. 2. DATA-DRIVEN. 5. FIX THE ENGINE, NO HACKS. 7. USE SOPS. 8. ASK, DONT ASSUME. 9. USE cloud-cgc-* — never guess architecture.\n'
     }
 
     if ! rules_ok; then
@@ -201,6 +201,13 @@ if [ "$MODE" = "nudge" ]; then
     [ -n "$TOOL" ] || exit 0
 
     THRESHOLD="$(jq -r '.meta.nudge_threshold // 5' "$RULES" 2>/dev/null)"
+    # A PREFIX ON PURPOSE. This reacts to a code-graph tool that WAS called,
+    # and the code graph is served by TWO servers: cloud-cgc-pub-mcp, reachable
+    # from every platform, and cloud-cgc-pvt-mcp, reachable by direct mesh IP.
+    # A full tool name would reset the counter for only one of them, and would
+    # go dead at the next rename — exactly how the pre-split name cloud-cgc-mcp
+    # died. Both live names share this prefix and no other server does, so the
+    # prefix is both more correct and more durable than any full name here.
     RESET_PREFIX="$(jq -r '.meta.nudge_reset_prefix // "mcp__cloud-cgc"' "$RULES" 2>/dev/null)"
     STATE="${TMPDIR:-/tmp}/claude-graph-nudge-${SID}"
 
@@ -219,7 +226,7 @@ if [ "$MODE" = "nudge" ]; then
 
     if [ "$count" -ge "$THRESHOLD" ]; then
         printf '0' > "$STATE" 2>/dev/null || true
-        jq -nc --arg ctx "REMINDER (FIRE rule 6): ${THRESHOLD} file reads/searches with no cloud-cgc-mcp query. Before reasoning about architecture, use octocode_graphrag / octocode_search / knowledge_* / c3_* — don't read-5-files-and-guess-the-6th." \
+        jq -nc --arg ctx "REMINDER (FIRE rule 6): ${THRESHOLD} file reads/searches with no cloud-cgc-* query. Before reasoning about architecture, use octocode_graphrag / octocode_search / knowledge_* / c3_* — don't read-5-files-and-guess-the-6th." \
           '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$ctx}}' 2>/dev/null || true
     else
         printf '%s' "$count" > "$STATE" 2>/dev/null || true

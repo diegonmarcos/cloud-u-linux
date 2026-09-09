@@ -11,7 +11,7 @@
 #
 #   Additionally, several cloud/ services share one physical `shared/` lib tree
 #   via a symlink into another service (e.g.
-#   user-ai_cloud-cgc-mcp/src/code/shared ->
+#   user-ai_cloud-cgc-pub-mcp/src/code/shared ->
 #   infra-api_c3-infra-api/src/code/shared). Node resolves modules from the
 #   *realpath* of the imported file, so the dir that physically owns `shared/`
 #   ALSO needs a `node_modules` symlink, not just the server's own dir.
@@ -79,12 +79,12 @@ while [ "$_p" != "/" ]; do
   fi
 done
 
-# cloud-cgc-mcp only: keep the LOCAL octocode DB tracking the GHCR upstream
+# cloud-cgc servers only: keep the LOCAL octocode DB tracking the GHCR upstream
 # (single source of truth, identical to oci-apps). Guarded to ≤ once/24h,
 # non-fatal, and a no-op until the producer (ship-cgc-db) has seeded GHCR.
 # Blocks briefly so the DB is consistent before the server opens it.
 case "$ENTRY" in
-  */user-ai_cloud-cgc-mcp/*)
+  */user-ai_cloud-cgc-*mcp/*)
     _pull="$HOME/git/cloud-infra/1_cicd/src/scripts/cloud-cgc-db-pull.sh"
     _stamp="$HOME/.cache/cgc-db-pull.stamp"
     if [ -f "$_pull" ] && command -v docker >/dev/null 2>&1; then
