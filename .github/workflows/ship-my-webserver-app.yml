@@ -33,8 +33,9 @@ name: ship-my-webserver-app
 # fine). postject only rewrites bytes in the target file — it never executes
 # it — so running it under x64 node against an aarch64 `node` binary as pure
 # file data sidesteps the bug entirely (confirmed 2026-08-10). Publishes
-# arch-suffixed binaries to a rolling GitHub Release
-# (my-webserver-latest).
+# arch-suffixed binaries to an IMMUTABLE, per-commit GitHub Release
+# (my-webserver-<short sha>) — see the publish step for why the tag can never
+# be a rolling one again.
 #
 # 2026-08-27: the SRI hashes that pin these assets live in cloud-infra-desktop
 # (ba_flakes_desktop + bb_flakes_termux), so the old in-workflow update-hashes
@@ -59,9 +60,11 @@ on:
 permissions:
   contents: write
 
-# Serialize runs: the release tag (my-webserver-latest) is rolling and
-# clobbered on each upload, so overlapping runs would leave the tag holding a
-# mix of two builds' assets.
+# Serialize runs: two runs finishing together would race to commit
+# nix/hashes.json, and the loser's rebase would silently publish a tag whose
+# hashes never reach a consumer. Each run's assets are now on its own tag, so
+# this no longer guards against a mixed-content release — only against a lost
+# pin.
 concurrency:
   group: ship-my-webserver-app
   cancel-in-progress: false
@@ -75,6 +78,12 @@ jobs:
     # below for why aarch64 injection must NOT run on a native aarch64
     # runner.
     runs-on: ubuntu-latest
+    # The pin job must hash the assets on the tag THIS run created. Recomputing
+    # the tag there from the sha would work today and drift the day the naming
+    # changes in one place only, which is the same one-artifact-two-opinions
+    # shape that produced the mismatch this workflow now avoids.
+    outputs:
+      tag: ${{ steps.publish.outputs.tag }}
     defaults:
       run:
         working-directory: da_my-webserver/src
@@ -121,17 +130,46 @@ jobs:
           path: da_my-webserver/src/my-webserver-aarch64
           if-no-files-found: error
 
-      - name: Publish to rolling GitHub Release
+      # THE TAG IS CREATED ONCE AND NEVER REWRITTEN.
+      #
+      # It used to be my-webserver-latest, re-uploaded with --clobber on every
+      # publish. nix/hashes.json pins an SRI hash for that URL, and a pin is a
+      # promise that the bytes never change — so every consumer still holding
+      # the previous hash started failing the moment a new build landed:
+      #
+      #   error: hash mismatch in fixed-output derivation
+      #          '...-my-webserver-aarch64.drv'
+      #
+      # which reads as corruption rather than as "the artifact moved". The
+      # consumer is a phone that installs a prebuilt closure and cannot build,
+      # so the whole home-manager-files closure failed with it and NOTHING
+      # reached the device. Bumping the hash would have bought quiet until the
+      # next publish; only an immutable tag ends it.
+      #
+      # The prefix is declared in build.json — this workflow does not name the
+      # release itself. The short sha is what makes each tag unique, and it is
+      # the same sha the pin commit below records, so a hashes.json always
+      # points at the assets built from the commit next to it.
+      - name: Publish to an immutable, per-commit GitHub Release
+        id: publish
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create my-webserver-latest \
-            --title "my-webserver (rolling)" \
-            --notes "Latest multi-arch build — main@${GITHUB_SHA:0:8}. Fetched by ba_flakes_desktop's and bb_flakes_termux's my-webserver nix modules." \
-            --target "$GITHUB_SHA" 2>/dev/null || true
-          gh release upload my-webserver-latest \
-            my-webserver-x86_64 my-webserver-aarch64 --clobber
+          set -euo pipefail
+          prefix="$(jq -r '.build.release_tag_prefix' ../build.json)"
+          [ -n "$prefix" ] && [ "$prefix" != "null" ] || {
+            echo "::error::build.json has no build.release_tag_prefix"; exit 1; }
+          tag="${prefix}-${GITHUB_SHA:0:8}"
+          # --target pins the tag to this exact commit. No --clobber anywhere:
+          # if this tag somehow already exists the upload must fail loudly
+          # rather than quietly rewrite content a consumer has pinned.
+          gh release create "$tag" \
+            --title "my-webserver ${GITHUB_SHA:0:8}" \
+            --notes "Multi-arch build of main@${GITHUB_SHA:0:8}. Installed by ba_flakes_desktop and bb_flakes_termux through da_my-webserver's flake." \
+            --target "$GITHUB_SHA"
+          gh release upload "$tag" my-webserver-x86_64 my-webserver-aarch64
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   # ── the pin ──────────────────────────────────────────────────────────────
   # WITHOUT THIS THE NIX PATH BREAKS ON THE NEXT RELEASE, LOUDLY.
@@ -147,6 +185,11 @@ jobs:
   # my-ai has had this job for months (ship-my-ai-app.yml, update-hashes). Same
   # shape, one difference: no nix on the runner, because an SRI hash is just
   # base64 of the raw sha256 digest and sha256sum+xxd+base64 are already here.
+  #
+  # It writes the TAG alongside the hashes now. prebuilt.nix builds the fetch
+  # URL from that field, so tag and hash move together in one reviewable commit
+  # and a consumer can never resolve a hash against a different upload than the
+  # one it was computed from.
   pin:
     name: Update nix/hashes.json
     needs: build
@@ -163,21 +206,25 @@ jobs:
       - name: Hash the published assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.build.outputs.tag }}
         run: |
           set -euo pipefail
+          [ -n "$TAG" ] || { echo "::error::build job published no tag"; exit 1; }
           sri() {
-            gh release download my-webserver-latest --repo "$GITHUB_REPOSITORY" \
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
               --pattern "$1" --output "/tmp/$1" --clobber
             h="$(sha256sum "/tmp/$1" | cut -d' ' -f1)"
             printf 'sha256-%s' "$(printf '%s' "$h" | xxd -r -p | base64 -w0)"
           }
           jq -n \
+            --arg tag "$TAG" \
+            --arg version "${GITHUB_SHA:0:8}" \
             --arg x64 "$(sri my-webserver-x86_64)" \
             --arg a64 "$(sri my-webserver-aarch64)" \
             '{
-              _comment: "Written by ship-my-webserver-app.yml. The per-arch Node SEA binaries — what ba_flakes_desktop and bb_flakes_termux install through da_my-webserver'"'"'s flake, with no compiler and no second copy of this fetch.",
-              tag: "my-webserver-latest",
-              version: "latest",
+              _comment: "Written by ship-my-webserver-app.yml. The per-arch Node SEA binaries — what ba_flakes_desktop and bb_flakes_termux install through da_my-webserver'"'"'s flake, with no compiler and no second copy of this fetch. The tag is immutable: consumers bump it by bumping their flake.lock, and an older lock stays buildable forever.",
+              tag: $tag,
+              version: $version,
               "x86_64-linux":  { "my-webserver": { asset: "my-webserver-x86_64",  hash: $x64 } },
               "aarch64-linux": { "my-webserver": { asset: "my-webserver-aarch64", hash: $a64 } }
             }' > da_my-webserver/nix/hashes.json

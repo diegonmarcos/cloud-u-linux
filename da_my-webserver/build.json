@@ -4,7 +4,8 @@
   "build": {
     "remote": true,
     "_remote_note": "The Node Single Executable Application build (node --experimental-sea-config + postject injection, both architectures) is heavy and fragile across environments — built on GHA (ship-my-webserver-app.yml), published to the rolling GitHub Release, and fetched by the desktop and Termux nix modules. Never built locally.",
-    "release_tag": "my-webserver-latest",
+    "release_tag_prefix": "my-webserver",
+    "_release_tag_note": "A PREFIX, not a tag. ship-my-webserver-app.yml appends the publishing commit's short sha, so every publish lands on a tag that is created once and never rewritten. The tag used to be the rolling my-webserver-latest, clobbered on every upload: a fixed-output derivation pins a hash, which is a promise the bytes at that URL never change, and a clobbered tag breaks that promise for every consumer already holding the old hash. See nix/hashes.json's tag field, which is what the fetch actually reads.",
     "repo": "diegonmarcos/cloud-u-linux",
     "subdir": "da_my-webserver"
   },
