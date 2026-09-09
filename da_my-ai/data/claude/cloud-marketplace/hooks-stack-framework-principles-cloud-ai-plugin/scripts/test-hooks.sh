@@ -99,6 +99,43 @@ else
     echo "  (HOOKS.md not generated yet — skipping drift check)"
 fi
 
+echo "## every mcp__ reference names a server in the generated MCP list ##"
+# The one assertion here that keeps catching this class of bug rather than the
+# single instance of it. The server list is DERIVED, not hand-kept: the service
+# declarations feed cloud-infra/1_cloud-configs/src/derive/derive-mcp-json.ts ->
+# dist/mcp.json -> gen-mcp-tpl.sh -> the mcp.*.json.tpl files sitting beside this
+# marketplace. Comparing against that is what would have caught the split of
+# cloud-cgc-mcp into cloud-cgc-pub-mcp/cloud-cgc-pvt-mcp the day it happened; the
+# dead name matched no tool, raised no error, and simply stopped hooking.
+#
+# A reference is legitimately either a full tool name (mcp__<server>__<tool>) or a
+# bare server PREFIX (mcp__cloud-cgc, which spans both cgc servers on purpose), so
+# a reference passes when its server part is a prefix of at least one known name.
+#
+# A failure naming a server that IS live but is keyed differently in the container
+# list (cloud-u-containers/.../claude-config/mcp.tpl.json calls the same servers
+# cloud-infra, cloud-services, mattermost) is a TRUE positive: that second list is
+# hand-written and its keys have drifted from the generated ones. Fix the drift,
+# do not widen this check to hide it.
+SOT_DIR="$(cd "$HERE/../../.." 2>/dev/null && pwd)"
+known=""
+for tpl in "$SOT_DIR/mcp.termux.json.tpl" "$SOT_DIR/mcp.desktop.json.tpl"; do
+    [ -f "$tpl" ] || continue
+    known="$known$(jq -r '.mcpServers|keys[]' "$tpl" 2>/dev/null)
+"
+done
+known="$(printf '%s' "$known" | grep -v '^$' | sort -u)"
+if [ -n "$known" ]; then
+    unknown=""
+    for ref in $(grep -rhoE 'mcp__[A-Za-z0-9_-]+' "$HERE/../.." | sed -e 's/^mcp__//' -e 's/__.*//' | sort -u); do
+        printf '%s\n' "$known" | grep -q -- "^$ref" || unknown="$unknown $ref"
+    done
+    if [ -z "$unknown" ]; then ok
+    else bad "mcp__ reference(s) name no server in the generated list:$unknown (known: $(printf '%s' "$known" | tr '\n' ' '))"; fi
+else
+    echo "  (mcp.*.json.tpl not beside this marketplace — skipping)"
+fi
+
 echo
 echo "RESULT pass=$pass fail=$fail"
 exit "$fail"
