@@ -25,6 +25,31 @@ LOCK_TTL=120                                        # a refresh can't outlive ti
 CACHE="${TMPDIR:-/tmp}/claude-mcp-status.cache"    # "name<TAB>on|off" per line
 LOCK="${TMPDIR:-/tmp}/claude-mcp-status.refresh.lock"
 
+# --- Liveness verdict for one probed HTTP status code ----------------------
+# 502/503/504 are the REVERSE PROXY answering on the backend's behalf to say it
+# could not reach that backend. Every fleet MCP sits behind the shared
+# mcp.diegonmarcos.com proxy, so "some HTTP code came back" only proves the
+# PROXY is alive — it says nothing about the service. Treating any non-000 code
+# as reachable is what let google-workspace-mcp render a green dot on
+# 2026-09-09/10 while its container did not exist on oci-apps at all: the probe
+# returned 502 the whole time and scored "on".
+# A LIVE streamable-HTTP MCP endpoint still rejects a bare GET with 4xx (wrong
+# method/headers for the protocol, not "down"), so 4xx must stay "on" — only
+# the gateway-error family flips to off. Empty/000 = no connection at all.
+http_verdict() {
+  case "$1" in
+    ""|000|502|503|504) printf 'off' ;;
+    *)                  printf 'on'  ;;
+  esac
+}
+
+# Hidden mode: expose the verdict for one code so it is testable without a
+# network round-trip (see test-claude-mcp-status.sh).
+if [ "${1:-}" = "--verdict" ]; then
+  http_verdict "${2:-}"; printf '\n'
+  exit 0
+fi
+
 # --- Hidden mode: the detached refresher (`$0 --refresh`) -------------------
 # `claude mcp list` health-checks every server and takes ~15s. It MUST run
 # detached (setsid, below) — an attached background child is reaped together
@@ -53,11 +78,7 @@ if [ "${1:-}" = "--refresh" ]; then
         # code at all, or "000") means actually unreachable.
         url=$(printf '%s' "$target" | sed -E 's/ \(HTTP\)$//')
         code=$(timeout 5 curl -o /dev/null -s -w '%{http_code}' -L "$url" 2>/dev/null)
-        if [ -n "$code" ] && [ "$code" != "000" ]; then
-          printf '%s\ton\n' "$name"
-        else
-          printf '%s\toff\n' "$name"
-        fi ;;
+        printf '%s\t%s\n' "$name" "$(http_verdict "$code")" ;;
       *)
         # stdio server: last whitespace-separated token is usually the
         # script/entry path; first token is the launcher command. "on" if
