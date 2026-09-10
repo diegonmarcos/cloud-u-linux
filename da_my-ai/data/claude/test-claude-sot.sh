@@ -376,4 +376,37 @@ else
   echo "skip — no deployed ~/.claude.json to compare"
 fi
 
+# ── galaxy's transcript archive trigger is declared, and is termux-only ──────
+# The phone has no scheduler of any kind — no systemd user session under
+# nix-on-droid, no apt layer so no termux-services, no Termux:API so no
+# termux-job-scheduler, and crontab reports "must be suid to work properly".
+# Its archive therefore rides Claude Code's own lifecycle, which means the
+# trigger is a SETTINGS key and lives or dies with this SoT. Two attempts at
+# this already shipped and neither ran: on 2026-09-09 the archive fell 12 MiB
+# behind overnight because the trigger it had (a shell start) never fired
+# again inside a long-running session.
+#
+# Stop is the during-session heartbeat and SessionEnd flushes the tail; both
+# matter, so both are checked. It must NOT be in settings.base.json — surface
+# archives from a systemd.user.timer and does not have the launcher, so the
+# hook there would be a permanent no-op advertising a trigger that is not the
+# real one.
+for ev in Stop SessionEnd; do
+  check "settings.termux.json declares the $ev archive hook" \
+    "$(jq -r --arg e "$ev" '[.hooks[$e][]?.hooks[]?.command] | map(select(test("claude-sync-sessions"))) | length' "$SOT/settings.termux.json")" 1
+done
+
+check "SessionEnd forces a flush rather than waiting for the interval" \
+  "$(jq -r '[.hooks.SessionEnd[]?.hooks[]?.command] | map(select(test("claude-sync-sessions --force"))) | length' "$SOT/settings.termux.json")" 1
+
+# A hook that exits non-zero can block a turn, and one that assumes the
+# launcher is installed would error on every turn of every other device that
+# ever picks this overlay up.
+check "both archive hooks are guarded and cannot fail a turn" \
+  "$(jq -r '[.hooks[][]?.hooks[]?.command] | map(select(test("claude-sync-sessions")))
+            | map(select(test("command -v") and test("\\|\\| true"))) | length' "$SOT/settings.termux.json")" 2
+
+check "the archive trigger is NOT in settings.base.json" \
+  "$(jq -r '[.hooks // {} | .[][]?.hooks[]?.command] | map(select(test("claude-sync-sessions"))) | length' "$SOT/settings.base.json")" 0
+
 exit "$fail"

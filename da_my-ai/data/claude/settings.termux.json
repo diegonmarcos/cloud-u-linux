@@ -7,5 +7,32 @@
     "MCP_TIMEOUT": "10000"
   },
   "_env_comment": "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC removed 2026-09-07: it also disables feature-flag evaluation, and Remote Control (`claude rc`) refuses to start without it. Saving a little background traffic is not worth losing rc on the phone, which is the machine that needs it most.",
-  "effortLevel": "xhigh"
+  "effortLevel": "xhigh",
+  "_hooks_comment": "The transcript archive's trigger, and it is here rather than in settings.base.json because it is a property of THIS device: galaxy has no scheduler at all (no systemd user session under nix-on-droid, no apt layer so no termux-services, no Termux:API so no termux-job-scheduler, and crontab answers 'must be suid to work properly'), while surface archives from a systemd.user.timer. Claude Code is the process that writes the transcripts, so its own lifecycle is the one signal on this device that is true exactly when there is new data. Stop fires per assistant turn and is rate-limited by min_sync_interval_seconds in the archive's bin/session-limits.json, which is what keeps a session that is killed rather than exited cheap; SessionEnd forces a flush of the tail on a clean exit. `command -v` guards both so a device without the launcher is a silent no-op rather than an error every turn, and both end in `|| true` so a broken archive can never block a turn. Body and the full argument: cloud-infra-desktop/bb_flakes_termux/src/claude/assets/scripts/claude-sync-sessions.sh.",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v claude-sync-sessions >/dev/null 2>&1 && claude-sync-sessions >/dev/null 2>&1 || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v claude-sync-sessions >/dev/null 2>&1 && claude-sync-sessions --force >/dev/null 2>&1 || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
 }
