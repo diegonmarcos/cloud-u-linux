@@ -1390,6 +1390,45 @@ server.listen(PORT, '127.0.0.1', () => {
   startupBanner();
 });
 
+// A failed listen used to be an UNHANDLED 'error' event: EventEmitter rethrows
+// it, so the whole diagnosis was a raw Node stack trace ending in
+// "Error: listen EADDRINUSE: address already in use 127.0.0.1:8000" and exit 1.
+// Readable enough in a terminal where you can just try another port; much less
+// so anywhere the process is started FOR you and its stderr is a log pane —
+// which is every non-terminal launcher, and the reason #288 went looking.
+//
+// The listener also has to exist for a second reason: with none attached, the
+// throw happens inside Node's internals AFTER startupBanner has been scheduled,
+// so on a slow start the banner can print first and the server reads as alive
+// right up until the process is gone.
+//
+// Exits non-zero in every branch. A local file server that could not take its
+// port has nothing useful left to do, and a supervisor must be able to tell
+// that from a clean shutdown.
+server.on('error', (err) => {
+  const hint = {
+    EADDRINUSE:
+      `port ${PORT} is already taken on 127.0.0.1 — something else is serving ` +
+      `there. Start this with a different port: my-webserver <port> [root]`,
+    EACCES:
+      `not allowed to bind port ${PORT}. Ports below 1024 need privileges; ` +
+      `pick one above it: my-webserver <port> [root]`,
+    EADDRNOTAVAIL:
+      `127.0.0.1 could not be bound — this machine has no usable loopback ` +
+      `interface, which is unusual and is not something this server can fix`,
+  }[err && err.code];
+
+  console.error('');
+  console.error(`${C.bold}${C.red}━━━ my-webserver did not start ━━━${C.reset}`);
+  console.error(`  ${C.dim}reason    ${C.reset}${(err && err.code) || 'unknown'}: ${err && err.message}`);
+  console.error(`  ${C.dim}wanted    ${C.reset}${C.cyan}http://127.0.0.1:${PORT}/${C.reset}`);
+  console.error(`  ${C.dim}root      ${C.reset}${ROOT}`);
+  if (hint) console.error(`  ${C.dim}what now  ${C.reset}${hint}`);
+  console.error(`${C.bold}${C.red}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C.reset}`);
+  console.error('');
+  process.exit(1);
+});
+
 // Graceful-shutdown summary (Ctrl-C friendly)
 let totalRequests = 0;
 server.on('request', () => { totalRequests++; });

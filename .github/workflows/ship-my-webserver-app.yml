@@ -90,6 +90,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Runs on the SOURCE, before anything is built, because that is what it
+      # asserts: that a server which cannot take its port says so in words
+      # instead of rethrowing an unhandled 'error' event as 14 lines of Node
+      # internals. Costs seconds, needs only the runner's preinstalled node,
+      # and fails before a binary exists to be published.
+      - name: "Test → a refused port must be readable, not a stack trace"
+        working-directory: da_my-webserver
+        run: ./test-listen-error.sh
+
       - name: Fetch official Node.js releases, both arches (statically link zlib/openssl/icu/etc — only glibc at runtime)
         run: |
           curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt"
