@@ -12,5 +12,37 @@
   "runtime": {
     "default_port": 8000,
     "default_root": "$HOME"
+  },
+  "android_abi": {
+    "_doc": "What makes a published binary RUNNABLE ON ANDROID, as data rather than as folklore. The per-arch binaries this project ships are built on the official nodejs.org Linux tarball, which is GLIBC: PT_INTERP=/lib/ld-linux-aarch64.so.1 and DT_NEEDED against libc.so.6/libstdc++.so.6. Android is bionic. It has no /lib, no libc.so.6 and no ld-linux-aarch64.so.1, and /lib lives on the read-only system partition so no APK can supply one. execve() of such a file returns ENOENT NAMING THE BINARY, not the missing interpreter, which is why this reads as a packaging fault and sends people back to re-checking extractNativeLibs. The aarch64 binary runs under Nix-on-Droid only because proot supplies a glibc root filesystem: the terminal is not the launcher there, it is the runtime. test-android-abi.sh reads this block; nothing about the rule is written in the script.",
+    "system_loader_64": "/system/bin/linker64",
+    "system_loader_32": "/system/bin/linker",
+    "allowed_needed": [
+      "libc.so",
+      "libm.so",
+      "libdl.so",
+      "liblog.so",
+      "libz.so",
+      "libandroid.so",
+      "libc++_shared.so",
+      "libcrypto.so",
+      "libssl.so"
+    ],
+    "_doc_allowed_needed": "Resolvable on a stock device (bionic + NDK) or shippable in jniLibs. A DT_NEEDED name is only extractable to nativeLibraryDir if it matches lib*.so, which is PackageManager's own filter, so a versioned soname such as libz.so.1 or libicuuc.so.78 is NOT shippable and must not appear here.",
+    "fixtures": {
+      "_doc": "A guard only ever observed passing proves nothing, so the self-test runs against two REAL published artifacts with known, opposite answers. Only the first 64 KiB of each is fetched: the ELF header and the program headers, which is where PT_INTERP lives, are at the front of the file.",
+      "must_fail": {
+        "repo": "diegonmarcos/cloud-u-linux",
+        "tag": "my-webserver-721ed987",
+        "asset": "my-webserver-aarch64",
+        "reason": "This project's own aarch64 SEA. glibc-linked, so it cannot start on Android. Pinned to an immutable per-commit tag so the fixture cannot drift out from under the test."
+      },
+      "must_pass": {
+        "repo": "diegonmarcos/cloud-u-linux",
+        "tag": "my-watchdog-latest",
+        "asset": "my-watchdog-aarch64",
+        "reason": "my-watchdog's aarch64 build: static, no PT_INTERP, no DT_NEEDED. This is the ONE shape in the fleet already proven to exec from nativeLibraryDir on the phone: ac_c3-watchdog ships and runs it today."
+      }
+    }
   }
 }

@@ -118,6 +118,27 @@ jobs:
             chmod +x "$OUT"
           done
 
+      # What these binaries are NOT: runnable on Android. They are built on the
+      # official nodejs.org Linux tarball, which is glibc — PT_INTERP
+      # /lib/ld-linux-aarch64.so.1, DT_NEEDED libc.so.6 — and Android is
+      # bionic, with no /lib to put an interpreter in. #288 set out to package
+      # the aarch64 binary as jniLibs/arm64-v8a/libmywebserver.so and exec it
+      # from nativeLibraryDir; it cannot start there, and the execve() ENOENT
+      # names the BINARY rather than the missing interpreter, so it reads as a
+      # packaging fault and sends you back to extractNativeLibs, which was
+      # never wrong. It works under Nix-on-Droid only because proot supplies a
+      # glibc root filesystem — the terminal is the runtime, not the launcher.
+      #
+      # This step does NOT gate the Linux artifacts above; they are correct for
+      # what they target. It keeps the guard itself honest by running its
+      # self-test on every build (it is observed both rejecting this project's
+      # own glibc binary and accepting my-watchdog's static one), so that on
+      # the day an Android target IS published here, a pass means something.
+      # A few KiB of HTTP Range reads, no build, no SDK.
+      - name: Android ABI guard — self-test, so a future Android artifact can be judged
+        working-directory: da_my-webserver
+        run: ./test-android-abi.sh
+
       - uses: actions/upload-artifact@v4
         with:
           name: my-webserver-x86_64
