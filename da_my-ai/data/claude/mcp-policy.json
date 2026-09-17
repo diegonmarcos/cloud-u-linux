@@ -35,6 +35,28 @@
       },
       "output": "cloud-u-containers/user-ai_my-ai_claude-api/src/code/claude-config/mcp.tpl.json",
       "_doc": "The my-ai_claude-api agent runner on oci-apps. It gets the SAME derived HTTP set as the two human machines — a headless agent that cannot reach the code graph reasons blind, which is exactly what a shorter list here caused. TWO declared exceptions, and no others:\n  1. auth_header uses AUTHELIA_OIDC_TOKEN_CLAUDE_ADMIN with an UNDERSCORE. The container is      rendered by render-mcp.mjs, which does a literal replaceAll of that exact string at boot;      desktop and termux are rendered by nix, which substitutes the hyphenated spelling. Neither      renderer recognises the other's placeholder, so one shared spelling would silently ship an      unexpanded literal as the bearer token and 403 every gated server.\n  2. output points OUT of this repository. The container image is built from a cloud-u-containers      build context that cannot reach this checkout, so its copy has to be committed there;      generating it directly is what keeps it from becoming a second hand-maintained list again.      The path is relative to ${GIT_BASE:-$HOME/git}. When that checkout is absent — cloud-infra's      lint-pipeline clones only cloud-u-linux — this platform is SKIPPED rather than failed, and      cloud-u-containers' own test-mcp-contract.sh asserts the same equality from its side."
+    },
+    "container-goose": {
+      "http": true,
+      "stdio": false,
+      "filter": ["cloud-cgc-pub-mcp", "cloud-infra-mcp"],
+      "url_mode": "mesh",
+      "format": "goose-yaml",
+      "server_names": {
+        "cloud-cgc-pub-mcp": "Cloud Code Graph Context MCP",
+        "cloud-infra-mcp": "Cloud Infra MCP"
+      },
+      "output": "cloud-u-containers/user-ai_my-ai-api/src/code/configs/goose-config.yaml",
+      "_doc": "The goose runner inside the my-ai-api container on oci-apps. Same rule as the claude       runner: a headless agent that cannot reach the code graph reasons blind. Its two servers are a      DECLARED FILTER over the shared derived set (both names must exist there or --check fails),      reached over the WireGuard mesh because goose-config.yaml carries no bearer token and the       container runs network_mode: host. format=goose-yaml renders a marked REGION inside the      committed config so the surrounding client config (providers, bundled extensions) stays       hand-authored while the server list is generated. This is a SUBSET BY DECLARATION — the      requirement cloud-c3-infra-mcp (the server the fleet keys as cloud-infra-mcp; c3-infra-mcp is      only its public URL path) and cloud-cgc-pub-mcp are present here is enforced by the filter       names themselves."
+    },
+    "container-hermes": {
+      "http": true,
+      "stdio": false,
+      "filter": ["cloud-cgc-pub-mcp", "cloud-infra-mcp"],
+      "url_mode": "mesh",
+      "format": "hermes-yaml",
+      "output": "cloud-u-containers/user-ai_hermes-agent/src/configs/config.yaml",
+      "_doc": "The hermes runner inside the hermes-agent container on oci-apps. Same declared filter,       same mesh transport, same region rendering as container-goose: hermes reads mcp_servers from       this file, and the gateway must keep offering cloud-cgc-pub-mcp + cloud-infra-mcp (the fleet's      canonical key for the c3-infra-mcp server). platform_toolsets must not name either server in an      allowlist or the other silently drops — the cloud-u-containers test-mcp-contract.sh asserts       that too."
     }
   },
   "_doc_auth_header": "The DEFAULT placeholder written into every proxy-hosted entry. A platform may override it, because the placeholder is not read by Claude Code alone — whoever renders the template has to recognise the exact string. Nix substitutes it on desktop and termux; the container has its own renderer with its own convention."

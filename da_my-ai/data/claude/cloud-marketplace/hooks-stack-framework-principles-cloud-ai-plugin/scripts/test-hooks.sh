@@ -160,11 +160,46 @@ AXIS='.mcpServers | with_entries(.value |= {type: (.type // "http"), url: .url})
 if [ -f "$POLICY" ] && [ -f "$SOT_DIR/mcp.desktop.json.tpl" ]; then
     want="$(jq -S "$AXIS" "$SOT_DIR/mcp.desktop.json.tpl")"
     for plat in $(jq -r '.platforms | keys[]' "$POLICY"); do
+        filter="$(jq -r --arg p "$plat" '.platforms[$p].filter // empty' "$POLICY")"
         out="$(jq -r --arg p "$plat" '.platforms[$p].output // ""' "$POLICY")"
         if [ -n "$out" ]; then
             list="${GIT_BASE:-$HOME/git}/$out"
         else
             list="$SOT_DIR/mcp.$plat.json.tpl"
+        fi
+        if [ -n "$filter" ]; then
+            # Declared-filter platform (container-goose, container-hermes): a
+            # SUBSET BY DECLARATION, not a second list — the task rule is "the
+            # subset must be a declared filter over the generated list". The
+            # equality axis here is therefore not full equality but (a) every
+            # filter name is a real canonical server — a typo silently turns the
+            # subset into a partial list — and (b) the generated region has not
+            # drifted, which gen-mcp-tpl.sh --check proves for every platform
+            # at once. This is deliberately NOT "same servers everywhere": those
+            # clients run on the mesh without a bearer token, so the full proxy
+            # set is unreachable for them by construction.
+            for name in $(printf '%s' "$filter" | jq -r '.[]' 2>/dev/null); do
+                if jq -e --arg n "$name" '.mcpServers | has($n)' "$SOT_DIR/mcp.desktop.json.tpl" >/dev/null 2>&1; then
+                    ok "$plat filter names canonical server '$name'"
+                else
+                    bad "$plat filter names '$name', absent from the canonical MCP list"
+                fi
+            done
+            if [ ! -f "$list" ]; then
+                echo "  ($plat list not present at $list — skipping)"
+                continue
+            fi
+            INFRA="${CLOUD_INFRA_DIR:-$SOT_DIR/../../../../cloud-infra}"
+            if [ -f "$INFRA/1_cloud-configs/dist/mcp.json" ]; then
+                if (cd "$SOT_DIR" && CLOUD_INFRA_DIR="$INFRA" GIT_BASE="${GIT_BASE:-$HOME/git}" ./gen-mcp-tpl.sh --check >/dev/null 2>&1); then
+                    ok "$plat region matches the derived MCP set"
+                else
+                    bad "$plat region has drifted from the derived MCP set — run gen-mcp-tpl.sh"
+                fi
+            else
+                echo "  ($plat cloud-infra dist/ not beside this repo — skipping region check)"
+            fi
+            continue
         fi
         if [ ! -f "$list" ]; then
             echo "  ($plat list not present at $list — skipping)"
