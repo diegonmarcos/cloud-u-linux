@@ -123,7 +123,7 @@ def mesh_url(name):
     return f"http://{d['services'][name]['ip']}:{d['container']['port']}/mcp"
 
 
-def render_region(plat, rules, servers):
+def render_region(plat, rules, servers, catalogue=None):
     # Each container client owns its own file format around the MCP block; this
     # script owns ONLY the marked region. `indent` matches the mapping level the
     # block sits at in the surrounding file (goose nests under `extensions:`).
@@ -140,6 +140,14 @@ def render_region(plat, rules, servers):
             lines.append(f"  {name}:")
             lines.append(f"    type: {entry.get('type', 'http')}")
             lines.append(f"    url: {entry['url']}")
+        if catalogue:
+            # A comment, not an entry: hermes' config schema has no verified
+            # "declared but disabled" form, and guessing one risks loading the
+            # very 147-tool server this budget exists to keep out. Names stay
+            # visible; an agent runs tools/list against the url on demand.
+            lines.append("  # names-only (NOT loaded — run tools/list on demand):")
+            for name in sorted(catalogue):
+                lines.append(f"  #   {name}: {catalogue[name]['url']}")
     elif fmt == "goose-yaml":
         display = rules.get("server_names", {})
         for name in sorted(servers):
@@ -149,6 +157,16 @@ def render_region(plat, rules, servers):
             lines.append(f"{pad}  type: streamable_http")
             lines.append(f"{pad}  uri: {entry['url']}")
             lines.append(f"{pad}  enabled: true")
+            lines.append(f"{pad}  timeout: 300")
+        # Catalogue: the NAME is here so the agent knows the server exists, but
+        # `enabled: false` means goose never fetches its tools, so it costs no
+        # context. Flip one to true only if its measured cost fits the budget.
+        for name in sorted(catalogue or {}):
+            lines.append(f"{pad}{name}:")
+            lines.append(f"{pad}  name: {display.get(name, name)}")
+            lines.append(f"{pad}  type: streamable_http")
+            lines.append(f"{pad}  uri: {catalogue[name]['url']}")
+            lines.append(f"{pad}  enabled: false")
             lines.append(f"{pad}  timeout: 300")
     else:
         raise SystemExit(f"unknown region format {fmt!r} for platform {plat}")
@@ -174,6 +192,49 @@ def extract_region(text):
 
 stdio = pol.get("stdio_extras", {})
 written, skipped, counts = [], [], []
+
+# ── Exposure tiering + token budget ────────────────────────────────────────
+# A REGISTERED server injects every tool schema into context on every turn.
+# Measured 2026-09-20 with a real initialize -> tools/list handshake: 310+
+# tools / ~39,700 tokens across nine servers, about double the 20k ceiling.
+# Only the `full` tier is registered; every other server becomes a catalogue
+# entry (name + url) that an agent queries with tools/list when it needs it.
+exp = pol.get("exposure")
+if not exp:
+    print("::error::mcp-policy.json has no `exposure` block — the token budget "
+          "would be unenforced and every server would load full schemas", file=sys.stderr)
+    sys.exit(1)
+
+budget = exp["budget_tokens"]
+full_names = set(exp["full"])
+measured = {k: v for k, v in exp["measured_tokens"].items() if not k.startswith("_")}
+per_name = exp["names_only_tokens_each"]
+
+def split_exposure(servers):
+    """(registered, catalogue) — catalogue keeps the NAME of every other server."""
+    reg, cat = collections.OrderedDict(), collections.OrderedDict()
+    for n, e in servers.items():
+        if n in full_names:
+            reg[n] = e
+        else:
+            cat[n] = collections.OrderedDict([
+                ("url", e.get("url", "")),
+                ("exposure", "names_only"),
+                ("tools", "run tools/list against this url when you need it"),
+            ])
+    return reg, cat
+
+def exposure_cost(reg, cat):
+    """Projected context cost. An UNMEASURED registered server is a failure,
+    never a zero — a missing number must not read as a free server."""
+    total = 0
+    for n in reg:
+        if n not in measured:
+            print(f"::error::{n} is registered `full` but has no measured_tokens "
+                  f"entry — its real cost is unknown and would count as 0", file=sys.stderr)
+            sys.exit(1)
+        total += measured[n]
+    return total + per_name * len(cat)
 
 for plat, rules in pol["platforms"].items():
     # A platform writes beside this script unless it declares somewhere else.
@@ -204,13 +265,27 @@ for plat, rules in pol["platforms"].items():
                 [("type", servers[name].get("type", "http")), ("url", mesh_url(name))])
     counts.append(len(servers))
 
+    # Cap enforced here, above the format branch: goose-yaml and hermes-yaml
+    # `continue` below, so a check placed after them would silently exempt
+    # exactly the two agent platforms this ceiling exists to protect.
+    registered, catalogue = split_exposure(servers)
+    projected = exposure_cost(registered, catalogue)
+    if projected > budget:
+        print(f"::error::{plat}: projected MCP exposure {projected} tokens exceeds "
+              f"the {budget} ceiling. Registered: "
+              f"{', '.join(f'{n}={measured[n]}' for n in registered)}. "
+              f"Move a server out of exposure.full, or collapse it to meta-tools.",
+              file=sys.stderr)
+        sys.exit(1)
+    servers = registered
+
     fmt = rules.get("format", "json")
     label = os.path.relpath(target, sot)
 
     if fmt in ("goose-yaml", "hermes-yaml"):
         # Region formats: rewrite only the marked block inside the client's own
         # config file, never the whole file.
-        region = render_region(plat, rules, servers)
+        region = render_region(plat, rules, servers, catalogue)
         old = open(target).read() if os.path.exists(target) else None
         got = extract_region(old) if old else None
         if check:
@@ -244,7 +319,15 @@ for plat, rules in pol["platforms"].items():
     out = collections.OrderedDict([("_warning", WARNING)])
     if rules.get("_doc"):
         out["_doc"] = rules["_doc"]
-    out["mcpServers"] = collections.OrderedDict(sorted(servers.items()))
+    out["_exposure"] = collections.OrderedDict([
+        ("_doc", "Only mcpServers below are registered and preload tool schemas. "
+                 "Every server in _mcp_catalogue is reachable but NOT preloaded: "
+                 "run tools/list against its url at the moment you need it."),
+        ("budget_tokens", budget),
+        ("projected_tokens", projected),
+    ])
+    out["mcpServers"] = collections.OrderedDict(sorted(registered.items()))
+    out["_mcp_catalogue"] = collections.OrderedDict(sorted(catalogue.items()))
 
     new = json.dumps(out, indent=2, ensure_ascii=False) + "\n"
     old = open(target).read() if os.path.exists(target) else None

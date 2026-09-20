@@ -14,6 +14,29 @@
       "url": "http://10.0.0.6:3111/mcp"
     }
   },
+  "exposure": {
+    "_doc": "DIEGO 2026-09-20: 'mcp tooling exposure cannot exceed 20k tokens. cgc must show it all. by default just add full list of mcps with just the names exposed not the full tools, then the agents must query the mcp to list the tools as it is needed.' A registered MCP server injects EVERY tool's JSON schema into the agent's context on EVERY turn. Measured live on oci-apps 2026-09-20 via a full initialize -> notifications/initialized -> tools/list handshake: 310+ tools totalling ~39,700 tokens across nine servers — roughly double the ceiling, paid on every single turn before the agent reads a word of the actual task. This block is what keeps that from happening. Servers in `full` are registered normally and load all their tools. Every other server is NOT registered; it appears in the generated `_mcp_catalogue` as name + url only, and an agent that needs it runs tools/list against that url at the moment it needs it. Nothing is hidden and nothing is dropped: the NAME of every server is still present on every platform, which is what the 'MCP LIST MUST BE SAME EVERYWHERE' rule (#49) actually requires.",
+    "budget_tokens": 20000,
+    "default": "names_only",
+    "full": [
+      "cloud-cgc-pub-mcp",
+      "cloud-cgc-pvt-mcp"
+    ],
+    "_doc_why_infra_is_not_full": "cloud-infra-mcp (c3-infra) is the other PRIORITY server and is deliberately still names_only, because the measurement forbids the alternative: it alone is 147 tools / ~17,534 tokens. Registering it full leaves 2,466 tokens of the 20,000 budget, and cgc — which Diego requires to 'show it all' — needs 6,342. The two cannot both be full under the ceiling. Priority here means an agent should reach for it FIRST, not that its schemas are preloaded. Making it full again requires collapsing it to meta-tools the way cloud-cgc-mcp went 42 -> 5; until then the number decides, not the label.",
+    "measured_tokens": {
+      "_doc": "Live tools/list payload bytes / 3.6, measured 2026-09-20. Feeds the budget guard so it is arithmetic on real numbers, not an estimate. Re-measure when a server's toolset changes; a stale entry here makes the guard confidently wrong.",
+      "cloud-infra-mcp": 17534,
+      "cloud-services-mcp": 13906,
+      "cloud-cgc-pub-mcp": 3171,
+      "cloud-cgc-pvt-mcp": 3171,
+      "cloud-drive-mcp": 969,
+      "cloud-mattermost-mcp": 385,
+      "cloud-vault-mcp": 280,
+      "cloud-mail-mcp": 270,
+      "cloud-superapp-mcp": 1000
+    },
+    "names_only_tokens_each": 40
+  },
   "_doc_stdio_extras": "EMPTY BY DESIGN (2026-09-05). This held three stdio servers that made desktop's list differ from termux's forever, which is the drift the user ruled against: 'NO MCP SHOULD BE ABSENT — THE MCP LIST MUST BE SAME EVERYWHERE'. All three are gone because the reason for each disappeared: cloud-vault-mcp and cloud-superapp-mcp were given a real StreamableHTTPServerTransport and now arrive through the DERIVED set for both platforms (verified live: POST /mcp returns 200 with serverInfo for each); cloud-cgc-pub-mcp-local ran the very same src/code/index.ts that the HTTP cloud-cgc-pub-mcp already serves, so it was a duplicate transport, not a distinct capability. Every entry also hardcoded /home/diego/... paths, which resolve on exactly one laptop and dangle everywhere else — the same machine-specific-path reason derive-mcp-json.ts skips stdio in the first place. Do NOT re-add a platform carve-out here: if a server cannot be reached over HTTP, fix the SERVICE so the deriver can see it, rather than re-splitting the lists.",
   "stdio_extras": {},
   "platforms": {
