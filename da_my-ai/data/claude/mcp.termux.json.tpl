@@ -4,7 +4,7 @@
   "_exposure": {
     "_doc": "Only mcpServers below are registered and preload tool schemas. Every server in _mcp_catalogue is reachable but NOT preloaded: run tools/list against its url at the moment you need it.",
     "budget_tokens": 20000,
-    "projected_tokens": 6702
+    "projected_tokens": 41686
   },
   "mcpServers": {
     "cloud-cgc-pub-mcp": {
@@ -17,53 +17,67 @@
     "cloud-cgc-pvt-mcp": {
       "type": "http",
       "url": "http://10.0.0.6:3107/mcp"
-    }
-  },
-  "_mcp_catalogue": {
+    },
     "cloud-drive-mcp": {
+      "type": "http",
       "url": "https://mcp.diegonmarcos.com/cloud-drive-mcp/mcp",
-      "exposure": "names_only",
-      "tools": "run tools/list against this url when you need it"
+      "headers": {
+        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
+      }
     },
     "cloud-infra-mcp": {
+      "type": "http",
       "url": "https://mcp.diegonmarcos.com/c3-infra-mcp/mcp",
-      "exposure": "names_only",
-      "tools": "run tools/list against this url when you need it"
+      "headers": {
+        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
+      }
     },
     "cloud-mail-mcp": {
+      "type": "http",
       "url": "https://mcp.diegonmarcos.com/mail-mcp/mcp",
-      "exposure": "names_only",
-      "tools": "run tools/list against this url when you need it"
+      "headers": {
+        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
+      }
     },
     "cloud-mattermost-mcp": {
+      "type": "http",
       "url": "https://mcp.diegonmarcos.com/mattermost-mcp/mcp",
-      "exposure": "names_only",
-      "tools": "run tools/list against this url when you need it"
+      "headers": {
+        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
+      }
     },
     "cloud-services-mcp": {
+      "type": "http",
       "url": "https://mcp.diegonmarcos.com/c3-services-mcp/mcp",
-      "exposure": "names_only",
-      "tools": "run tools/list against this url when you need it"
+      "headers": {
+        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
+      }
     },
     "cloud-superapp-mcp": {
+      "type": "http",
       "url": "https://mcp.diegonmarcos.com/cloud-superapp-mcp/mcp",
-      "exposure": "names_only",
-      "tools": "run tools/list against this url when you need it"
+      "headers": {
+        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
+      }
     },
     "cloud-vault-mcp": {
-      "url": "http://10.0.0.6:3111/mcp",
-      "exposure": "names_only",
-      "tools": "run tools/list against this url when you need it"
+      "type": "http",
+      "url": "http://10.0.0.6:3111/mcp"
     },
     "google-personal-mcp": {
+      "type": "http",
       "url": "https://mcp.diegonmarcos.com/g-personal/mcp",
-      "exposure": "names_only",
-      "tools": "run tools/list against this url when you need it"
+      "headers": {
+        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
+      }
     },
     "google-workspace-mcp": {
+      "type": "http",
       "url": "https://mcp.diegonmarcos.com/g-workspace/mcp",
-      "exposure": "names_only",
-      "tools": "run tools/list against this url when you need it"
+      "headers": {
+        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
+      }
     }
-  }
+  },
+  "_mcp_catalogue": {}
 }

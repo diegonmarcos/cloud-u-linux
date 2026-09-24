@@ -114,13 +114,22 @@ def mesh_url(name):
     # token. The ip+port come from the fleet's own declaration of each server
     # (dist/build-<name>.json) — the same source the cloud-u-containers contract
     # tests assert against, so the client and the test cannot disagree.
+    # Returns None when this server has no mesh declaration, and the CALLER keeps
+    # the already-resolved url. Raising here used to be right when these platforms
+    # carried a hand-picked two-server filter; now that they carry all eleven
+    # (#346 widened 2026-09-21), a missing declaration must not abort generation —
+    # that would leave the agent with NO config at all, which is a worse failure
+    # than one server reached over the proxy instead of the mesh. Entries in
+    # policy.direct_http are already mesh urls (10.0.0.6:port) and need no lookup.
     declaration = os.path.join(dist_dir, f"build-{name}.json")
     if not os.path.isfile(declaration):
-        raise SystemExit(
-            f"mesh url for {name}: missing fleet declaration {declaration} — "
-            "run 1_cloud-configs/build.sh derive")
+        return None
     d = json.load(open(declaration))
-    return f"http://{d['services'][name]['ip']}:{d['container']['port']}/mcp"
+    svc = d.get("services", {}).get(name)
+    port = d.get("container", {}).get("port")
+    if not svc or not svc.get("ip") or not port:
+        return None
+    return f"http://{svc['ip']}:{port}/mcp"
 
 
 def render_region(plat, rules, servers, catalogue=None):
@@ -261,8 +270,10 @@ for plat, rules in pol["platforms"].items():
         servers.update(stdio)
     if rules.get("url_mode") == "mesh":
         for name in list(servers):
-            servers[name] = collections.OrderedDict(
-                [("type", servers[name].get("type", "http")), ("url", mesh_url(name))])
+            m = mesh_url(name)
+            if m:  # None -> keep the already-resolved url (proxy or direct_http)
+                servers[name] = collections.OrderedDict(
+                    [("type", servers[name].get("type", "http")), ("url", m)])
     counts.append(len(servers))
 
     # Cap enforced here, above the format branch: goose-yaml and hermes-yaml
@@ -270,11 +281,22 @@ for plat, rules in pol["platforms"].items():
     # exactly the two agent platforms this ceiling exists to protect.
     registered, catalogue = split_exposure(servers)
     projected = exposure_cost(registered, catalogue)
+    # RATCHET, not block. A hard fail here refuses to generate a WORKING config
+    # in order to honour a ceiling — and on 2026-09-20 that is exactly what
+    # happened: nine servers were dropped from mcpServers to get under 20k, which
+    # disconnected them outright (a url in a catalogue key is never dialled) and
+    # took devops_ssh_exec and devops_telegram_send away from the user mid-task.
+    # The budget may never again be met by removing a server from the client.
+    baseline = exp.get("baseline_tokens", budget)
     if projected > budget:
-        print(f"::error::{plat}: projected MCP exposure {projected} tokens exceeds "
-              f"the {budget} ceiling. Registered: "
-              f"{', '.join(f'{n}={measured[n]}' for n in registered)}. "
-              f"Move a server out of exposure.full, or collapse it to meta-tools.",
+        print(f"::warning::{plat}: MCP exposure {projected} tokens is over the "
+              f"{budget} target. The fix is SERVER-SIDE tool reduction "
+              f"(cloud-infra-mcp 147 tools, cloud-services-mcp 127 — 31,440 of the "
+              f"total); do NOT unregister a server to get under it.")
+    if projected > baseline:
+        print(f"::error::{plat}: MCP exposure {projected} exceeds the "
+              f"{baseline} baseline — it got WORSE. Registered: "
+              f"{', '.join(f'{n}={measured.get(n,0)}' for n in registered)}.",
               file=sys.stderr)
         sys.exit(1)
     servers = registered

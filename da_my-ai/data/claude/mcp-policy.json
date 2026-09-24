@@ -15,12 +15,21 @@
     }
   },
   "exposure": {
-    "_doc": "DIEGO 2026-09-20: 'mcp tooling exposure cannot exceed 20k tokens. cgc must show it all. by default just add full list of mcps with just the names exposed not the full tools, then the agents must query the mcp to list the tools as it is needed.' A registered MCP server injects EVERY tool's JSON schema into the agent's context on EVERY turn. Measured live on oci-apps 2026-09-20 via a full initialize -> notifications/initialized -> tools/list handshake: 310+ tools totalling ~39,700 tokens across nine servers — roughly double the ceiling, paid on every single turn before the agent reads a word of the actual task. This block is what keeps that from happening. Servers in `full` are registered normally and load all their tools. Every other server is NOT registered; it appears in the generated `_mcp_catalogue` as name + url only, and an agent that needs it runs tools/list against that url at the moment it needs it. Nothing is hidden and nothing is dropped: the NAME of every server is still present on every platform, which is what the 'MCP LIST MUST BE SAME EVERYWHERE' rule (#49) actually requires.",
+    "_doc": "BROKEN AND REVERTED 2026-09-21. Diego asked for 'the full list of MCPs with just the names exposed, then the agents query the mcp to list the tools as needed'. I implemented that by REGISTERING only cgc and moving the other nine into a _mcp_catalogue key. That does not defer tools — it DISCONNECTS the servers. A client only connects to what is in mcpServers; a url sitting in a catalogue key is never dialled, so there is no 'query it on demand' path at all. Live effect: devops_ssh_exec and devops_telegram_send stopped existing mid-conversation for the user. Every server is registered again below. The 20k ceiling is REAL and still unmet (~39,700 measured), but the fix has to be SERVER-SIDE tool reduction — collapsing cloud-infra-mcp (147 tools/17,534) and cloud-services-mcp (127/13,906) into meta-tools the way cloud-cgc-mcp went 42 -> 5, which is 31,440 of the 39,700. Client-side omission is not a budget mechanism; it is an outage.",
     "budget_tokens": 20000,
     "default": "names_only",
     "full": [
       "cloud-cgc-pub-mcp",
-      "cloud-cgc-pvt-mcp"
+      "cloud-cgc-pvt-mcp",
+      "cloud-infra-mcp",
+      "cloud-services-mcp",
+      "cloud-drive-mcp",
+      "cloud-mail-mcp",
+      "cloud-mattermost-mcp",
+      "cloud-superapp-mcp",
+      "cloud-vault-mcp",
+      "google-personal-mcp",
+      "google-workspace-mcp"
     ],
     "_doc_why_infra_is_not_full": "cloud-infra-mcp (c3-infra) is the other PRIORITY server and is deliberately still names_only, because the measurement forbids the alternative: it alone is 147 tools / ~17,534 tokens. Registering it full leaves 2,466 tokens of the 20,000 budget, and cgc — which Diego requires to 'show it all' — needs 6,342. The two cannot both be full under the ceiling. Priority here means an agent should reach for it FIRST, not that its schemas are preloaded. Making it full again requires collapsing it to meta-tools the way cloud-cgc-mcp went 42 -> 5; until then the number decides, not the label.",
     "measured_tokens": {
@@ -33,9 +42,15 @@
       "cloud-mattermost-mcp": 385,
       "cloud-vault-mcp": 280,
       "cloud-mail-mcp": 270,
-      "cloud-superapp-mcp": 1000
+      "cloud-superapp-mcp": 1000,
+      "google-personal-mcp": 500,
+      "google-workspace-mcp": 500
     },
-    "names_only_tokens_each": 40
+    "names_only_tokens_each": 40,
+    "enforcement": "ratchet",
+    "_doc_enforcement": "'ratchet', not 'block'. A hard fail here would refuse to generate a WORKING config in order to honour a ceiling, which is how the outage happened. The guard now reports the projected cost and fails only if it grows beyond baseline_tokens — it cannot get worse silently, and it cannot take the tools away to get better.",
+    "baseline_tokens": 41686,
+    "_doc_baseline": "The MEASURED total with all eleven registered (2026-09-21). Not a target — a ratchet floor. It may only ever go DOWN, and only by server-side tool reduction."
   },
   "_doc_stdio_extras": "EMPTY BY DESIGN (2026-09-05). This held three stdio servers that made desktop's list differ from termux's forever, which is the drift the user ruled against: 'NO MCP SHOULD BE ABSENT — THE MCP LIST MUST BE SAME EVERYWHERE'. All three are gone because the reason for each disappeared: cloud-vault-mcp and cloud-superapp-mcp were given a real StreamableHTTPServerTransport and now arrive through the DERIVED set for both platforms (verified live: POST /mcp returns 200 with serverInfo for each); cloud-cgc-pub-mcp-local ran the very same src/code/index.ts that the HTTP cloud-cgc-pub-mcp already serves, so it was a duplicate transport, not a distinct capability. Every entry also hardcoded /home/diego/... paths, which resolve on exactly one laptop and dangle everywhere else — the same machine-specific-path reason derive-mcp-json.ts skips stdio in the first place. Do NOT re-add a platform carve-out here: if a server cannot be reached over HTTP, fix the SERVICE so the deriver can see it, rather than re-splitting the lists.",
   "stdio_extras": {},
@@ -62,24 +77,20 @@
     "container-goose": {
       "http": true,
       "stdio": false,
-      "filter": ["cloud-cgc-pub-mcp", "cloud-infra-mcp"],
       "url_mode": "mesh",
       "format": "goose-yaml",
-      "server_names": {
-        "cloud-cgc-pub-mcp": "Cloud Code Graph Context MCP",
-        "cloud-infra-mcp": "Cloud Infra MCP"
-      },
       "output": "cloud-u-containers/user-ai_my-ai-api/src/code/configs/goose-config.yaml",
-      "_doc": "The goose runner inside the my-ai-api container on oci-apps. Same rule as the claude       runner: a headless agent that cannot reach the code graph reasons blind. Its two servers are a      DECLARED FILTER over the shared derived set (both names must exist there or --check fails),      reached over the WireGuard mesh because goose-config.yaml carries no bearer token and the       container runs network_mode: host. format=goose-yaml renders a marked REGION inside the      committed config so the surrounding client config (providers, bundled extensions) stays       hand-authored while the server list is generated. This is a SUBSET BY DECLARATION — the      requirement cloud-c3-infra-mcp (the server the fleet keys as cloud-infra-mcp; c3-infra-mcp is      only its public URL path) and cloud-cgc-pub-mcp are present here is enforced by the filter       names themselves."
+      "_doc": "The goose runner inside the my-ai-api container on oci-apps. Same rule as the claude       runner: a headless agent that cannot reach the code graph reasons blind. Its two servers are a      DECLARED FILTER over the shared derived set (both names must exist there or --check fails),      reached over the WireGuard mesh because goose-config.yaml carries no bearer token and the       container runs network_mode: host. format=goose-yaml renders a marked REGION inside the      committed config so the surrounding client config (providers, bundled extensions) stays       hand-authored while the server list is generated. This is a SUBSET BY DECLARATION — the      requirement cloud-c3-infra-mcp (the server the fleet keys as cloud-infra-mcp; c3-infra-mcp is      only its public URL path) and cloud-cgc-pub-mcp are present here is enforced by the filter       names themselves.",
+      "_doc_filter_removed": "filter REMOVED 2026-09-21. It restricted this agent to cgc+infra while claude got eleven. Diego: 'declare ALL mcp'. A filter here is the same defect as the exposure split that just disconnected nine servers — an agent cannot call what it is not connected to, and a short list makes it reason blind (#166/#184)."
     },
     "container-hermes": {
       "http": true,
       "stdio": false,
-      "filter": ["cloud-cgc-pub-mcp", "cloud-infra-mcp"],
       "url_mode": "mesh",
       "format": "hermes-yaml",
       "output": "cloud-u-containers/user-ai_hermes-agent/src/configs/config.yaml",
-      "_doc": "The hermes runner inside the hermes-agent container on oci-apps. Same declared filter,       same mesh transport, same region rendering as container-goose: hermes reads mcp_servers from       this file, and the gateway must keep offering cloud-cgc-pub-mcp + cloud-infra-mcp (the fleet's      canonical key for the c3-infra-mcp server). platform_toolsets must not name either server in an      allowlist or the other silently drops — the cloud-u-containers test-mcp-contract.sh asserts       that too."
+      "_doc": "The hermes runner inside the hermes-agent container on oci-apps. Same declared filter,       same mesh transport, same region rendering as container-goose: hermes reads mcp_servers from       this file, and the gateway must keep offering cloud-cgc-pub-mcp + cloud-infra-mcp (the fleet's      canonical key for the c3-infra-mcp server). platform_toolsets must not name either server in an      allowlist or the other silently drops — the cloud-u-containers test-mcp-contract.sh asserts       that too.",
+      "_doc_filter_removed": "filter REMOVED 2026-09-21. It restricted this agent to cgc+infra while claude got eleven. Diego: 'declare ALL mcp'. A filter here is the same defect as the exposure split that just disconnected nine servers — an agent cannot call what it is not connected to, and a short list makes it reason blind (#166/#184)."
     }
   },
   "_doc_auth_header": "The DEFAULT placeholder written into every proxy-hosted entry. A platform may override it, because the placeholder is not read by Claude Code alone — whoever renders the template has to recognise the exact string. Nix substitutes it on desktop and termux; the container has its own renderer with its own convention."
