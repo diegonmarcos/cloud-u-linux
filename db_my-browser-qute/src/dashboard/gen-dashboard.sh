@@ -5,7 +5,7 @@
 #   BOOKMARKS_JSON      section SoT (curated links/folders + source markers)
 #   CLOUD_DESKTOP_JSON  cloud-data's build-flakes_desktop.json (per-service domain + proxy.primary.wg_only)
 #   FRONT_TOPOLOGY_JSON front's I_front-data/front-topology.json (projects[] with category + path)
-#   FRONT_ROOT          front repo root for file:// links (default ~/git/front)
+#   FRONT_ROOT          front repo root for file:// links (default ~/git/front-diegonmarcos)
 #   HISTORY_SQLITE      my-browser-qute history db for the "Last Sessions" section
 #   TEMPLATE            dashboard.template.html (has the __BOOKMARKS_JSON__ token)
 #   OUT                 output qute-bookmarks.html
@@ -20,8 +20,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 BOOKMARKS_JSON="${BOOKMARKS_JSON:-$HERE/../2_configs/qute-bookmarks.json}"
 CLOUD_DESKTOP_JSON="${CLOUD_DESKTOP_JSON:-$HOME/git/cloud-infra/2_configs/dist/build-flakes_desktop.json}"
-FRONT_TOPOLOGY_JSON="${FRONT_TOPOLOGY_JSON:-$HOME/git/front/front-topology.json}"
-FRONT_ROOT="${FRONT_ROOT:-$HOME/git/front}"
+FRONT_TOPOLOGY_JSON="${FRONT_TOPOLOGY_JSON:-$HOME/git/front-diegonmarcos/front-topology.json}"
+FRONT_ROOT="${FRONT_ROOT:-$HOME/git/front-diegonmarcos}"
 HISTORY_SQLITE="${HISTORY_SQLITE:-$HOME/.local/share/my-browser-qute/history.sqlite}"
 # Live history.js dumped by the fork (mybar.py, event-driven off history.web_history.changed)
 # — matches its default standarddir.data() path exactly. See dashboard.template.html's

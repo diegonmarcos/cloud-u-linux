@@ -30,7 +30,7 @@
         },
         {
           "label": "front repo",
-          "cmd": "cd ~/git/front"
+          "cmd": "cd ~/git/front-diegonmarcos"
         },
         {
           "label": "vault repo",

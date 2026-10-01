@@ -1545,7 +1545,7 @@ do_sys_paths() { set +x 2>/dev/null
   printf "$_F" "hm-desktop" "~/git/cloud-infra-desktop/ba_flakes_desktop/"
   printf "$_F" "hm-termux" "~/git/cloud-infra-desktop/bb_flakes_termux/"
   printf "$_F" "cloud-repo" "~/git/cloud-infra/"
-  printf "$_F" "front-repo" "~/git/front/"
+  printf "$_F" "front-repo" "~/git/front-diegonmarcos/"
   printf "$_F" "tools-repo" "~/git/cloud-mykonsole-dtk/"
   printf "$_F" "vault-repo" "~/git/cloud-vault/"
   printf "${D}  engines:${R}\n"
