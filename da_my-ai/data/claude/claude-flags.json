@@ -1,8 +1,0 @@
-{
-  "_comment": "Selectable claude startup flags surfaced in the my-ai-dash COMPOSE/CLAUDE FLAGS section. key = St toggle key, flag = literal arg appended to the launch token stream, default = initial checkbox state.",
-  "flags": [
-    { "key": "auto",        "flag": "--auto",        "note": "auto-accept edits",        "default": false },
-    { "key": "plan",        "flag": "--plan",        "note": "start in plan mode",       "default": false },
-    { "key": "interactive", "flag": "--interactive", "note": "force interactive session","default": false }
-  ]
-}

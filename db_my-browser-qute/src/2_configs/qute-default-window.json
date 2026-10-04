@@ -1,9 +1,0 @@
-{
-  "_description": "Default window arrangement — the tab set for the `default-window`/`open_saved_tabs` commands (New Default Window Ctrl-Shift-N; Open Saved Tabs Ctrl-Shift-T). The home-module builds qutebrowser aliases from this: the FIRST url opens a new window (open -w) for default-window / a tab (open -t) for open_saved_tabs, the rest open as tabs — then any tab with pinned:true gets `:tab-pin`'d in place (native qutebrowser pinned-tab styling: smaller, colored distinctly — see qute-settings.json colors.tabs.pinned). Keep in sync with the fresh-boot layout (ba_flakes_desktop default-session.json qutebrowser window).",
-  "_pinned_naming_note": "qutebrowser has no tab-rename API (verified against upstream source — tabwidget.py has no editable-title/context-menu hook). Tab labels are always the page's own <title>. qute-bookmarks.html is OUR generated page, so its <title>bookmarks</title> gives an exact match. localhost:8000 is an external dev server we don't control — its tab label is whatever THAT page titles itself; pinning still applies regardless of title.",
-  "tabs": [
-    { "url": "file:///home/diego/.config/my-browser-qute/qute-bookmarks.html", "pinned": true },
-    { "url": "http://localhost:8000", "pinned": true },
-    { "url": "https://www.qwant.com", "pinned": false }
-  ]
-}

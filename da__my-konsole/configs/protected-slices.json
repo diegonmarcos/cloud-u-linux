@@ -1,4 +1,0 @@
-{
-  "_comment": "Cgroup slices the process-table's kill action refuses to signal into, regardless of which signal is requested. Mirrors the protected_slices notion in aa_desk-usr_x86_surface-linux_nixos/src/modules/cloud-data-disk-protection.json (os-essentials.slice = ssh/wg/session/watchdog, connectivity.slice = the untouchable freeze-guard island) — kept as a separate copy here because that file is consumed by root-owned nix-generated systemd units and this one is read straight off disk by the unprivileged per-user tray daemon (watchdog.rs: load_protected_slices/proc_protected_slice). Edit this file and resync (build.sh sync-data) to change what the process table can never kill; pid 1 is refused unconditionally in code, not via this list. No rebuild needed for an edit here to take effect — it is re-read on every kill request.",
-  "protected_slices": ["os-essentials.slice", "connectivity.slice"]
-}

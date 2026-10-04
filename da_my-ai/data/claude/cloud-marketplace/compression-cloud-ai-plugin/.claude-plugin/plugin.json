@@ -1,7 +1,0 @@
-{
-  "name": "compression-cloud-ai-plugin",
-  "displayName": "Compression",
-  "version": "1.0.0",
-  "description": "Steady-state context compression: per-turn/per-bash one-line principles pointer instead of re-injecting the full set every turn. Split from cloud-principles-ai-plugin.",
-  "author": { "name": "Diego Nepomuceno Marcos" }
-}

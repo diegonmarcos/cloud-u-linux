@@ -1,6 +1,0 @@
-{
-  "identifier": "default",
-  "description": "my-ai-gui default capability (window + app commands)",
-  "windows": ["main"],
-  "permissions": ["core:default"]
-}

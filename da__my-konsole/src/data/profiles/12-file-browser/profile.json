@@ -1,9 +1,0 @@
-{
-  "name": "file-browser",
-  "display_name": "File Browser",
-  "home": true,
-  "filebrowser": true,
-  "start_path": "~",
-  "theme": { "accent": "#2ecc71" },
-  "sections": []
-}

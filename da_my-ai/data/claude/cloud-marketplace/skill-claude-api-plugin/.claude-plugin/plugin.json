@@ -1,7 +1,0 @@
-{
-  "name": "skill-claude-api-plugin",
-  "displayName": "Skill: Claude API",
-  "version": "1.0.0",
-  "description": "Claude API / Anthropic SDK skill, delivered as a plugin. Every skill in this fleet ships as a plugin — nothing loose in ~/.claude/skills/. Vendored from anthropics/skills; see ORIGIN.md.",
-  "author": { "name": "Diego Nepomuceno Marcos" }
-}

@@ -1,7 +1,0 @@
-{
-  "name": "sub-agents-cloud-ai-plugin",
-  "displayName": "Sub-Agents",
-  "version": "0.1.0",
-  "description": "Scaffold — reserved for future sub-agent / Task-tool orchestration principles. No active rules yet. Split from cloud-principles-ai-plugin.",
-  "author": { "name": "Diego Nepomuceno Marcos" }
-}

@@ -1,133 +1,0 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>htop Export</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background-color: #000000;
-            color: #c0c0c0;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
-            font-size: 13px;
-            line-height: 1.2;
-            padding: 20px;
-        }
-
-        .htop-container {
-            background-color: #000000;
-            border: 2px solid #333;
-            border-radius: 8px;
-            padding: 15px;
-            max-width: 100%;
-            overflow-x: auto;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        }
-
-        .htop-content {
-            white-space: pre;
-            letter-spacing: 0;
-        }
-
-        /* Foreground colors */
-        .fg-black { color: #2e3436; }
-        .fg-red { color: #cc0000; }
-        .fg-green { color: #4e9a06; }
-        .fg-yellow { color: #c4a000; }
-        .fg-blue { color: #3465a4; }
-        .fg-magenta { color: #75507b; }
-        .fg-cyan { color: #06989a; }
-        .fg-white { color: #d3d7cf; }
-        .fg-default { color: #c0c0c0; }
-
-        .fg-bright-black { color: #555753; }
-        .fg-bright-red { color: #ef2929; }
-        .fg-bright-green { color: #8ae234; }
-        .fg-bright-yellow { color: #fce94f; }
-        .fg-bright-blue { color: #729fcf; }
-        .fg-bright-magenta { color: #ad7fa8; }
-        .fg-bright-cyan { color: #34e2e2; }
-        .fg-bright-white { color: #eeeeec; }
-
-        /* Background colors */
-        .bg-black { background-color: #2e3436; }
-        .bg-red { background-color: #cc0000; }
-        .bg-green { background-color: #4e9a06; }
-        .bg-yellow { background-color: #c4a000; }
-        .bg-blue { background-color: #3465a4; }
-        .bg-magenta { background-color: #75507b; }
-        .bg-cyan { background-color: #06989a; }
-        .bg-white { background-color: #d3d7cf; }
-        .bg-default { background-color: transparent; }
-
-        .bg-bright-black { background-color: #555753; }
-        .bg-bright-red { background-color: #ef2929; }
-        .bg-bright-green { background-color: #8ae234; }
-        .bg-bright-yellow { background-color: #fce94f; }
-        .bg-bright-blue { background-color: #729fcf; }
-        .bg-bright-magenta { background-color: #ad7fa8; }
-        .bg-bright-cyan { background-color: #34e2e2; }
-        .bg-bright-white { background-color: #eeeeec; }
-
-        /* Text styles */
-        .bold { font-weight: bold; }
-        .dim { opacity: 0.6; }
-        .italic { font-style: italic; }
-        .underline { text-decoration: underline; }
-        .inverse {
-            filter: invert(1);
-        }
-
-        /* Header styling */
-        .htop-header {
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #333;
-        }
-
-        .htop-header h1 {
-            color: #34e2e2;
-            font-size: 24px;
-            margin-bottom: 5px;
-        }
-
-        .htop-header .timestamp {
-            color: #8ae234;
-            font-size: 12px;
-        }
-
-        /* Scrollbar styling */
-        .htop-container::-webkit-scrollbar {
-            height: 10px;
-        }
-
-        .htop-container::-webkit-scrollbar-track {
-            background: #1a1a1a;
-        }
-
-        .htop-container::-webkit-scrollbar-thumb {
-            background: #555;
-            border-radius: 5px;
-        }
-
-        .htop-container::-webkit-scrollbar-thumb:hover {
-            background: #777;
-        }
-    </style>
-</head>
-<body>
-    <div class="htop-header">
-        <h1>htop System Monitor Export</h1>
-        <div class="timestamp">Generated: 2025-12-05 15:16:27</div>
-    </div>
-    <div class="htop-container">
-        <div class="htop-content">[4l=<span class="bg-default fg-default"><span class="bg-default fg-default"></span>[2d  <span class="fg-cyan">Date &amp; Time: <span class="fg-cyan fg-default"></span>2025-12-05 15:1</span> <span class="fg-cyan">Avg<span class="fg-cyan fg-default"></span>[</span>||||||||||<span class="fg-green fg-red">|||||</span>   65.0%<span class="bold fg-bright-black fg-default">]</span> <span class="fg-cyan">Mem<span class="fg-cyan fg-default"></span>[</span>||||||||||||5<span class="fg-green fg-magenta">.04</span>G</span>/7.60G<span class="fg-default fg-yellow"></span>]</span> <span class="fg-cyan">Network: </span>initializing...</span>GPU<span class="fg-cyan fg-default"></span>[<span class="bold fg-bright-black">[19X0.0%<span class="bold fg-bright-black fg-default">]</span> <span class="fg-cyan">Swp<span class="fg-cyan fg-default"></span>[</span>||||||<span class="fg-red fg-yellow">|</span>     1.95G/8.00G<span class="bold fg-bright-black fg-default">]</span>Hostname: <span class="fg-cyan fg-default"></span>diego-surfacepro8</span>  <span class="fg-cyan">PSI some CPU:    <span class="fg-cyan fg-default"></span> 0.45% <span class="bold fg-cyan"> 0.3<span class="bold fg-cyan fg-default"></span> <span class="fg-cyan">PSI full memory: <span class="fg-cyan fg-default"></span> 0.00% <span class="bold fg-cyan"> 0.00% </span> 0.00% System: <span class="fg-cyan fg-default"></span>Linux 6.17.1-surface</span> <span class="fg-cyan">Uptime: </span>4 days, 02:54:06<span class="bold fg-cyan fg-default"></span>     <span class="fg-cyan">Tasks: </span>221<span class="bold fg-bright-black fg-cyan">, 921 thr, 160 kthr</span>; </span>3</span> runningBattery: </span>100.0% (Running on <span class="bold fg-cyan fg-default"></span> <span class="fg-cyan">FDs: used: <span class="fg-cyan fg-green">22039<span class="fg-cyan fg-green"> max: </span>unlimi<span class="bold fg-blue fg-default"></span> <span class="fg-cyan">Load average: <span class="fg-cyan fg-default"></span>2.32 <span class="bold fg-cyan">1.85 </span>1.72 SELinux: disabledLoad: <span class="fg-cyan fg-default"></span>2.32 </span>Systemd: </span>degraded</span> (<span class="fg-cyan fg-default"></span>2</span>/</span>754</span> failed) (</span>0</span>/</span>80701</span> jobs)<span class="fg-cyan fg-green"><span class="bg-green fg-cyan fg-green">[<span class="bg-green fg-black fg-cyan fg-green"><span class="bg-green fg-black fg-cyan fg-green">Main<span class="bg-green fg-black fg-cyan fg-green"><span class="bg-green fg-black fg-cyan fg-green">]<span class="bg-default bg-green fg-black fg-cyan fg-default fg-green"></span> <span class="fg-blue"><span class="bg-blue fg-blue">[<span class="bg-blue fg-black fg-blue"><span class="bg-blue fg-black fg-blue">I/O<span class="bg-blue fg-black fg-blue"><span class="bg-blue fg-black fg-blue">][12d<span class="bg-blue fg-black fg-blue"><span class="bg-blue bg-green fg-black fg-blue">EXE[14XDATA <span class="bg-blue bg-green fg-black fg-blue"><span class="bg-blue bg-cyan bg-green fg-black fg-blue">MEM%▽<span class="bg-blue bg-cyan bg-green fg-black fg-blue"><span class="bg-blue bg-cyan bg-green fg-black fg-blue"> CPU%  GPU% GPU_TIME  NI  VIRT   RES  CODE   SHR S CWD[25XTIME+  USER[13d<span class="bg-blue bg-cyan bg-green fg-black fg-blue"><span class="bg-blue bg-cyan bg-green fg-black fg-blue">node             692M  8.5  13.3   0.0      0ns   0 31.7G  660M 38756 59444 S /home/diego/Documents/Git  1:22.92 diego[14d</span>N/A             </span>1<span class="fg-cyan fg-green">162M <span class="fg-cyan fg-default fg-green"></span> 6.2 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 <span class="bold fg-bright-black fg-red">1</span>392G <span class="fg-cyan fg-green"> 484M  211M  131M </span>S N/A[23X<span class="bold fg-bright-black fg-default"></span> 3:32.45 diego[15d<span class="bold"><span class="bold fg-cyan">node            </span> 663M <span class="fg-cyan fg-default"></span> 5.8 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 </span>31<span class="fg-cyan fg-green">.7<span class="fg-cyan fg-green">G <span class="fg-cyan fg-green"> 452M 38<span class="fg-cyan fg-default fg-green"></span>756 <span class="fg-cyan">59<span class="fg-cyan fg-default"></span>472 <span class="bold"><span class="bold fg-bright-black">S <span class="bold fg-bright-black fg-default"></span>/home/diego/Documents/Git  5:02.63 diego[16d<span class="bold"><span class="bold fg-yellow">brave           </span> 630M <span class="fg-cyan fg-default"></span> 4.6 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 </span>33<span class="fg-cyan fg-green">.1<span class="fg-cyan fg-green">G <span class="fg-cyan fg-green"> 359M  211M  201M </span>S <span class="bold fg-bright-black fg-default"></span>/home/diego12:55.16 diego[17d<span class="bold"><span class="bold fg-yellow">plasmashell     </span> 765M <span class="fg-cyan fg-default"></span> 4.1  26.7 <span class="bold"><span class="bold fg-bright-black">  0.0      0ns   0 </span>4<span class="fg-cyan fg-green">700M  318M <span class="fg-cyan fg-default fg-green"></span>  464 <span class="fg-cyan">82<span class="fg-cyan fg-default"></span>616 <span class="bold"><span class="bold fg-bright-black">S <span class="bold fg-bright-black fg-default"></span>/home/diego<span class="fg-cyan">20h<span class="fg-cyan fg-default"></span>43:13 diego[18d<span class="bold"><span class="bold fg-cyan">node            </span> 359M <span class="fg-cyan fg-default"></span> 4.1   6.7 <span class="bold"><span class="bold fg-bright-black">  0.0      0ns   0 </span>31<span class="fg-cyan fg-green">.4<span class="fg-cyan fg-green">G <span class="fg-cyan fg-green"> 315M 38<span class="fg-cyan fg-default fg-green"></span>756 <span class="fg-cyan">59<span class="fg-cyan fg-default"></span>372 <span class="bold"><span class="bold fg-bright-black">S <span class="bold fg-bright-black fg-default"></span>/home/diego/Documents/Git  1:41.39 diego[19d<span class="bold"><span class="bold fg-bright-black">N/A             </span> 915M <span class="fg-cyan fg-default"></span> 3.9 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 <span class="bold fg-bright-black fg-red">1</span>392G <span class="fg-cyan fg-green"> 305M  211M  146M </span>S N/A[23X<span class="bold fg-bright-black fg-default"></span> 0:26.87 diego[20d<span class="bold"><span class="bold fg-cyan">node            </span> 330M <span class="fg-cyan fg-default"></span> 3.8 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 </span>31<span class="fg-cyan fg-green">.4<span class="fg-cyan fg-green">G <span class="fg-cyan fg-green"> 296M 38<span class="fg-cyan fg-default fg-green"></span>756 <span class="fg-cyan">59<span class="fg-cyan fg-default"></span>656 <span class="bold"><span class="bold fg-bright-black">S <span class="bold fg-bright-black fg-default"></span>/home/diego/Documents/Git  0:31.66 diego[21d<span class="bold"><span class="bold fg-cyan">kate            </span> 141M <span class="fg-cyan fg-default"></span> 2.7 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 </span>1<span class="fg-cyan fg-green">579M  209M <span class="fg-cyan fg-default fg-green"></span>   44 <span class="fg-cyan"> 134M </span>S <span class="bold fg-bright-black fg-default"></span>/home/diego/Documents/Git  0:07.96 diego[22d<span class="bold"><span class="bold fg-cyan">node            </span> 218M <span class="fg-cyan fg-default"></span> 2.3  26.7 <span class="bold"><span class="bold fg-bright-black">  0.0      0ns   0 </span>11<span class="fg-cyan fg-green">.3<span class="fg-cyan fg-green">G <span class="fg-cyan fg-green"> 179M 38<span class="fg-cyan fg-default fg-green"></span>756 <span class="fg-cyan">57<span class="fg-cyan fg-default"></span>892 <span class="fg-green">R <span class="fg-default fg-green"></span>/home/diego/Documents/Git  2:17.50 diego[23d<span class="bold"><span class="bold fg-cyan">dolphin         </span> 128M <span class="fg-cyan fg-default"></span> 2.2 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 </span>1<span class="fg-cyan fg-green">479M  171M <span class="fg-cyan fg-default fg-green"></span>  544 <span class="fg-cyan"> 126M </span>S <span class="bold fg-bright-black fg-default"></span>/home/diego0:38.50 diego[24d<span class="bold"><span class="bold fg-cyan">dolphin         </span> 129M <span class="fg-cyan fg-default"></span> 1.9 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 </span>1<span class="fg-cyan fg-green">478M  150M <span class="fg-cyan fg-default fg-green"></span>  544 <span class="fg-cyan"> 122M </span>S <span class="bold fg-bright-black fg-default"></span>/home/diego1:11.21 diego[25d<span class="bold"><span class="bold fg-bright-black">N/A             </span> 682M <span class="fg-cyan fg-default"></span> 1.9 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 <span class="bold fg-bright-black fg-red">1</span>392G <span class="fg-cyan fg-green"> 145M  211M  116M </span>S N/A[23X<span class="bold fg-bright-black fg-default"></span> 0:02.74 diego[26d<span class="bold"><span class="bold fg-cyan">konsole         </span> 104M <span class="fg-cyan fg-default"></span> 1.9   6.7 <span class="bold"><span class="bold fg-bright-black">  0.0      0ns   0 </span>1<span class="fg-cyan fg-green">015M  144M <span class="fg-cyan fg-default fg-green"></span>   16 <span class="fg-cyan"> 112M </span>S <span class="bold fg-bright-black fg-default"></span>/home/diego0:52.90 diego[27d<span class="bold"><span class="bold fg-cyan">dolphin         </span> 125M <span class="fg-cyan fg-default"></span> 1.8 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 </span>1<span class="fg-cyan fg-green">474M  142M <span class="fg-cyan fg-default fg-green"></span>  544 <span class="fg-cyan"> 121M </span>S <span class="bold fg-bright-black fg-default"></span>/home/diego0:15.17 diego[28d<span class="bold"><span class="bold fg-cyan">konsole         </span> 104M <span class="fg-cyan fg-default"></span> 1.7 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 </span>1<span class="fg-cyan fg-green">123M  135M <span class="fg-cyan fg-default fg-green"></span>   16 <span class="fg-cyan"> 109M </span>S <span class="bold fg-bright-black fg-default"></span>/home/diego1:24.55 diego[29d<span class="bold"><span class="bold fg-cyan">konsole         </span>95<span class="fg-cyan fg-default"></span>792  1.7 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 </span>1<span class="fg-cyan fg-green">005M  135M <span class="fg-cyan fg-default fg-green"></span>   16 <span class="fg-cyan"> 114M </span>S <span class="bold fg-bright-black fg-default"></span>/home/diego/Documents/Git  0:10.69 diego[30d<span class="bold"><span class="bold fg-yellow">brave           </span> 348M <span class="fg-cyan fg-default"></span> 1.7 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 </span>33<span class="fg-cyan fg-green">.0<span class="fg-cyan fg-green">G <span class="fg-cyan fg-green"> 135M  211M 86<span class="fg-cyan fg-default fg-green"></span>960 <span class="bold"><span class="bold fg-bright-black">S <span class="bold fg-bright-black fg-default"></span>/home/diego12:52.34 diego[31d<span class="bold"><span class="bold fg-bright-black">N/A             </span> 680M <span class="fg-cyan fg-default"></span> 1.7 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 <span class="bold fg-bright-black fg-red">1</span>393G <span class="fg-cyan fg-green"> 132M  211M  101M </span>S N/A[23X<span class="bold fg-bright-black fg-default"></span> 0:20.35 diego[32d<span class="bold"><span class="bold fg-cyan">konsole         </span>95<span class="fg-cyan fg-default"></span>612  1.7 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 </span> 986M  130M <span class="fg-cyan fg-default"></span>   16 <span class="fg-cyan"> 110M </span>S <span class="bold fg-bright-black fg-default"></span>/home/diego0:25.62 diego[33d<span class="bold"><span class="bold fg-bright-black">N/A             </span> 705M <span class="fg-cyan fg-default"></span> 1.7 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 <span class="bold fg-bright-black fg-red">1</span>393G <span class="fg-cyan fg-green"> 129M  211M  102M </span>S N/A[23X<span class="bold fg-bright-black fg-default"></span> 1:27.74 diego[34d<span class="bold"><span class="bold fg-bright-black">N/A             </span> 674M <span class="fg-cyan fg-default"></span> 1.6 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 <span class="bold fg-bright-black fg-red">1</span>393G <span class="fg-cyan fg-green"> 128M  211M 98<span class="fg-cyan fg-default fg-green"></span>112 <span class="bold"><span class="bold fg-bright-black">S N/A[23X<span class="bold fg-bright-black fg-default"></span> 0:02.94 diego[35d<span class="bold"><span class="bold fg-bright-black">N/A             </span> 664M <span class="fg-cyan fg-default"></span> 1.5 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 <span class="bold fg-bright-black fg-red">1</span>393G <span class="fg-cyan fg-green"> 115M  211M 93<span class="fg-cyan fg-default fg-green"></span>436 <span class="bold"><span class="bold fg-bright-black">S N/A[23X<span class="bold fg-bright-black fg-default"></span> 0:04.16 diego[36d<span class="bold"><span class="bold fg-bright-black">N/A             </span> 648M <span class="fg-cyan fg-default"></span> 1.4 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 <span class="bold fg-bright-black fg-red">1</span>392G <span class="fg-cyan fg-green"> 111M  211M 96<span class="fg-cyan fg-default fg-green"></span>948 <span class="bold"><span class="bold fg-bright-black">S N/A[23X<span class="bold fg-bright-black fg-default"></span> 0:07.96 diego[37d<span class="bold"><span class="bold fg-bright-black">N/A[14X101M  1.4  13.3   0.0      0ns   0  867M  109M  1740 83008 S N/A[24X2h40:58 root[38d<span class="bold fg-bright-black fg-cyan">kioslave5       </span>62<span class="fg-cyan fg-default"></span>604  1.4 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 </span> 795M  106M <span class="fg-cyan fg-default"></span>    4 <span class="fg-cyan">89<span class="fg-cyan fg-default"></span>816 <span class="bold"><span class="bold fg-bright-black">S <span class="bold fg-bright-black fg-default"></span>/home/diego0:00.36 diego[39d<span class="bold"><span class="bold fg-bright-black">N/A             </span> 660M <span class="fg-cyan fg-default"></span> 1.4 <span class="bold"><span class="bold fg-bright-black">  0.0   0.0      0ns   0 <span class="bold fg-bright-black fg-red">1</span>393G <span class="fg-cyan fg-green"> 105M  211M 91<span class="fg-cyan fg-default fg-green"></span>864 <span class="bold"><span class="bold fg-bright-black">S N/A[23X<span class="bold fg-bright-black fg-default"></span> 0:00.56 diego[40dF1<span class="fg-black"><span class="bg-cyan fg-black">Help  <span class="bg-cyan bg-default fg-black fg-default"></span>F2<span class="fg-black"><span class="bg-cyan fg-black">Setup <span class="bg-cyan bg-default fg-black fg-default"></span>F3<span class="fg-black"><span class="bg-cyan fg-black">Search<span class="bg-cyan bg-default fg-black fg-default"></span>F4<span class="fg-black"><span class="bg-cyan fg-black">Filter<span class="bg-cyan bg-default fg-black fg-default"></span>F5<span class="fg-black"><span class="bg-cyan fg-black">Tree  <span class="bg-cyan bg-default fg-black fg-default"></span>F6<span class="fg-black"><span class="bg-cyan fg-black">SortBy<span class="bg-cyan bg-default fg-black fg-default"></span>F7<span class="fg-black"><span class="bg-cyan fg-black">Nice -<span class="bg-cyan bg-default fg-black fg-default"></span>F8<span class="fg-black"><span class="bg-cyan fg-black">Nice +<span class="bg-cyan bg-default fg-black fg-default"></span>F9<span class="fg-black"><span class="bg-cyan fg-black">Kill  <span class="bg-cyan bg-default fg-black fg-default"></span>F10<span class="fg-black"><span class="bg-cyan fg-black">Quit  <span class="bg-cyan bg-default fg-black fg-default"></span></div>
-    </div>
-</body>
-</html>

@@ -1,8 +1,0 @@
-{
-  "_comment": "SINGLE SOURCE OF TRUTH for this plugin's hook rules. Consumed by hook-engine.sh (enforce), gen-hooks-doc.sh (docs), test-hooks.sh (fixtures). NEVER hand-edit deployed copy — edit here + build.sh switch.",
-  "_status": "SCAFFOLD — no rules yet. Reserved for future sub-agent / Task-tool orchestration principles (e.g. when to delegate to Explore/general-purpose vs act inline, dedup guidance so a caller doesn't repeat a subagent's search). Split out of cloud-principles-ai-plugin on 2026-07-30 alongside compression/hooks-stack-framework/memory-system.",
-  "meta": {
-    "version": 1
-  },
-  "rules": []
-}

@@ -1,9 +1,0 @@
-{
-  "_comment": "Bundled fallback USD-per-MTok pricing for `my-ai usage` (ccusage-equivalent). Overridden by ~/.claude/claude-pricing.json if present. Keyed by model-id PREFIX (longest match wins), else `default`. cache_write is the 5-min tier.",
-  "models": {
-    "claude-opus-4":   { "input": 15, "output": 75, "cache_read": 1.50, "cache_write": 18.75 },
-    "claude-sonnet-4": { "input": 3,  "output": 15, "cache_read": 0.30, "cache_write": 3.75  },
-    "claude-haiku-4":  { "input": 1,  "output": 5,  "cache_read": 0.10, "cache_write": 1.25  }
-  },
-  "default": { "input": 15, "output": 75, "cache_read": 1.50, "cache_write": 18.75 }
-}
