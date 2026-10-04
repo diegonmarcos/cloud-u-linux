@@ -1,0 +1,26 @@
+# Repo-level git config — deployed by 9_others/build.sh
+# Managed declaratively: edit src/gitconfig, run build.sh, commit.
+[push]
+	recurseSubmodules = on-demand
+[submodule]
+	recurse = true
+[fetch]
+	recurseSubmodules = on-demand
+[core]
+	hooksPath = 0_git/dist/hooks
+[pull]
+	rebase = true
+[rebase]
+	autoStash = true
+[alias]
+	# smart, non-destructive sync — see 1_cicd/src/scripts/cloud-git-sync.sh
+	#   git sync           → remote wins on conflict (default)
+	#   git sync remote    → remote wins on conflict
+	#   git sync local     → local commits win on conflict
+	sync = !./1_cicd/dist/scripts/cloud-git-sync.sh
+	# bulletproof reset-from-origin — see 1_cicd/src/scripts/cloud-git-nuke.sh
+	# DESTRUCTIVE: wipes local commits, dirty work, untracked files. Survives
+	# force-pushes and divergent history. For ephemeral CI containers.
+	#   git nuke           → reset to origin/<current-branch>
+	#   git nuke main      → reset to origin/main explicitly
+	nuke = !./1_cicd/dist/scripts/cloud-git-nuke.sh

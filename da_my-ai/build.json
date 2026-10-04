@@ -1,0 +1,39 @@
+{
+  "name": "my-ai",
+  "description": "Claude Code via the Headroom compression proxy — CLI + Tauri GUI/systray (rebrand of claude-superset).",
+  "app": {
+    "identifier": "com.diegonmarcos.my-ai",
+    "product_name": "my-ai",
+    "wm_class": "com.diegonmarcos.my-ai",
+    "bin": "my-ai",
+    "gui_bin": "my-ai-gui",
+    "dash_bin": "my-ai-dash",
+    "_dash_note": "my-ai-dash is an internal TUI engine only — fetched into runtime.store_subdir, never copied into bin_dir/PATH. `my-ai --help` execs it from there; there is no standalone `my-ai-dash` command."
+  },
+  "build": {
+    "engine": "cargo tauri build",
+    "bundle": "deb",
+    "remote": true,
+    "_remote_note": "Rust/Tauri compile is heavy — built on GHA (ship-my-ai-app.yml), published to a rolling GH release, pulled on the laptop. Never compiled locally (freeze-guard).",
+    "repo": "diegonmarcos/cloud-u-linux",
+    "release_tag": "my-ai-latest",
+    "_arch_note": "my-ai is pure Rust → built for both arches (assets suffixed -x86_64 / -aarch64). my-ai-gui (Tauri/webkit) is desktop-only → built on gui_arches only. Termux (aarch64) pulls cli only; desktop (x86_64) pulls cli+gui.",
+    "arches": ["x86_64", "aarch64"],
+    "gui_arches": ["x86_64"],
+    "artifacts": ["my-ai", "my-ai-dash", "my-ai-gui"]
+  },
+  "runtime": {
+    "store_subdir": ".local/share/my-ai",
+    "bin_dir": ".local/bin",
+    "env": {
+      "WEBKIT_DISABLE_COMPOSITING_MODE": "1",
+      "WEBKIT_DISABLE_DMABUF_RENDERER": "1"
+    }
+  },
+  "desktop": {
+    "generic_name": "AI Launcher",
+    "comment": "Claude Code via the Headroom compression proxy — launcher + systray",
+    "categories": "Utility;Development;",
+    "icon_svg": "icon.svg"
+  }
+}

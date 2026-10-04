@@ -1,0 +1,38 @@
+# Line endings — normalize tracked text to LF (all-Linux fleet: termux, CI, VMs).
+* text=auto
+
+# Logs — union-merge: keep both sides' lines instead of conflicting, so the
+# pre-push hook's `pull --rebase --autostash` can never jam on log churn.
+# `union` is built into git (no per-machine merge.*.driver config needed).
+*.log    merge=union
+
+# Generated trees & lockfiles — mark generated so GitHub collapses them in PR
+# diffs (cosmetic; does not affect merge behavior).
+**/dist/**        linguist-generated=true
+flake.lock        linguist-generated=true
+package-lock.json linguist-generated=true
+
+# Binary assets — never text-diff or 3-way line-merge (avoids corruption on
+# keystores/apks and noisy diffs on images/fonts).
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.ttf   binary
+*.otf   binary
+*.woff  binary
+*.woff2 binary
+*.apk   binary
+*.aab   binary
+*.jar   binary
+*.aar   binary
+*.keystore binary
+*.jks   binary
+*.so    binary
+*.zst   binary
+*.nar   binary
+*.gz    binary
+*.zip   binary
+*.pdf   binary

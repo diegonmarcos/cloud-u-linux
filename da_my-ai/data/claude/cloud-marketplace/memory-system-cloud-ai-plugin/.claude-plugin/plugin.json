@@ -1,0 +1,7 @@
+{
+  "name": "memory-system-cloud-ai-plugin",
+  "displayName": "Memory System",
+  "version": "1.0.0",
+  "description": "Diego's memory-structure rule: MEMORY.md is an index, not a preload bundle — entries live in type subfolders, loaded on demand only. Injected at SessionStart. Split from cloud-principles-ai-plugin.",
+  "author": { "name": "Diego Nepomuceno Marcos" }
+}

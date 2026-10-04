@@ -1,0 +1,87 @@
+[
+  {
+    "_comment": "Mount configuration - edit this file to add/modify mount points",
+    "_schema": {
+      "name": "Display name and mount folder name",
+      "remote": "rclone remote name (must be configured in rclone)",
+      "type": "vm | drive | phone",
+      "enabled": "true | false",
+      "vm_subdirs": "(vm only) subdirs to mount: sys=/, home=/home, docker=/var/lib/docker/volumes, mnt=/mnt"
+    }
+  },
+  {
+    "_settings": {
+      "mount_dir": "/home/diego/Mounts/Storage",
+      "rclone_opts": "--vfs-cache-mode writes",
+      "log_file": ".mount.log"
+    }
+  },
+  {
+    "_oci_flex_0": {
+      "instance_id": "ocid1.instance.oc1.eu-marseille-1.anwxeljruadvczacj7dfxl7uifar574je7fzlvtdjp4ghljdwuwdemsdbiva",
+      "region": "eu-marseille-1"
+    }
+  },
+  {
+    "_oci_flex_1": {
+      "instance_id": "ocid1.instance.oc1.eu-marseille-1.anwxeljruadvczachwpa3qrh7n25vfez3smidz4o7gpmtj4ga4d7zqlja5yq",
+      "region": "eu-marseille-1"
+    }
+  },
+  {
+    "_phone": {
+      "device_id": "28b75fc5_4661_422f_9b7f_38252da1579d",
+      "name": "samsung_gS21",
+      "sftp_base": "/run/user/1000/28b75fc5_4661_422f_9b7f_38252da1579d/storage/emulated/0"
+    }
+  },
+  {
+    "name": "Gdrive_dnm",
+    "remote": "Gdrive_dnm",
+    "type": "drive",
+    "enabled": true,
+    "comment": "diegonmarcos1@gmail.com"
+  },
+  {
+    "name": "Gdrive_me",
+    "remote": "Gdrive_me",
+    "type": "drive",
+    "enabled": true,
+    "comment": "me@diegonmarcos.com"
+  },
+  {
+    "name": "OCI_micro_0",
+    "remote": "OCI_micro_0",
+    "type": "vm",
+    "enabled": true,
+    "vm_subdirs": ["sys", "home", "docker", "mnt"]
+  },
+  {
+    "name": "OCI_micro_1",
+    "remote": "OCI_micro_1",
+    "type": "vm",
+    "enabled": true,
+    "vm_subdirs": ["sys", "home", "docker", "mnt"]
+  },
+  {
+    "name": "OCI_Flex_0",
+    "remote": "OCI_Flex_0",
+    "type": "vm",
+    "enabled": true,
+    "vm_subdirs": ["sys", "home", "docker", "mnt"]
+  },
+  {
+    "name": "OCI_Flex_1",
+    "remote": "OCI_Flex_1",
+    "type": "vm",
+    "enabled": true,
+    "vm_subdirs": ["sys", "home", "docker", "mnt"]
+  },
+  {
+    "name": "GCP_micro_1",
+    "remote": "GCP_micro_1",
+    "type": "vm",
+    "enabled": true,
+    "vm_subdirs": ["sys", "home", "docker", "mnt"]
+  }
+]

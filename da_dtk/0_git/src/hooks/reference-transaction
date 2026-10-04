@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║ reference-transaction — forbid creating new local branches       ║
+# ║                                                                  ║
+# ║ Source: cloud/0_git/src/hooks/reference-transaction        ║
+# ║ Active via [core] hooksPath = 0_git/dist/hooks             ║
+# ║                                                                  ║
+# ║ Main-only policy: this repo is worked on directly on `main`.     ║
+# ║ A branch creation is a ref update under refs/heads/ whose OLD    ║
+# ║ value is the all-zeros object id. We reject the whole            ║
+# ║ transaction at the "prepared" stage, which makes                ║
+# ║ `git branch <new>`, `git checkout -b <new>` and                 ║
+# ║ `git switch -c <new>` fail. Updates to existing branches,       ║
+# ║ fetches (refs/remotes/*), tags, resets and commits are          ║
+# ║ unaffected. main/master are always allowed.                     ║
+# ╚══════════════════════════════════════════════════════════════════╝
+set -uo pipefail
+
+# Only act on the "prepared" phase (before the ref update commits).
+[ "${1:-}" = "prepared" ] || exit 0
+
+ZERO=0000000000000000000000000000000000000000
+
+while read -r old _new ref; do
+  case "$ref" in
+    refs/heads/main|refs/heads/master) : ;;
+    refs/heads/*)
+      if [ "$old" = "$ZERO" ]; then
+        {
+          printf '\n\033[31mBLOCKED: creating new local branches is disabled (main-only policy).\033[0m\n'
+          printf '  attempted : %s\n' "${ref#refs/heads/}"
+          printf '  Work directly on main.\n'
+          printf '  Source    : 0_git/src/hooks/reference-transaction\n\n'
+        } >&2
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+exit 0

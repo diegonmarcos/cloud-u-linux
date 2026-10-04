@@ -1,0 +1,18 @@
+{
+  "fuse_drives": [
+    {
+      "name": "Gdrive_dnm",
+      "remote": "Gdrive_dnm",
+      "type": "drive",
+      "enabled": true,
+      "account": "diegonmarcos1@gmail.com"
+    },
+    {
+      "name": "Gdrive_me",
+      "remote": "Gdrive_me",
+      "type": "drive",
+      "enabled": true,
+      "account": "me@diegonmarcos.com"
+    }
+  ]
+}

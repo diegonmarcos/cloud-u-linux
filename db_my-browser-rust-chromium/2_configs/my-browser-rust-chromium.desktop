@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=My Browser (Rust/Chromium)
+GenericName=Web Browser
+Comment=Rust + real-Chromium (CEF) browser with a genuine Chrome TLS fingerprint
+Exec=@EXEC@ %U
+Icon=my-browser-rust-chromium
+Terminal=false
+Categories=Network;WebBrowser;
+StartupNotify=true
+StartupWMClass=my-browser-rust-chromium
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;

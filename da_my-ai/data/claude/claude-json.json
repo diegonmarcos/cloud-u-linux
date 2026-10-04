@@ -1,0 +1,13 @@
+{
+  "_doc": "Keys enforced in ~/.claude.json — Claude Code's OTHER config file, and the one settings.base.json cannot reach. Declared here because the SoT owns the configuration and the flakes only deploy it; claude.nix already applies exactly this shape for autoUpdates, and a second hardcoded key in an activation script is how the first one stops being findable.",
+
+  "_doc_why_not_settings_base": "~/.claude/settings.json and ~/.claude.json are different files with different rules. settings.json is inert config the flakes may lay down whole. ~/.claude.json is large mutable runtime state — auth, project history, onboarding flags — and is gitignored, so it must never be written wholesale. Anything applying this file sets ONE KEY AT A TIME and passes the rest through, via a temp file and an atomic rename, so an interrupted activation cannot truncate it. That is what claude.nix's claudeAutoUpdates activation already does; this file is the data it should read instead of naming a key inline.",
+
+  "_doc_remote_control": "remoteControlAtStartup makes every new CLI session connect Remote Control at startup, so a session appears in the app without being toggled by hand each time. Same effect as turning on 'Enable Remote Control for all sessions' in /config, which writes this key. CLI only: the desktop app keeps its own per-session remoteControlEnabled runtime state, defaults it to off, and does not read this key — so it still has to be toggled per session there, and no amount of declaring it here changes that.",
+
+  "keys": {
+    "remoteControlAtStartup": true
+  },
+
+  "_doc_not_included": "autoUpdates stays in claude.nix for now rather than moving here. It is conditional in a way this file cannot express: it is only meaningful because the desktop installMethod is 'native' (~/.local/bin/claude -> versions/<ver>), and under a nix-managed claude the store is immutable and the flake pins the version, which makes setting it pointless rather than merely redundant. Moving it would silently apply it to hosts where that reasoning does not hold."
+}

@@ -1,0 +1,8 @@
+{
+  "name": "file-editor",
+  "display_name": "File Editor",
+  "home": true,
+  "fileeditor": true,
+  "theme": { "accent": "#f39c12" },
+  "sections": []
+}

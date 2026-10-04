@@ -1,0 +1,9 @@
+function myhelp
+    printf "\n\033[1;32m=== QUICK REFERENCE ===\033[0m\n"
+    echo "Navigation:  ..  ...  ....  mkcd <dir>"
+    echo "Listing:     ll  la  lh  lt"
+    echo "Git:         gs  ga  gc  gp  gl  gd  gcam  gpsh"
+    echo "Docker:      dps  dpsa  dcu  dcd  dlog  dex"
+    echo "System:      df  free  ports  myip  cpucap"
+    echo "Tools:       extract  backup  qfind  serve  duh"
+end

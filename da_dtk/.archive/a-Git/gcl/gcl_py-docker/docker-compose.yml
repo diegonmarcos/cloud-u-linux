@@ -1,0 +1,53 @@
+# docker-compose.yml for gcl.py
+# Usage:
+#   docker-compose run --rm gcl              # Launch TUI
+#   docker-compose run --rm gcl status       # Run CLI command
+#   docker-compose run --rm gcl sync         # Sync repos
+
+version: '3.8'
+
+services:
+  gcl:
+    # Build configuration - builds from Dockerfile in current directory
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # Image name after building
+    image: gcl-manager:latest
+
+    # Container name (optional, for easy identification)
+    container_name: gcl-tool
+
+    # Enable interactive terminal (required for TUI/curses)
+    stdin_open: true
+    tty: true
+
+    # Mount volumes
+    volumes:
+      # Mount SSH keys for git authentication (read-only for security)
+      - ~/.ssh:/root/.ssh:ro
+
+      # Mount your Git repositories directory
+      - ~/Documents/Git:/workspace
+
+      # Optional: Mount git config
+      - ~/.gitconfig:/root/.gitconfig:ro
+
+    # Environment variables
+    environment:
+      - TERM=xterm-256color
+      - PYTHONUNBUFFERED=1
+
+    # Working directory inside container
+    working_dir: /workspace
+
+    # Network mode (optional - use host network for simplicity)
+    network_mode: host
+
+    # Resource limits (optional - prevents runaway processes)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '1.0'
+    #       memory: 512M

@@ -1,0 +1,33 @@
+[package]
+name = "c3-morpheus"
+version = "0.1.0"
+edition = "2021"
+
+# ONE BINARY, NAMED FOR WHAT SHOWS UP IN ps.
+#
+# Same rule da_watchdog's Cargo.toml states at length: a process is called
+# whatever its FILE is called, because the process table is built from
+# /proc/<pid>/cmdline. `c3-morpheus` is unambiguous next to `watchdog-d`.
+[[bin]]
+name = "c3-morpheus"
+path = "src/main.rs"
+
+# NO DEPENDENCIES, ON PURPOSE.
+#
+# v1 asks two servers a question and prints the answer. Pulling reqwest +
+# serde + tokio to do that would add a minute to every CI build and a TLS
+# stack this binary has to keep patched, to reimplement what `curl`, `gh` and
+# `jq` already do on every box in this fleet. Same shape as da_watchdog, which
+# is std + libc and shells out to journalctl/lsblk/nft: the tools are
+# ADVERTISED in flake.nix::runtimeDeps and a missing one is reported as a
+# missing tool, never as an empty list.
+#
+# When morpheus grows a daemon that must run headless with no PATH to rely on,
+# that is the moment to link an HTTP client — not before.
+[dependencies]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

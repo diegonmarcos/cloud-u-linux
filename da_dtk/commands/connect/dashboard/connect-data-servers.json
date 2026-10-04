@@ -1,0 +1,77 @@
+{
+  "data_servers": [
+    {
+      "name": "home-webdav",
+      "type": "webdav",
+      "port": 8082,
+      "root": "~",
+      "auth": "sops",
+      "tls": true,
+      "mode": "lan",
+      "enabled": true
+    },
+    {
+      "name": "home-sftp",
+      "type": "sftp",
+      "port": 2022,
+      "root": "~",
+      "auth": "sops",
+      "tls": false,
+      "mode": "lan",
+      "enabled": true
+    },
+    {
+      "name": "home-http",
+      "type": "http",
+      "port": 8083,
+      "root": "~",
+      "auth": "none",
+      "tls": false,
+      "mode": "lan",
+      "enabled": true
+    },
+    {
+      "name": "vault-share",
+      "type": "webdav",
+      "port": 8480,
+      "root": "~/Mounts/Git/vault",
+      "auth": "basic",
+      "tls": true,
+      "mode": "local",
+      "enabled": false
+    },
+    {
+      "name": "photos-share",
+      "type": "webdav",
+      "port": 8481,
+      "root": "~/Mounts/Storage/Gdrive_me",
+      "auth": "none",
+      "tls": false,
+      "mode": "lan",
+      "enabled": false
+    }
+  ],
+  "unison_profiles": [
+    {
+      "name": "termux-home",
+      "profile": "termux-home",
+      "enabled": true
+    }
+  ],
+  "server_settings": {
+    "cert_dir": "~/.config/rclone/certs",
+    "secrets_paths": [
+      "~/git/front/secrets.yaml",
+      "~/Mounts/Git/front/secrets.yaml"
+    ],
+    "age_key_paths": [
+      "~/git/cloud-vault/A0_keys/providers/system/oauth/age_keys.txt",
+      "~/Mounts/Git/vault/A0_keys/providers/system/oauth/age_keys.txt"
+    ],
+    "http_server_paths": [
+      "~/git/cloud-mykonsole-dtk/a-cloud-connect/libs/web-server-md-eruda.mjs",
+      "~/Mounts/Git/tools/a-cloud-connect/libs/web-server-md-eruda.mjs"
+    ],
+    "log_dir": "~/.config/cloud-connect/server-logs"
+  }
+}

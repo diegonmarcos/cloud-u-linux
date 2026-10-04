@@ -1,0 +1,901 @@
+// Writing a snapshot out, and the /proc reads only the detail view needs.
+use std::fs;
+
+use serde_json::Value;
+
+use crate::tui::monitor::data::{arr, num, text};
+use crate::tui::monitor::view::fmt::{fmt_bytes_short, fmt_g, fmt_mib, fmt_mib_g, fmt_uptime};
+
+/// Everything on screen, written out twice: the snapshot verbatim as JSON and
+/// a readable report as Markdown.
+///
+/// Both, not one. The JSON is the truth and survives being diffed against a
+/// later export or fed to something else; the Markdown is what you can paste
+/// into an issue at 3am without the reader parsing a thousand-line object.
+/// Writing only the pretty one is how exports stop being useful the moment
+/// somebody needs a field it left out.
+///
+/// A YAML scalar, quoted only where bare would parse back as something else.
+///
+/// The point of the YAML is token count, and a quote is a token — so bare is
+/// the default and quoting is the exception: a number-, bool- or null-looking
+/// string, or one carrying structural characters. Emitted as UTF-8 throughout,
+/// never \u-escaped, for the same reason.
+fn yaml_str(v: &str) -> String {
+    let needs = v.is_empty()
+        || v.trim() != v
+        || v.contains(['\n', '"', '\'', ':', '#', '\\'])
+        || v.starts_with(['-', '?', ',', '[', ']', '{', '}', '&', '*', '!', '|', '>', '%', '@', '`'])
+        || matches!(v, "true" | "false" | "null" | "yes" | "no" | "on" | "off" | "~")
+        || v.parse::<f64>().is_ok();
+    if !needs {
+        return v.to_string();
+    }
+    format!("\"{}\"", v.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n"))
+}
+
+/// Forty lines against a serde_yaml dependency and its transitive tree, for
+/// one output format used in one function — the same trade the sampler makes
+/// by writing its JSON by hand. Empty containers go inline so a map of mostly
+/// empties does not become a page of bare keys.
+///
+/// ONE space of indent, not two. This file is the machine-facing half of the
+/// pair — the Markdown beside it is the one meant to be read — and on a
+/// snapshot nested this deep the second space buys nothing but 95 KB.
+pub(crate) fn to_yaml(v: &Value, indent: usize, out: &mut String) {
+    let pad = " ".repeat(indent);
+    let block = |v: &Value| {
+        matches!(v, Value::Object(o) if !o.is_empty()) || matches!(v, Value::Array(a) if !a.is_empty())
+    };
+    match v {
+        Value::Object(m) if m.is_empty() => out.push_str("{}\n"),
+        Value::Array(a) if a.is_empty() => out.push_str("[]\n"),
+        Value::Object(m) => {
+            out.push('\n');
+            for (k, val) in m {
+                out.push_str(&pad);
+                out.push_str(&yaml_str(k));
+                out.push(':');
+                // A nested block starts on the next line at one deeper indent;
+                // a scalar sits on this one, after a single space.
+                if !block(val) {
+                    out.push(' ');
+                }
+                to_yaml(val, indent + 1, out);
+            }
+        }
+        Value::Array(a) => {
+            out.push('\n');
+            for item in a {
+                out.push_str(&pad);
+                out.push_str("- ");
+                to_yaml(item, indent + 1, out);
+            }
+        }
+        Value::String(s) => {
+            out.push_str(&yaml_str(s));
+            out.push('\n');
+        }
+        Value::Null => out.push_str("null\n"),
+        other => {
+            out.push_str(&other.to_string());
+            out.push('\n');
+        }
+    }
+}
+
+/// The units that MEAN something, plus counts for the rest.
+///
+/// `v` publishes all 428. The first cut kept everything not running, which
+/// sounds small and is not: 144 of those are "not-loaded", meaning a unit FILE
+/// exists that was never loaded — installed software, not a stopped service,
+/// with `sub` literally an em dash. Another 148 are loaded-but-dead, mostly
+/// oneshots that ran and exited as designed.
+///
+/// Six are failed. That is the set anybody opens this file to find, so it is
+/// the set the machine files carry, with every state counted beside it so the
+/// totals are stated rather than quietly dropped. The Markdown still tables
+/// every unit that is not running, capped at sixty, and the live `v` view
+/// still shows all of them — this is the export, not the panel.
+fn trim_units(v: &Value) -> Value {
+    let mut out = v.clone();
+    let Some(svc) = v.get("services").and_then(|x| x.as_array()) else { return out };
+    let count = |state: &str| svc.iter().filter(|u| text(u, "active") == state).count();
+    let failed: Vec<Value> =
+        svc.iter().filter(|u| text(u, "active") == "failed").cloned().collect();
+    if let Some(o) = out.as_object_mut() {
+        o.insert("services_declared".into(), serde_json::json!(svc.len()));
+        o.insert("services_active".into(), serde_json::json!(count("active")));
+        o.insert("services_inactive".into(), serde_json::json!(count("inactive")));
+        o.insert("services_not_loaded".into(), serde_json::json!(count("not-loaded")));
+        o.insert("services_failed".into(), serde_json::json!(failed.len()));
+        o.insert("services".into(), Value::Array(failed));
+    }
+    out
+}
+
+/// The name is {host}-{user}-{timestamp}: the triple that stays unambiguous
+/// once you have exported the same peer twice and a second machine once. The
+/// host comes from the SNAPSHOT, so exporting a peer names the peer.
+///
+/// `fleet` EMPTY is the default and the common case: one export, one machine.
+/// Pass peers to fold the whole mesh into the same file — everything the
+/// panel could show, at the cost of a file several times the size.
+/// The Markdown report for ONE machine.
+///
+/// Lifted out of export_snapshot unchanged so that every machine in a fleet
+/// export gets the same report, not just the one the cursor was on. A peer
+/// page whose report was a stub would be a page nobody opens twice.
+fn report(
+    s: &Value,
+    host: &str,
+    user: &str,
+    stamp: &str,
+    target: Option<&str>,
+    files: &[String],
+    fleet: &[(String, Value)],
+) -> String {
+    let hi = |k: &str| text(s, &format!("host_info.{k}"));
+    let n = |k: &str| num(s, k);
+    let mut m = String::new();
+    m.push_str(&format!("# {host} · {stamp}\n\n"));
+    if let Some(a) = target {
+        m.push_str(&format!(
+            "> Collected from `{a}` over ssh by the hub, not published by that machine.\n\n"
+        ));
+    }
+    let row = |m: &mut String, k: &str, v: String| m.push_str(&format!("| {k} | {v} |\n"));
+    m.push_str("| | |\n|---|---|\n");
+    row(&mut m, "user", user.to_string());
+    row(&mut m, "os", hi("os"));
+    row(&mut m, "kernel", hi("kernel"));
+    row(&mut m, "uptime", fmt_uptime(n("totals.since_s")));
+    row(&mut m, "cpu", text(s, "cpu_info.model"));
+    row(&mut m, "cores", format!("{}", arr(s, "cores").len()));
+    row(&mut m, "memory", fmt_mib_g(n("mem_detail.total")));
+    row(&mut m, "swap", fmt_mib_g(n("swap_detail.total")));
+
+    m.push_str("\n## Now\n\n| | |\n|---|---|\n");
+    row(&mut m, "cpu", format!("{:.1}%", n("cpu")));
+    row(&mut m, "load", format!("{:.2} {:.2} {:.2}", n("load1"), n("load5"), n("load15")));
+    row(
+        &mut m,
+        "memory",
+        format!("{:.1}%  {} of {}", n("mem"), fmt_mib_g(n("mem_detail.used")), fmt_mib_g(n("mem_detail.total"))),
+    );
+    row(&mut m, "swap", format!("{:.1}%", n("swap")));
+    row(
+        &mut m,
+        "psi cpu / io / mem",
+        format!("{:.2} / {:.2} / {:.2}", n("psi.cpu.some10"), n("psi.io.full10"), n("psi.memory.full10")),
+    );
+
+    m.push_str("\n## Moved since boot\n\n| | |\n|---|---|\n");
+    for (k, f) in [
+        ("downloaded", "totals.net_rx_bytes"),
+        ("uploaded", "totals.net_tx_bytes"),
+        ("read", "totals.disk_read_bytes"),
+        ("written", "totals.disk_write_bytes"),
+    ] {
+        row(&mut m, k, fmt_bytes_short(n(f)));
+    }
+
+    let ifs = arr(s, "host_info.ifaces");
+    if !ifs.is_empty() {
+        m.push_str("\n## Network\n\n| interface | address |\n|---|---|\n");
+        for i in ifs {
+            m.push_str(&format!("| {} | {} |\n", text(i, "name"), text(i, "addr")));
+        }
+        let pubip = hi("public");
+        m.push_str(&format!(
+            "\ngateway `{}` via `{}` · public {} · dns {}\n",
+            hi("gateway"),
+            hi("wan_if"),
+            if pubip.is_empty() { "behind NAT".into() } else { format!("`{pubip}`") },
+            arr(s, "host_info.dns")
+                .iter()
+                .filter_map(|d| d.as_str())
+                .map(|d| format!("`{d}`"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ));
+    }
+
+    for pool in arr(s, "storage") {
+        m.push_str(&format!(
+            "\n## Storage ({})\n\n{} of {} used\n\n| mount | used | limit |\n|---|---|---|\n",
+            text(pool, "label"),
+            fmt_g(num(pool, "alloc_used")),
+            fmt_g(num(pool, "dev_size"))
+        ));
+        for v in arr(pool, "volumes") {
+            let lim = num(v, "limit");
+            m.push_str(&format!(
+                "| {} | {} | {} |\n",
+                text(v, "mount"),
+                fmt_g(num(v, "referenced")),
+                if lim > 0.0 { fmt_g(lim) } else { "—".into() }
+            ));
+        }
+    }
+
+    let cs = arr(s, "containers");
+    if !cs.is_empty() {
+        m.push_str("\n## Containers\n\n| name | status | cpu | mem | ports | image |\n|---|---|---|---|---|---|\n");
+        for c in cs {
+            let or = |k: &str| {
+                let v = text(c, k);
+                if v.is_empty() { "—".to_string() } else { v }
+            };
+            m.push_str(&format!(
+                "| {} | {} | {} | {} | {} | {} |\n",
+                text(c, "name"),
+                text(c, "status"),
+                or("cpu"),
+                or("mem_pct"),
+                or("ports"),
+                text(c, "image")
+            ));
+        }
+    }
+
+    m.push_str("\n## Processes\n\n| pid | user | name | cpu% | mem% | rss |\n|---|---|---|---|---|---|\n");
+    for p in arr(s, "proc_table").iter().take(40) {
+        m.push_str(&format!(
+            "| {} | {} | {} | {:.1} | {:.2} | {} |\n",
+            num(p, "pid") as i64,
+            text(p, "user"),
+            text(p, "name"),
+            num(p, "cpu_pct"),
+            num(p, "mem_pct"),
+            fmt_mib(num(p, "mem_rss_bytes"))
+        ));
+    }
+    // ── containers-i ───────────────────────────────────────────────────
+    let imgs = arr(s, "images");
+    if !imgs.is_empty() {
+        let used: std::collections::HashSet<String> = arr(s, "containers")
+            .iter()
+            .map(|c| text(c, "image"))
+            .collect();
+        m.push_str("\n## Images\n\n| image | size | created | used by |\n|---|---|---|---|\n");
+        for i in imgs {
+            let full = format!("{}:{}", text(i, "repo"), text(i, "tag"));
+            m.push_str(&format!(
+                "| {full} | {} | {} | {} |\n",
+                text(i, "size"),
+                text(i, "created"),
+                if used.contains(&full) { "yes" } else { "**nothing**" }
+            ));
+        }
+    }
+
+    // ── history ────────────────────────────────────────────────────────
+    if num(s, "history.samples") >= 2.0 {
+        let h = |k: &str| num(s, &format!("history.{k}"));
+        m.push_str(&format!(
+            "\n## Last {} ({} samples)\n\n| | |\n|---|---|\n",
+            fmt_uptime(h("window_s")),
+            h("samples") as i64
+        ));
+        for (k, f) in [
+            ("downloaded", "net_rx_bytes"),
+            ("uploaded", "net_tx_bytes"),
+            ("read", "disk_read_bytes"),
+            ("written", "disk_write_bytes"),
+        ] {
+            m.push_str(&format!("| {k} | {} |\n", fmt_bytes_short(h(f))));
+        }
+        for (k, f) in [
+            ("cpu, time-weighted", "cpu_pct_avg"),
+            ("memory, time-weighted", "mem_pct_avg"),
+            ("swap, time-weighted", "swap_pct_avg"),
+        ] {
+            m.push_str(&format!("| {k} | {:.2}% |\n", h(f)));
+        }
+    }
+
+    // ── fleet ──────────────────────────────────────────────────────────
+    // Only in a fleet export; a single-machine file has no peers to table.
+    if !fleet.is_empty() {
+        m.push_str("\n## Fleet\n\n| peer | cpu | mem | swap | load | cores | psi cpu/io/mem |\n|---|---|---|---|---|---|---|\n");
+        for (alias, v) in fleet {
+            let g = |k: &str| num(v, k);
+            m.push_str(&format!(
+                "| {alias} | {:.1}% | {:.1}% | {:.1}% | {:.2} {:.2} {:.2} | {} | {:.2} / {:.2} / {:.2} |\n",
+                g("cpu"), g("mem"), g("swap"),
+                g("load1"), g("load5"), g("load15"),
+                arr(v, "cores").len(),
+                g("psi.cpu.some10"), g("psi.io.full10"), g("psi.memory.full10"),
+            ));
+        }
+    }
+
+    // ── declared units ─────────────────────────────────────────────────
+    let svc = arr(s, "services");
+    if !svc.is_empty() {
+        let bad: Vec<&Value> = svc
+            .iter()
+            .filter(|u| {
+                let a = text(u, "active");
+                a == "failed" || a == "inactive" || a == "not-loaded"
+            })
+            .collect();
+        m.push_str(&format!(
+            "\n## Units\n\n{} declared, {} active. Not running:\n\n| unit | state | scope |\n|---|---|---|\n",
+            svc.len(),
+            svc.iter().filter(|u| text(u, "active") == "active").count()
+        ));
+        for u in bad.iter().take(60) {
+            m.push_str(&format!(
+                "| {} | {}/{} | {} |\n",
+                text(u, "name"),
+                text(u, "active"),
+                text(u, "sub"),
+                text(u, "scope")
+            ));
+        }
+        if bad.len() > 60 {
+            m.push_str(&format!("\n… and {} more not running\n", bad.len() - 60));
+        }
+    }
+
+    // ── files ──────────────────────────────────────────────────────────
+    if !files.is_empty() {
+        m.push_str(&format!(
+            "\n## Home\n\n{} entries, three levels deep.\n\n```\n",
+            files.len()
+        ));
+        // Capped: a full tree in a report is a scroll, not a section. The
+        // whole thing is in the JSON beside it.
+        for l in files.iter().take(400) {
+            m.push_str(l);
+            m.push('\n');
+        }
+        if files.len() > 400 {
+            m.push_str(&format!("… {} more lines, all of them in the JSON\n", files.len() - 400));
+        }
+        m.push_str("```\n");
+    }
+
+    // The Markdown caps its lists; the two machine-readable files do not, and
+    // saying which is which here is cheaper than finding out later that the
+    // table stopped at sixty units.
+    m.push_str(&format!(
+        "\n<sub>my-konsole-dash · the JSON and YAML beside this file are the same data \
+         in full — this machine's snapshot, its file tree{}. \
+         Declared units are the ones NOT running, the same set as above. \
+         The YAML is the same content at roughly a third of the tokens.</sub>\n",
+        if fleet.is_empty() { "" } else { " and every fleet peer" }
+    ));
+    m
+}
+
+/// Every machine this user has, not just the one being measured.
+///
+/// MACHINE used to name the box you were standing on, which answers a question
+/// nobody asked: the report is read as "what have I got".
+///
+/// TWO SOURCES, AND THEY ARE NOT THE SAME LIST. ~/.ssh/config says what is
+/// reachable; the fleet declaration says what EXISTS. A VM with no ssh entry
+/// yet — one still being provisioned, one reached another way — is missing
+/// from the first and present in the second, and it is still a VM you have.
+/// Neither is a probe, so a one-shot export enumerates the fleet as completely
+/// as a running panel and a machine that is switched off still appears.
+///
+/// The ssh side needs deduplicating before it is worth showing. One box owns
+/// several Host entries — a -dropbear alias for the early-boot shell, -pub and
+/// -v6 for the other routes to the same address — and listing them as separate
+/// machines turns six machines into sixteen rows of noise. Keyed by address,
+/// shortest alias wins, and entries that resolve to no address at all (github.com)
+/// are not machines.
+pub(super) fn fleet_machines() -> Vec<Value> {
+    let mut out: Vec<Value> = vec![];
+    let mut seen: Vec<String> = vec![];
+
+    // EVERY address a machine answers on, not just the one it is keyed by.
+    //
+    // A machine is on up to four mesh networks — wg0 v4 and v6, the public
+    // tunnel's v4 and v6 — and the fleet tab has a page per network. Recording
+    // one address meant three of those four pages could never have a row on
+    // them, whatever the mesh was actually doing.
+    //
+    // A list rather than four named fields, because the page decides what it
+    // wants by the PREFIX its Sub declares in TABS. That table is where "which
+    // network is this" is written down, and a second answer here would be a
+    // second thing to keep in step with it.
+    let addrs = |v: &[&str]| -> Value {
+        Value::Array(
+            v.iter().filter(|a| !a.is_empty()).map(|a| Value::String((*a).into())).collect(),
+        )
+    };
+
+    // The declaration first, so a declared VM keeps its real name and its
+    // provider/shape rather than whatever alias ssh happens to call it.
+    for (name, v) in declared_fleet() {
+        let wg = text(&v, "wg_ip");
+        let wg6 = text(&v, "wg_ipv6");
+        let key = if wg.is_empty() { text(&v, "ip") } else { wg.clone() };
+        if !key.is_empty() {
+            seen.push(key);
+        }
+        if !text(&v, "ssh_alias").is_empty() {
+            seen.push(text(&v, "ssh_alias"));
+        }
+        // The NAME is what the fleet calls it — the ssh alias — not the key
+        // config.json happens to file it under. "gcp-E2-f_0" is a provider
+        // and a shape; "gcp-proxy" is the machine, and it is the name in
+        // every other tool, in the mesh table and in the reader's head.
+        let alias = text(&v, "ssh_alias");
+        let shown = if alias.is_empty() { name.clone() } else { alias.clone() };
+        out.push(serde_json::json!({
+            "name": shown,
+            "key": name,
+            "alias": text(&v, "ssh_alias"),
+            "ip": if wg.is_empty() { text(&v, "ip") } else { wg.clone() },
+            "public": text(&v, "ip"),
+            "addrs": addrs(&[wg.as_str(), wg6.as_str()]),
+            "role": text(&v, "wg_role"),
+            "user": text(&v, "user"),
+            "kind": "vm",
+            "local": false,
+        }));
+    }
+
+    for p in crate::tui::mesh::peers_from_ssh_config() {
+        if p.ip.is_empty() || p.ip == p.alias {
+            continue; // a Host with no HostName is not a machine
+        }
+        // -dropbear is the early-boot shell, -pub the public route, -v6 the
+        // v6 one: four Host entries, one machine. Keyed by the base name as
+        // well as the address, because the alternate routes have addresses of
+        // their own and would otherwise each land as a machine.
+        let base = ["-dropbear", "-pub", "-v6", "-v4"]
+            .iter()
+            .fold(p.alias.as_str(), |a, sfx| a.strip_suffix(sfx).unwrap_or(a))
+            .to_string();
+        if seen.contains(&p.ip) || seen.contains(&base) {
+            // KEPT, not dropped. The alternate route was skipped outright, so
+            // the only record of oci-analytics-pub's 10.1.0.1 and its
+            // fd0c:1d01::1 was the ssh config itself — which is why the two
+            // public-tunnel pages were empty on a fleet that plainly has one.
+            // Deduping the ROW was right; discarding the address was not.
+            let hit = out
+                .iter()
+                .position(|m| text(m, "name") == base || text(m, "alias") == base);
+            if let Some(i) = hit {
+                if let Some(list) = out[i].get_mut("addrs").and_then(|a| a.as_array_mut()) {
+                    if !list.iter().any(|a| a.as_str() == Some(p.ip.as_str())) {
+                        list.push(Value::String(p.ip.clone()));
+                    }
+                }
+            }
+            continue;
+        }
+        seen.push(p.ip.clone());
+        seen.push(base.clone());
+        out.push(serde_json::json!({
+            "name": p.alias,
+            "alias": p.alias,
+            "ip": p.ip.clone(),
+            "public": "",
+            "addrs": addrs(&[p.ip.as_str()]),
+            "role": "",
+            "user": "",
+            "kind": if p.local { "this machine" } else { "peer" },
+            "local": p.local,
+        }));
+    }
+
+    // STALE ssh-config HOSTS ARE NOT FLEET.
+    //
+    // ~/.ssh/config outlives the machines in it: oci-apps-2 and gcp-t4 were
+    // archived from config.json and stayed in the phone's config file for
+    // months, so the drawer offered two machines that do not exist. A Host
+    // entry is evidence that something WAS reachable, not that it is fleet —
+    // the declaration is what says which machines exist. So a peer the
+    // declaration does not know is kept only while it answers, and marked.
+    for m in out.iter_mut() {
+        if text(m, "kind") != "peer" {
+            continue;
+        }
+        if let Some(o) = m.as_object_mut() {
+            o.insert("undeclared".into(), Value::Bool(true));
+        }
+    }
+    out.retain(|m| {
+        text(m, "kind") != "peer" || crate::tui::mesh::reachable(&text(m, "ip"))
+    });
+
+    // THE CLIENTS ARE FLEET TOO — and they come LAST.
+    //
+    // config.json declares five wireguard clients beside the VMs: this laptop,
+    // the phone, and three CI runners. This function read only `vms`. The
+    // laptop and the phone appeared anyway, by the accident of having a Host
+    // entry in ~/.ssh/config; gha-runner, health-runner and vault-backup have
+    // no ssh alias and so appeared on no page at all, while holding mesh
+    // addresses .200 to .202. "Every mesh peer side by side" was missing three
+    // of them.
+    //
+    // After the ssh pass rather than before it, because the two overlap and
+    // ssh knows things the declaration does not: it is ssh that reports which
+    // row is THIS machine, and the declaration calls this laptop `surface` and
+    // the phone `termux` where the names anyone types are `surface-nixos` and
+    // `phone`. Running first, it would have renamed both and dropped the
+    // `local` flag the page uses to mark the host you are on.
+    //
+    // So a client already present only donates its v6, which the declaration
+    // has and ssh does not.
+    for (name, v) in declared_clients() {
+        let wg = text(&v, "wg_ip");
+        let wg6 = text(&v, "wg_ipv6");
+        if wg.is_empty() {
+            continue;
+        }
+        // The DECLARED name, where there is one: config.json now carries
+        // `name` per client, so this laptop is desktop-nixos and the phone is
+        // termux-galaxy rather than the config keys `surface` and `termux`.
+        let shown = { let n = text(&v, "name"); if n.is_empty() { name.clone() } else { n } };
+        if let Some(i) = out.iter().position(|m| text(m, "ip") == wg) {
+            // A row ssh named first is renamed to the declared name — the
+            // declaration is where the fleet's names live — but keeps the
+            // `local` flag and the alias ssh gave it.
+            if let Some(o) = out[i].as_object_mut() {
+                o.insert("name".into(), Value::String(shown.clone()));
+            }
+            if !wg6.is_empty() {
+                if let Some(list) = out[i].get_mut("addrs").and_then(|a| a.as_array_mut()) {
+                    if !list.iter().any(|a| a.as_str() == Some(wg6.as_str())) {
+                        list.push(Value::String(wg6.clone()));
+                    }
+                }
+            }
+            continue;
+        }
+        seen.push(wg.clone());
+        seen.push(name.clone());
+        out.push(serde_json::json!({
+            "name": shown,
+            "key": name,
+            "alias": "",
+            "ip": wg.clone(),
+            "public": "",
+            "addrs": addrs(&[wg.as_str(), wg6.as_str()]),
+            "role": text(&v, "role"),
+            "user": "",
+            "kind": "client",
+            "local": false,
+        }));
+    }
+
+    out
+}
+
+/// The declared wireguard clients — machines with a mesh address and no VM.
+///
+/// Beside [`declared_fleet`] rather than folded into it: a client has no
+/// provider, no public IP and no ssh alias, and pretending it is a VM would
+/// put empty columns on the machines page to save a function.
+fn declared_clients() -> Vec<(String, Value)> {
+    let path = std::env::var("CLOUD_INFRA_CONFIG").unwrap_or_else(|_| {
+        format!("{}/git/cloud-infra/config.json", std::env::var("HOME").unwrap_or_default())
+    });
+    let Ok(raw) = fs::read_to_string(&path) else { return vec![] };
+    let Ok(v) = serde_json::from_str::<Value>(&raw) else { return vec![] };
+    v.get("native")
+        .and_then(|n| n.get("wireguard"))
+        .and_then(|w| w.get("clients"))
+        .and_then(|c| c.as_object())
+        .map(|m| m.iter().map(|(k, x)| (k.clone(), x.clone())).collect())
+        .unwrap_or_default()
+}
+
+/// The declared fleet, if this machine happens to have the infra repo checked
+/// out. Optional by design: the report must still render on a box that has
+/// never seen it, and there it simply lists what ssh knows.
+fn declared_fleet() -> Vec<(String, Value)> {
+    let path = std::env::var("CLOUD_INFRA_CONFIG").unwrap_or_else(|_| {
+        format!("{}/git/cloud-infra/config.json", std::env::var("HOME").unwrap_or_default())
+    });
+    let Ok(raw) = fs::read_to_string(&path) else { return vec![] };
+    let Ok(v) = serde_json::from_str::<Value>(&raw) else { return vec![] };
+    v.get("vms")
+        .and_then(|m| m.as_object())
+        .map(|m| m.iter().map(|(k, x)| (k.clone(), x.clone())).collect())
+        .unwrap_or_default()
+}
+
+pub(crate) fn export_snapshot(
+    s: &Value,
+    target: Option<String>,
+    files: &[String],
+    fleet: &[(String, Value)],
+    fold: bool,
+) -> Result<String, String> {
+    let hi = |k: &str| text(s, &format!("host_info.{k}"));
+    let host = if hi("host").is_empty() { "unknown".to_string() } else { hi("host") };
+    let user = if hi("user").is_empty() { "unknown".to_string() } else { hi("user") };
+    // date(1) rather than arithmetic on a unix counter: this name is for a
+    // human to find later, so it wants LOCAL time, and those rules live in the
+    // system's timezone database rather than in a formula worth rewriting.
+    let stamp = std::process::Command::new("date")
+        .arg("+%Y-%m-%d_%H-%M-%S")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|x| x.trim().to_string())
+        .filter(|x| !x.is_empty())
+        .ok_or("could not read the clock")?;
+
+    let safe = |x: &str| -> String {
+        x.chars()
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .collect()
+    };
+    // ~/.watchdog, not $HOME: exports accumulate — one pair per press — and
+    // a home directory is the wrong place to accumulate anything. One
+    // directory means they are findable, listable and deletable as a set.
+    // Two directories under it, not one: `exports` is the machine-readable
+    // pair plus the report, `html` is the same export as a page. They were one
+    // flat directory, which meant the thing you open and the thing you feed to
+    // a tool were interleaved and neither could be listed on its own.
+    let home = std::env::var("HOME").map_err(|_| "no HOME".to_string())?;
+    let dir = format!("{home}/.watchdog/exports");
+    let html_dir = format!("{home}/.watchdog/html");
+    fs::create_dir_all(&dir).map_err(|e| format!("{dir}: {e}"))?;
+    fs::create_dir_all(&html_dir).map_err(|e| format!("{html_dir}: {e}"))?;
+    let name = format!("{}-{}-{stamp}", safe(&host), safe(&user));
+    let stem = format!("{dir}/{name}");
+
+    // ONE MACHINE BY DEFAULT — the one being measured, whichever that is.
+    // `target` picks it, so exporting while viewing a peer writes that peer's
+    // file under that peer's name, and the file tree is the one on screen.
+    //
+    // The fleet was 772KB of a 1030KB export and is now opt-in, because an
+    // export is normally a snapshot OF something and folding four other
+    // machines into it made the common case pay for the rare one.
+    //
+    // Still an envelope rather than the bare snapshot: the file tree is read
+    // from disk by the panel and never appears in what the sampler publishes.
+    let mut envelope = serde_json::Map::new();
+    // Same derivation the headless envelope does, and `target` is honoured:
+    // exporting a peer reads THAT peer's journal, not this box's.
+    let machines = fleet_machines();
+    let mut trimmed = trim_units(s);
+    if let Some(map) = trimmed.as_object_mut() {
+        super::data::pages::derive(map, &machines, target.as_deref());
+    }
+    envelope.insert("snapshot".into(), trimmed);
+    envelope.insert("files".into(), serde_json::json!(files));
+    envelope.insert("machines".into(), Value::Array(machines));
+    // The same rulebook the panel's about/rules page shows, carried in the
+    // export so the HTML report and the phone show it too. Read here rather
+    // than by each renderer: this is the machine that HAS the policy file, and
+    // a second reader is a second thing that can disagree with the guard.
+    envelope.insert(
+        "rules".into(),
+        Value::Array(
+            super::data::rules::rules()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|t| serde_json::json!({
+                    "head": t.head,
+                    "rows": t.rows.iter().map(|r| serde_json::json!({
+                        "rule": r.rule,
+                        "trigger": r.trigger,
+                        "effect": r.effect,
+                        "fires": r.fires,
+                    })).collect::<Vec<_>>(),
+                }))
+                .collect(),
+        ),
+    );
+    envelope.insert(
+        "app_map".into(),
+        Value::Array(
+            super::data::appmap::map()
+                .iter()
+                .map(|n| serde_json::json!({
+                    "depth": n.depth, "key": n.key, "name": n.name, "desc": n.desc,
+                }))
+                .collect(),
+        ),
+    );
+    envelope.insert("exported".into(), serde_json::json!(stamp));
+    envelope.insert(
+        "measured".into(),
+        serde_json::json!(target.clone().unwrap_or_else(|| "local".into())),
+    );
+
+    // DEDUPED BY MACHINE, not by alias. ~/.ssh/config gives several ways in to
+    // the same box — oci-analytics, -pub and -v6 are one host — and the fleet
+    // map is keyed by alias, so a naive dump wrote that machine's whole
+    // snapshot three times. The peer's own hostname is the identity; the
+    // aliases that reached it are recorded beside it, because which route
+    // answered is worth knowing and costs a string.
+    // The fleet is ALWAYS written as its own page and its own json under
+    // `html`; folding it into this one envelope as well is the opt-in, because
+    // it was 772KB of a 1030KB file and the record is normally about one
+    // machine.
+    if fold && !fleet.is_empty() {
+        let mut by_host: serde_json::Map<String, Value> = serde_json::Map::new();
+        let mut aliases: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+        for (alias, v) in fleet {
+            let peer = text(v, "host_info.host");
+            let key = if peer.is_empty() { alias.clone() } else { peer };
+            aliases.entry(key.clone()).or_default().push(alias.clone());
+            by_host.entry(key).or_insert_with(|| trim_units(v));
+        }
+        envelope.insert("fleet".into(), Value::Object(by_host));
+        envelope.insert("fleet_aliases".into(), serde_json::json!(aliases));
+    }
+    let envelope = Value::Object(envelope);
+    // Compact, not pretty. Indentation was 35% of the file and this is the
+    // machine-readable half of the pair — the Markdown beside it is the one
+    // meant to be read. `jq .` puts the whitespace back for free.
+    let json = serde_json::to_string(&envelope).map_err(|e| e.to_string())?;
+    fs::write(format!("{stem}.json"), &json).map_err(|e| format!("{stem}.json: {e}"))?;
+
+    // The same data as YAML, for feeding to a model. No braces, no commas, no
+    // quotes on most strings — the structure costs a fraction of the tokens
+    // JSON spends on punctuation, and nothing is dropped to get there.
+    let mut yaml = String::new();
+    to_yaml(&envelope, 0, &mut yaml);
+    fs::write(format!("{stem}.yaml"), yaml.trim_start_matches('\n'))
+        .map_err(|e| format!("{stem}.yaml: {e}"))?;
+
+    let m = report(s, &host, &user, &stamp, target.as_deref(), files, fleet);
+    fs::write(format!("{stem}.md"), &m).map_err(|e| format!("{stem}.md: {e}"))?;
+
+    // The page, and the listing that finds it. Written last so a failure here
+    // cannot cost the exports that already landed — it is the readable copy,
+    // not the record.
+    // ONE DIRECTORY, EVERY MACHINE. `exports` is the record and is stamped so
+    // it accumulates; `html` is the VIEW and is overwritten, so it always
+    // describes now. That is why the names here are stable rather than
+    // stamped: a switcher whose links rot after the next export is not a
+    // switcher, and the fleet is only navigable if every page can reach every
+    // other one by a name known before either was written.
+    //
+    // The local machine is index.html rather than a file named after it,
+    // because opening this directory is how it gets read and index.html is
+    // what that opens.
+    let mut machines: Vec<(String, String, Value, Option<String>)> =
+        vec![(host.clone(), "index.html".to_string(), s.clone(), target.clone())];
+    for (alias, v) in fleet {
+        let peer = text(v, "host_info.host");
+        let label = if peer.is_empty() { alias.clone() } else { peer };
+        // Deduped by MACHINE, not alias, for the same reason the envelope is:
+        // -pub and -v6 are routes to one box, not three machines to switch
+        // between.
+        if machines.iter().any(|(l, ..)| *l == label) {
+            continue;
+        }
+        let file = format!("{}.html", safe(&label));
+        machines.push((label, file, v.clone(), Some(alias.clone())));
+    }
+
+    // Plain links, not a <select> driven by script: a link works from file://
+    // with the network off, which is the whole premise of this directory.
+    // `sfx` keeps a page inside its own kind: tapping a machine on the phone
+    // page has to reach that machine's PHONE page, or the switcher is a
+    // one-way door out of the mobile report and back into the desktop one.
+    let switcher = |cur: &str, sfx: &str| -> String {
+        let mut o = String::new();
+        for (label, file, _, _) in &machines {
+            o.push_str(&format!(
+                "<li><a class=\"m{}\" href=\"{}\">{}</a></li>",
+                if file.as_str() == cur { " on" } else { "" },
+                file.replace(".html", sfx),
+                crate::tui::monitor::html::esc(label)
+            ));
+        }
+        o
+    };
+
+    // The same list on every page, so it is built once rather than per page.
+    // Named apart from `machines` above, which is the pages being written and
+    // is a different thing entirely — that collision is what hid this bug.
+    let fleet = Value::Array(fleet_machines());
+    // Rendered once, not per page. A failure here is not a failed export: the
+    // page falls back to the boxes it builds itself, and says nothing rather
+    // than showing half a screen.
+    let tui = crate::tui::monitor::overview_html().ok();
+
+    for (label, file, snap, from) in &machines {
+        let local = file.as_str() == "index.html";
+        // The file tree is read off disk by the panel and only exists for the
+        // machine it was read on; a peer page claiming the hub's directories
+        // would be worse than one with no files tab at all.
+        let mfiles: &[String] = if local { files } else { &[] };
+        let muser = if local { user.clone() } else { text(snap, "host_info.user") };
+        let mreport = report(snap, label, &muser, &stamp, from.as_deref(), mfiles, &[]);
+
+        let mut env = serde_json::Map::new();
+        env.insert("snapshot".into(), trim_units(snap));
+        env.insert("files".into(), serde_json::json!(mfiles));
+        // The page's OWN envelope, which is the one the browser reads. The
+        // outer envelope beside it feeds the .json/.yaml/.md export and is not
+        // what the HTML embeds — putting the fleet only there meant MACHINE
+        // rendered empty on every page while the json beside it was correct.
+        env.insert("machines".into(), fleet.clone());
+        // Only the local page: this is a transcript of THIS panel drawing
+        // THIS machine, and a peer's page carrying it would be showing the
+        // hub's screen under the peer's name.
+        if local {
+            if let Some((wide, narrow)) = tui.as_ref() {
+                env.insert("tui".into(), serde_json::json!(wide));
+                env.insert("tui_narrow".into(), serde_json::json!(narrow));
+            }
+        }
+        env.insert("exported".into(), serde_json::json!(stamp));
+        env.insert(
+            "measured".into(),
+            serde_json::json!(from.clone().unwrap_or_else(|| "local".into())),
+        );
+        let env = Value::Object(env);
+
+        // The JSON BESIDE the page, not only inside it. The page keeps its
+        // inline copy because a file:// page cannot fetch a sibling — browsers
+        // read that as cross-origin — and a report that only opens off a server
+        // is not one you can double-click. This copy is what a person or a tool
+        // picks up, so the directory can be handed over whole.
+        let hj = format!("{html_dir}/{}.json", safe(label));
+        fs::write(&hj, serde_json::to_string(&env).map_err(|e| e.to_string())?)
+            .map_err(|e| format!("{hj}: {e}"))?;
+
+        let title = format!("{label} · {stamp}");
+        let hp = format!("{html_dir}/{file}");
+        let write = |path: &str, view: &str, sfx: &str| -> Result<(), String> {
+            let html = crate::tui::monitor::html::page(
+                &title,
+                &env,
+                &mreport,
+                &switcher(file, sfx),
+                view,
+            );
+            fs::write(path, html).map_err(|e| format!("{path}: {e}"))
+        };
+        write(&hp, "", ".html")?;
+        // The phone page beside the desktop one rather than instead of it, and
+        // written every time: a mobile page that has to be generated by some
+        // other command is a mobile page that is always older than the report
+        // it sits next to. Same envelope, same renderer, one body attribute.
+        let hm = format!("{html_dir}/{}", file.replace(".html", "-mobile.html"));
+        write(&hm, "data-view=\"mobile\"", "-mobile.html")?;
+    }
+
+    Ok(stem)
+}
+
+/// A pid's name straight from /proc, for when it has dropped out of the
+/// published table but the process itself is still there.
+pub(crate) fn proc_comm(pid: i32) -> Option<String> {
+    fs::read_to_string(format!("/proc/{pid}/status"))
+        .ok()?
+        .lines()
+        .find(|l| l.starts_with("Name:"))
+        .map(|l| l[5..].trim().to_string())
+}
+
+pub(crate) fn exe_dir(pid: i32) -> Option<String> {
+    let exe = fs::read_link(format!("/proc/{pid}/exe")).ok()?;
+    Some(exe.parent()?.display().to_string())
+}
+
+/// Hand a directory to the desktop's file manager.
+///
+/// stdio is nulled deliberately: xdg-open's helpers write to stderr, and this
+/// process owns an alternate screen — one stray line from a child repaints as
+/// corruption the user has to redraw to clear.
+pub(crate) fn open_dir(dir: &str) -> Result<(), String> {
+    std::process::Command::new("xdg-open")
+        .arg(dir)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+

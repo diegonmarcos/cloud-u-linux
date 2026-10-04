@@ -1,0 +1,157 @@
+name: ship-my-ai-app
+# Build the my-ai Rust workspace, matrixed per-arch. my-ai (CLI) is pure Rust →
+# built for x86_64 AND aarch64. my-ai-gui (Tauri v2 systray/webview) needs
+# webkit → x86_64 only (build.gui_arches). Toolchain comes from
+# da_my-ai/flake.nix; CI just needs nix. Publishes arch-suffixed binaries
+# (+ x86 .deb) to a rolling GitHub Release (my-ai-latest). A post-publish
+# update-hashes job recomputes SRI sha256s and commits nix/hashes.json so the
+# da_my-ai flake's packages.my-ai output stays in sync automatically.
+#
+# 2026-08-27: bb_flakes_termux/src/pkgs/my-ai-hashes.json lives in
+# cloud-infra-desktop and is no longer written here -- GITHUB_TOKEN cannot push
+# cross-repo. cloud-infra-desktop's update-flake-hashes.yml polls this repo's
+# releases and maintains that file.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'da_my-ai/**'
+      - '.github/workflows/ship-my-ai-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Serialize runs. my-ai is not a reproducible build — every CI run produces a
+# differently-hashed binary. Because the release tag (my-ai-latest) is rolling
+# and clobbered on each upload, overlapping runs race: one commits the hash of
+# a binary another has already overwritten, so the pinned hash never matches the
+# live asset. A single-flight group guarantees the last update-hashes commit
+# reflects the last uploaded binary. cancel-in-progress=false so no half-upload.
+concurrency:
+  group: ship-my-ai-app
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: da_my-ai
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Compile-verify (build.sh check)
+        env:
+          CARGO_BUILD_JOBS: "4"
+        run: ./build.sh check
+
+      - name: Build release binaries (build.sh build)
+        env:
+          CARGO_BUILD_JOBS: "4"
+        run: ./build.sh build
+
+      - name: Stage arch-suffixed assets (build.sh stage)
+        run: ./build.sh stage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: my-ai-${{ matrix.arch }}
+          path: da_my-ai/dist-assets/**
+          if-no-files-found: warn
+
+      - name: Publish to rolling GitHub Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create my-ai-latest \
+            --title "my-ai (rolling)" \
+            --notes "Latest multi-arch build — main@${GITHUB_SHA:0:8}. Fetch via da_my-ai/build.sh install." \
+            --target "$GITHUB_SHA" 2>/dev/null || true
+          gh release upload my-ai-latest dist-assets/* --clobber
+
+  update-hashes:
+    name: Update nix/hashes.json
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download released binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: /tmp
+        run: |
+          gh release download my-ai-latest --repo "$GITHUB_REPOSITORY" \
+            --pattern "my-ai-aarch64" --pattern "my-ai-dash-aarch64" \
+            --pattern "my-ai-x86_64"  --pattern "my-ai-dash-x86_64" \
+            --clobber
+
+      - uses: cachix/install-nix-action@v27
+
+      - name: Compute SRI hashes and update nix/hashes.json
+        run: |
+          aarch64_my_ai=$(nix hash file --sri /tmp/my-ai-aarch64)
+          aarch64_dash=$(nix hash file --sri /tmp/my-ai-dash-aarch64)
+          x86_64_my_ai=$(nix hash file --sri /tmp/my-ai-x86_64)
+          x86_64_dash=$(nix hash file --sri /tmp/my-ai-dash-x86_64)
+
+          cat > da_my-ai/nix/hashes.json <<JSON
+          {
+            "version": "latest",
+            "aarch64-linux": {
+              "my-ai":      "$aarch64_my_ai",
+              "my-ai-dash": "$aarch64_dash"
+            },
+            "x86_64-linux": {
+              "my-ai":      "$x86_64_my_ai",
+              "my-ai-dash": "$x86_64_dash"
+            }
+          }
+          JSON
+
+      - name: Commit updated hashes
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add da_my-ai/nix/hashes.json
+          git diff --cached --quiet || \
+            git commit -m "chore: update my-ai nix/hashes.json [skip ci]"
+          # Retry with a rebase. The build above takes ~10 minutes, and main
+          # very often moves in that window (other pushes, sibling ship-*
+          # workflows). A bare `git push` then loses the race and the step
+          # fails -- which is worse than it sounds: the release assets on the
+          # rolling my-ai-latest tag have ALREADY been replaced by this point,
+          # so hashes.json is left pinning bytes that no longer exist and
+          # EVERY downstream closure build dies on "hash mismatch in
+          # fixed-output derivation" until someone fixes it by hand.
+          # Rebase is safe here: this step only ever touches the hash file,
+          # so there is nothing for it to conflict with.
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              exit 0
+            fi
+            echo "push rejected (attempt $attempt) -- rebasing onto origin/main"
+            git pull --rebase origin main
+          done
+          echo "::error::could not push updated hashes after 5 attempts"
+          exit 1
