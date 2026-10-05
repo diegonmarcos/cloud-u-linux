@@ -324,7 +324,12 @@ build_entry() {
         stage_tmp; tmp="$TMPP"
         cp -R -P --preserve=mode,links "$src" "$tmp" || die "$l/$k: could not copy $src"
         unseal "$tmp"
-        [ "$(printf '%s' "$v" | jq -r '.exe // false')" = true ] && chmod +x "$tmp"
+        if [ "$(printf '%s' "$v" | jq -r '.exe // false')" = true ]; then
+            # a FUSE source (the phone's CloudDrive) keeps no exec bit: on a
+            # directory, exe marks every shebang file executable
+            if [ -d "$tmp" ]; then find "$tmp" -type f -exec sh -c 'head -c2 "$1" | grep -q "^#!" && chmod +x "$1"' _ {} \;
+            else chmod +x "$tmp"; fi
+        fi
         add_store "$tmp" "$k"; t="$OBJ"; kind=path
     else
         sha="$(printf '%s' "$v" | jq -r '.sha256 // empty')"

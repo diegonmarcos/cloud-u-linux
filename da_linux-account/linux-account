@@ -75,7 +75,12 @@ wg_target() {  # dev file → "path\tmode" or nothing
     esac
 }
 VAULT_SSH_KEY="A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_rsa"
+# The vault path may hold a stub rather than the key (65 bytes on the phone's
+# checkout, 2026-10-05); only a file that is a key is declared from the vault,
+# otherwise the bundle's copy is written, as on a box with no checkout.
+vault_key_ok() { [ -f "$1" ] && grep -q '^-----BEGIN ' "$1"; }
 
+LSBIN() { if command -v linux-store >/dev/null 2>&1; then echo linux-store; elif [ -x "$HOME/.linux-store/current/bin/linux-store" ]; then echo "$HOME/.linux-store/current/bin/linux-store"; else echo "sh $HERE/../da_linux-store/linux-store"; fi; }
 umask 077
 mkdir -p "$CFG" "$SECRETS" "$QUEUE" 2>/dev/null || die "cannot create $CFG"
 chmod 700 "$CFG" "$SECRETS" "$QUEUE"
@@ -204,7 +209,7 @@ cmd_who() {
 # ── CONNECT, step 3: which device ──────────────────────────────────────────
 devices() { need_bundle; bq '.electronics.fleet | to_entries[] | "\(.key)\t\(.value.type // "")\t\(.value.wg_peer.name // "")\t\(.value.wg_peer.wg_ip // "")\t\(.value.wg_peer.wg_ipv6 // "")"'; }
 default_device() {  # from the linux-store profile: the phone is galaxy, the desktop is surface
-    case "$(linux-store profile 2>/dev/null || sh "$HERE/../da_linux-store/linux-store" profile 2>/dev/null)" in
+    case "$($(LSBIN) profile 2>/dev/null)" in
         termux) echo galaxy ;; desktop) echo surface ;; *) echo "" ;;
     esac
 }
@@ -236,7 +241,7 @@ plan() {
     # git → Drive credentials, declared from the vault's files
     if present '.git'; then
         f="$gb/cloud-me_vault/$VAULT_SSH_KEY"
-        if [ -f "$f" ]; then
+        if vault_key_ok "$f"; then
             printf 'git\tstore\t.ssh/id_rsa\tsecret file vault:%s (600)\n' "$VAULT_SSH_KEY"
             [ -f "$f.pub" ] && printf 'git\tstore\t.ssh/id_rsa.pub\tsecret file vault:%s.pub (644)\n' "$VAULT_SSH_KEY"
         else printf 'git\twrite\t.ssh/id_rsa\tfrom the bundle (no vault checkout at %s)\n' "$f"; fi
@@ -296,11 +301,11 @@ write_fragment() {  # the linux-store include fragment: paths only, never values
     [ -d "$dir" ] || die "no deb-user-configs at $dir"
     frag="$dir/account.json"
     v='{}'
-    [ -f "$gb/cloud-me_vault/$VAULT_SSH_KEY" ] && v="$(printf '%s' "$v" | jq -c --arg k "$VAULT_SSH_KEY" '.[".ssh/id_rsa"] = {file: ("vault:" + $k)} | .[".ssh/id_rsa.pub"] = {file: ("vault:" + $k + ".pub"), mode: "644"}')"
+    vault_key_ok "$gb/cloud-me_vault/$VAULT_SSH_KEY" && v="$(printf '%s' "$v" | jq -c --arg k "$VAULT_SSH_KEY" '.[".ssh/id_rsa"] = {file: ("vault:" + $k), app: "account"} | .[".ssh/id_rsa.pub"] = {file: ("vault:" + $k + ".pub"), mode: "644", app: "account"}')"
     if [ -f "$gb/cloud-me_vault/$VAULT_GH_TOKEN" ]; then
         mkdir -p "$dir/src/gh"
         [ -f "$dir/src/gh/hosts.yml.tpl" ] || printf 'github.com:\n    user: diegonmarcos\n    oauth_token: @GH_TOKEN@\n    git_protocol: https\n' > "$dir/src/gh/hosts.yml.tpl"
-        v="$(printf '%s' "$v" | jq -c --arg k "$VAULT_GH_TOKEN" '.[".config/gh/hosts.yml"] = {template: "me:src/gh/hosts.yml.tpl", values: {GH_TOKEN: {file: ("vault:" + $k)}}}')"
+        v="$(printf '%s' "$v" | jq -c --arg k "$VAULT_GH_TOKEN" '.[".config/gh/hosts.yml"] = {template: "me:src/gh/hosts.yml.tpl", app: "account", values: {GH_TOKEN: {file: ("vault:" + $k)}}}')"
     fi
     p="$gb/cloud-me_vault/$WG_ROOT/$wgd-public"
     if [ -d "$p" ]; then
@@ -308,9 +313,9 @@ write_fragment() {  # the linux-store include fragment: paths only, never values
             [ -f "$f" ] || continue; n="$(basename "$f")"
             tgt="$(wg_target "$wgd" "$n")"; [ -n "$tgt" ] || continue
             if grep -q 'PROVIDED_BY_DEVICE' "$f"; then
-                v="$(printf '%s' "$v" | jq -c --arg t "${tgt%%	*}" --arg m "${tgt##*	}" --arg tpl "vault:$WG_ROOT/$wgd-public/$n" --arg key "vault:$WG_ROOT/$wgd/privatekey" '.[$t] = {template: $tpl, mode: $m, values: {WG_PRIVATE_KEY: {file: $key, placeholder: "<PROVIDED_BY_DEVICE>"}}}')"
+                v="$(printf '%s' "$v" | jq -c --arg t "${tgt%%	*}" --arg m "${tgt##*	}" --arg tpl "vault:$WG_ROOT/$wgd-public/$n" --arg key "vault:$WG_ROOT/$wgd/privatekey" '.[$t] = {template: $tpl, mode: $m, app: "wireguard", values: {WG_PRIVATE_KEY: {file: $key, placeholder: "<PROVIDED_BY_DEVICE>"}}}')"
             else
-                v="$(printf '%s' "$v" | jq -c --arg t "${tgt%%	*}" --arg m "${tgt##*	}" --arg s "vault:$WG_ROOT/$wgd-public/$n" '.[$t] = {file: $s, mode: $m}')"
+                v="$(printf '%s' "$v" | jq -c --arg t "${tgt%%	*}" --arg m "${tgt##*	}" --arg s "vault:$WG_ROOT/$wgd-public/$n" '.[$t] = {file: $s, mode: $m, app: "wireguard"}')"
             fi
         done
     fi
@@ -340,7 +345,7 @@ commit_writes() {
     # git → repos (and bundle-only fallbacks when the vault is not checked out)
     if present '.git'; then
         bqc '.git.repos' > "$CFG/repos.json"; chmod 600 "$CFG/repos.json"
-        if [ ! -f "$gb/cloud-me_vault/$VAULT_SSH_KEY" ]; then
+        if ! vault_key_ok "$gb/cloud-me_vault/$VAULT_SSH_KEY"; then
             mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
             bq '.git.ssh_private_key' > "$HOME/.ssh/id_rsa.tmp" && chmod 600 "$HOME/.ssh/id_rsa.tmp" && mv -f "$HOME/.ssh/id_rsa.tmp" "$HOME/.ssh/id_rsa"; rec ".ssh/id_rsa" "$HOME/.ssh/id_rsa"
             bq '.git.ssh_public_key' > "$HOME/.ssh/id_rsa.pub.tmp" && chmod 644 "$HOME/.ssh/id_rsa.pub.tmp" && mv -f "$HOME/.ssh/id_rsa.pub.tmp" "$HOME/.ssh/id_rsa.pub"
@@ -373,7 +378,7 @@ commit_writes() {
     fi
     # mail → env for the identity's account
     if present '.mail.accounts'; then
-        acct="$(jq -r --arg e "$email" '(.bundle // .) | .mail.accounts | to_entries[] | select(.value.name == $e or .key == ($e | split("@")[0])) | .key' "$B" 2>/dev/null | head -1)"
+        acct="$(jq -r --arg e "$email" '(.bundle // .) | ($e | split("@")[0]) as $lp | .mail.accounts | to_entries[] | select(.value.name == $e or .value.name == $lp or .key == $lp) | .key' "$B" 2>/dev/null | head -1)"
         [ -n "$acct" ] || acct="$(bq '.mail.accounts | keys[0]')"
         jq -r --arg a "$acct" '(.bundle // .) | .mail as $m
             | ["# GENERATED by linux-account apply (0600) — mail for account \($a)",
@@ -417,8 +422,7 @@ cmd_apply() {
     st_set applied_at "$(date -u +%FT%TZ)"; st_set applied_device "$(DEV)"
     if [ "$noswitch" = 1 ]; then say "declared; --no-switch given — run: linux-store switch"; return 0; fi
     say "switch: linux-store switch (realises the declared secrets)"
-    if command -v linux-store >/dev/null 2>&1; then linux-store switch
-    else sh "$HERE/../da_linux-store/linux-store" switch; fi
+    $(LSBIN) switch
 }
 
 # ── FLEET: the cockpit ─────────────────────────────────────────────────────
@@ -447,7 +451,8 @@ card() {  # title observed rows-file  → prints card, returns via global LIGHT
           awk -F'\t' '{ gsub(/&/,"\\&amp;"); gsub(/</,"\\&lt;"); printf "<tr><td class=\"state\">%s</td><td>%s</td><td class=\"path\">%s</td></tr>", $2, $1, $3 }' "$3"
           echo '</table></div>'; } >> "$HTML_BUF"
     fi
-    m="$(grep -c "$(printf '\t')MATCH" "$3" 2>/dev/null || echo 0)"; d="$(grep -cE "$(printf '\t')(DIFFERS|ABSENT)" "$3" 2>/dev/null || echo 0)"; p="$(grep -c "$(printf '\t')PENDING" "$3" 2>/dev/null || echo 0)"
+    # grep -c prints 0 itself when nothing matches (and exits 1): no fallback echo
+    m="$(grep -c "$(printf '\t')MATCH" "$3" 2>/dev/null)"; d="$(grep -cE "$(printf '\t')(DIFFERS|ABSENT)" "$3" 2>/dev/null)"; p="$(grep -c "$(printf '\t')PENDING" "$3" 2>/dev/null)"
     case "$LIGHT" in ON) l='●' ;; OFF) l='○' ;; UNVERIFIABLE) l='◌' ;; *) l='◍' ;; esac
     printf '  %s %-24s %s  %s\n' "$l" "$1" "$LIGHT" "$m match / $d differ / $p pending"
     [ "${VERBOSE:-0}" = 1 ] && awk -F'\t' '{ printf "      %-9s %-28s %s\n", $2, $1, $3 }' "$3"
@@ -458,7 +463,7 @@ cmd_fleet() {
     local gb dev wgd R t n f sha email acct declared installed lsok tgt
     need_bundle; gb="$(git_base)"; dev="$(DEV)"; wgd="$(wg_dir_of "$dev")"; R="$CFG/.rows"
     [ "${1:-}" = -v ] && VERBOSE=1
-    printf '  device %s   wg %s %s   bundle: %s (%s)\n\n' "$dev" "$(bq --arg d "$dev" '.electronics.fleet[$d].wg_peer.name // "?"')" "$(bq --arg d "$dev" '.electronics.fleet[$d].wg_peer.wg_ip // ""')" "$(st_get bundle_source)" "$(st_get connected_at | cut -c1-10)"
+    printf '  device %s   wg %s %s   bundle: %s (%s)\n\n' "$dev" "$(jq -r --arg d "$dev" '(.bundle // .) | .electronics.fleet[$d].wg_peer.name // "?"' "$B")" "$(jq -r --arg d "$dev" '(.bundle // .) | .electronics.fleet[$d].wg_peer.wg_ip // ""' "$B")" "$(st_get bundle_source)" "$(st_get connected_at | cut -c1-10)"
 
     # Mail
     : > "$R"
@@ -469,7 +474,7 @@ cmd_fleet() {
             if [ ! -f "$f" ]; then row "account $acct" ABSENT "secrets/mail.env"
             elif [ "$(sha256sum "$f" | cut -d' ' -f1)" = "$(st_get 'sha:secrets/mail.env')" ]; then row "account $acct" MATCH "secrets/mail.env"
             else row "account $acct" DIFFERS "secrets/mail.env changed"; fi >> "$R"
-            row "jmap host" "$( [ -n "$(bq '.mail.endpoints.jmap // empty')" ] && echo MATCH || echo PENDING)" "$(bq '.mail.endpoints.domain // ""')" >> "$R"
+            row "jmap host" "$( [ -n "$(bq '.mail.endpoints.jmap // .mail.endpoints.domain // empty')" ] && echo MATCH || echo PENDING)" "$(bq '.mail.endpoints.jmap // .mail.endpoints.domain // ""')" >> "$R"
         else row "account" ABSENT "never applied" >> "$R"; fi
     else row "mail" PENDING "not in bundle" >> "$R"; fi
     card "Mail" 1 "$R"
@@ -481,7 +486,7 @@ cmd_fleet() {
     # Mesh — one row per profile of this device + fleet hosts
     : > "$R"
     if [ -d "$gb/cloud-me_vault/$WG_ROOT/$wgd-public" ]; then
-        lsok=1; { command -v linux-store >/dev/null 2>&1 && linux-store check >/dev/null 2>&1; } || lsok=0
+        lsok=1; $(LSBIN) check >/dev/null 2>&1 || lsok=0
         for f in "$gb/cloud-me_vault/$WG_ROOT/$wgd-public"/*; do
             [ -f "$f" ] || continue; tgt="$(wg_target "$wgd" "$(basename "$f")")"; [ -n "$tgt" ] || continue
             n="${tgt%%	*}"; n="${n#.config/wireguard/}"; t="$HOME/.config/wireguard/$n"
@@ -524,8 +529,10 @@ cmd_fleet() {
     # Apps — declared = linux-store bin entries; installed = resolvable
     : > "$R"
     if [ -f "$HOME/.linux-store/current/manifest.json" ]; then
-        jq -r '.entries[] | select(.layer == "bin") | .name' "$HOME/.linux-store/current/manifest.json" | while read -r n; do
-            [ -x "$HOME/.linux-store/current/bin/$n" ] && row "$n" MATCH "bin" || row "$n" ABSENT "bin/$n dangling"
+        jq -r '.entries[] | select(.layer == "bin") | "\(.name)\t\(.kind)"' "$HOME/.linux-store/current/manifest.json" | while IFS="$(printf '\t')" read -r n k; do
+            if [ "$k" = absent ]; then row "$n" PENDING "declared, not built or fetched on this box"
+            elif [ -x "$HOME/.linux-store/current/bin/$n" ]; then row "$n" MATCH "bin ($k)"
+            else row "$n" ABSENT "bin/$n dangling"; fi
         done >> "$R"
     else row "linux-store" ABSENT "no live generation" >> "$R"; fi
     present '.apps.devices' || row "bundle apps.devices" PENDING "staged section" >> "$R"
@@ -545,7 +552,7 @@ ensure_install() {
 }
 card_doc() {  # the POST body: 8-field allowlist, nothing else
     [ -f "$CARD" ] || echo '{}' > "$CARD"
-    jq -c --arg id "$(st_get install_id)" --arg at "$(date -u +%FT%TZ)" --arg v "$(linux-store status 2>/dev/null | sed -n 's/^Live: *//p' | cut -d' ' -f1)" \
+    jq -c --arg id "$(st_get install_id)" --arg at "$(date -u +%FT%TZ)" --arg v "$($(LSBIN) status 2>/dev/null | sed -n 's/^Live: *//p' | cut -d' ' -f1)" \
         '{schema: 1, install_id: $id, app_version_code: 1, app_version_name: ("linux-account/" + ($v // "")), updated_at: $at,
           profile: ({name, email, phone, birth, location, company, website, titles} | with_entries(select(.value != null and .value != "")))}' "$CARD"
 }
@@ -606,7 +613,8 @@ cmd_apps() {
             [ -f "$m" ] || die "no live linux-store generation"
             d=0; i=0
             jq -r '.entries[] | select(.layer == "bin") | "\(.name)\t\(.kind)\t\(.host // .target)"' "$m" | while IFS="$(printf '\t')" read -r n k t; do
-                if [ -x "$HOME/.linux-store/current/bin/$n" ]; then printf '  ● %-14s %-10s %s\n' "$n" "$k" "$t"; else printf '  ○ %-14s %-10s MISSING %s\n' "$n" "$k" "$t"; fi
+                if [ "$k" = absent ]; then printf '  ◌ %-14s %-10s declared, absent: %s\n' "$n" "$k" "$t"
+                elif [ -x "$HOME/.linux-store/current/bin/$n" ]; then printf '  ● %-14s %-10s %s\n' "$n" "$k" "$t"; else printf '  ○ %-14s %-10s MISSING %s\n' "$n" "$k" "$t"; fi
             done
             printf '\n  declared %s (linux-store bin) · installed %s · bundle apps.devices: %s\n' \
                 "$(jq '[.entries[] | select(.layer == "bin")] | length' "$m")" \
