@@ -885,11 +885,24 @@ check() {
     done < "$ROOT/.verify.$$"
     rm -f "$ROOT/.verify.$$"
 
+    write_summary "$( [ "$BAD" -eq 0 ] && echo ok || echo FAIL)"
     if [ "$BAD" -eq 0 ]; then
         say "ok — ${gen##*/}, every declared link, object and file checks out"
         [ ! -s "$DEVLIST" ] || say "dev mode (out-of-store) for: $(paste -sd' ' "$DEVLIST")"
     fi
     return "$BAD"
+}
+
+# ── summary: one line the fish greeting cats (no subprocess at shell start) ──
+write_summary() {
+    local live light
+    live="$(readlink "$CUR" 2>/dev/null || true)"; [ -f "$live/manifest.json" ] || return 0
+    light="${1:-?}"
+    mkdir -p "$UI"
+    jq -r --arg l "$light" --arg at "$(date '+%d-%m %H:%M')" '
+        (.entries | map(select(.kind != "absent")) | group_by(.layer) | map("\(.[0].layer) \(length)") | join(" · ")) as $n
+        | "\(.generation)  \($n)  absent \([.entries[] | select(.kind == "absent")] | length)  check \($l) \($at)"' \
+        "$live/manifest.json" > "$UI/summary.txt.tmp" && mv -f "$UI/summary.txt.tmp" "$UI/summary.txt"
 }
 
 # ── commands ───────────────────────────────────────────────────────────────

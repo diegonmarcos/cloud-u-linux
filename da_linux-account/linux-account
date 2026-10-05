@@ -420,6 +420,7 @@ cmd_apply() {
     write_fragment
     commit_writes
     st_set applied_at "$(date -u +%FT%TZ)"; st_set applied_device "$(DEV)"
+    cmd_fleet >/dev/null 2>&1 || true
     if [ "$noswitch" = 1 ]; then say "declared; --no-switch given — run: linux-store switch"; return 0; fi
     say "switch: linux-store switch (realises the declared secrets)"
     $(LSBIN) switch
@@ -454,6 +455,7 @@ card() {  # title observed rows-file  → prints card, returns via global LIGHT
     # grep -c prints 0 itself when nothing matches (and exits 1): no fallback echo
     m="$(grep -c "$(printf '\t')MATCH" "$3" 2>/dev/null)"; d="$(grep -cE "$(printf '\t')(DIFFERS|ABSENT)" "$3" 2>/dev/null)"; p="$(grep -c "$(printf '\t')PENDING" "$3" 2>/dev/null)"
     case "$LIGHT" in ON) l='●' ;; OFF) l='○' ;; UNVERIFIABLE) l='◌' ;; *) l='◍' ;; esac
+    SUMMARY="${SUMMARY:+$SUMMARY · }$l ${1%% (*}"
     printf '  %s %-24s %s  %s\n' "$l" "$1" "$LIGHT" "$m match / $d differ / $p pending"
     [ "${VERBOSE:-0}" = 1 ] && awk -F'\t' '{ printf "      %-9s %-28s %s\n", $2, $1, $3 }' "$3"
     return 0
@@ -461,6 +463,7 @@ card() {  # title observed rows-file  → prints card, returns via global LIGHT
 
 cmd_fleet() {
     local gb dev wgd R t n f sha email acct declared installed lsok tgt
+    SUMMARY=""
     need_bundle; gb="$(git_base)"; dev="$(DEV)"; wgd="$(wg_dir_of "$dev")"; R="$CFG/.rows"
     [ "${1:-}" = -v ] && VERBOSE=1
     printf '  device %s   wg %s %s   bundle: %s (%s)\n\n' "$dev" "$(jq -r --arg d "$dev" '(.bundle // .) | .electronics.fleet[$d].wg_peer.name // "?"' "$B")" "$(jq -r --arg d "$dev" '(.bundle // .) | .electronics.fleet[$d].wg_peer.wg_ip // ""' "$B")" "$(st_get bundle_source)" "$(st_get connected_at | cut -c1-10)"
@@ -542,6 +545,13 @@ cmd_fleet() {
     : > "$R"; for n in settings peers; do present ".$n" && row "$n" PENDING "read-only" || row "$n" PENDING "pending in bundle"; done >> "$R"
     card "Raw (uncovered sections)" 0 "$R"
     rm -f "$R"
+    write_summary
+}
+
+# one line the fish greeting cats: journey dots + card lights
+write_summary() {
+    set -- $(step_state)
+    printf '%s %s %s %s  %s  %s\n' "$(dot "$1")" "$(dot "$2")" "$(dot "$3")" "$(dot "$4")" "${SUMMARY:-}" "$(date '+%d-%m %H:%M')" > "$CFG/summary.txt.tmp" && mv -f "$CFG/summary.txt.tmp" "$CFG/summary.txt"
 }
 
 # ── INFOS: the contact card + ProfileSync ──────────────────────────────────
