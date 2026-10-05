@@ -354,10 +354,19 @@ build_wrapper() {
 
 build_activate() {
     local k="$1" v="$2" f files tmp n
-    n="$(printf '%s' "$v" | jq '[has("render"), has("keys")] | map(select(.)) | length')"
-    [ "$n" = 1 ] || die "activate/$k: declare exactly one of render, keys"
+    n="$(printf '%s' "$v" | jq '[has("render"), has("keys"), has("copy")] | map(select(.)) | length')"
+    [ "$n" = 1 ] || die "activate/$k: declare exactly one of render, keys, copy"
     stage_tmp; tmp="$TMPP"
-    if [ "$(printf '%s' "$v" | jq 'has("render")')" = true ]; then
+    if [ "$(printf '%s' "$v" | jq 'has("copy")')" = true ]; then
+        # A real file for a program that cannot follow links (goose), any text
+        # format, @HOME@ filled in. Realised and verified exactly like render.
+        f="$(resolve_src "$(printf '%s' "$v" | jq -r .copy)")" || exit 1
+        [ -f "$f" ] || die "activate/$k: $f does not exist"
+        sed "s|@HOME@|$HOME|g" "$f" > "$tmp" || die "activate/$k: could not fill $f"
+        add_store "$tmp" "$k"
+        genlink "$OBJ" activate "$k"
+        entry activate "$k" render "$OBJ" "$f"
+    elif [ "$(printf '%s' "$v" | jq 'has("render")')" = true ]; then
         files=""
         for f in $(printf '%s' "$v" | jq -r '.render[]'); do
             f="$(resolve_src "$f")" || exit 1

@@ -176,6 +176,12 @@ flock "$R/lock" sleep 3 & sleep 1
 ls_ apply; check "a held lock makes a second apply fail fast" '[ $? -ne 0 ] && grep -q "holds" "$T/out"'
 wait
 
+section "activate copy"
+printf 'extensions:\n  cmd: @HOME@/.node_modules/x.mjs\n' > "$C/goose.yaml"
+jq '.common.activate[".config/goose/config.yaml"] = {"copy": "c:goose.yaml"}' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
+ls_ apply; check "copy writes a real file with @HOME@ filled" \
+    '[ -f "$HOME/.config/goose/config.yaml" ] && [ ! -L "$HOME/.config/goose/config.yaml" ] && grep -qx "  cmd: $HOME/.node_modules/x.mjs" "$HOME/.config/goose/config.yaml"'
+
 section "secrets (sops, throwaway age key)"
 # Everything here is generated for the test: a fresh age key and fake values.
 # No real key or secret is read.
