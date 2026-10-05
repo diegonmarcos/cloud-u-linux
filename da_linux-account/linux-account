@@ -1,0 +1,724 @@
+#!/bin/sh
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║ linux-account — cloud-superapp's Account tab, for the Linux userlands    ║
+# ║                                                                          ║
+# ║ Usage: linux-account <command> [args]      (linux-account help | tui)    ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+#
+# The same screen as aa_cloud-superapp's ProfileFragment, verb for verb:
+#
+#   FLEET     the cockpit: one card per section of the vault bundle, each row
+#             declared vs what THIS device holds — MATCH / DIFFERS / ABSENT /
+#             PENDING — rolled up into a light (ON / OFF / UNKNOWN /
+#             UNVERIFIABLE). Drawing never writes; every apply is a verb.
+#   CONNECT   the four-step journey: sign in (find the bundle) → who (identity)
+#             → which device (peer) → get everything (apply).
+#   INFOS     the contact card (8 fields), auto-saved, pushed to c3-infra-api
+#             with the install id + secret of ProfileSync; erase = DELETE.
+#   WIREGUARD / AI   links, as in the app: `wg` and `ai` verbs.
+#
+# The bundle is cloud-me_vault/C_A1-configs/profile-secrets.json (schema 1):
+# mesh, mail, ai, git, about, autocomplete, electronics, settings. Same gate
+# as VaultConnect (known_schema_versions [1]), same refusal of a sops file as
+# ImportConfigsFragment, same two passes as ConfigAutoImport.apply: PLAN every
+# section (nothing written), then COMMIT.
+#
+# What apply writes, and how:
+#   via linux-store   everything that is a FILE IN THE VAULT (ssh keys, the
+#                     github token, the WireGuard profiles + private key) is
+#                     DECLARED, not copied: apply emits a linux-store fragment
+#                     (deb-user-configs/account.json, paths only, committable)
+#                     and runs `linux-store switch`. Rollback, check and repair
+#                     then cover them like everything else.
+#   directly          values that exist only inside the bundle (ai tokens,
+#                     mail passwords, autocomplete lists) are written 0600
+#                     under ~/.config/linux-account/, and their sha256 is
+#                     recorded so the cockpit can tell MATCH from DIFFERS
+#                     without ever printing a value.
+set -u
+
+ME=linux-account
+die() { printf '%s: %s\n' "$ME" "$*" >&2; exit 1; }
+say() { printf '%s: %s\n' "$ME" "$*"; }
+
+for _c in jq sha256sum; do command -v "$_c" >/dev/null 2>&1 || die "requires $_c on PATH"; done
+
+SELF="$(readlink -f "$0")"; HERE="$(dirname "$SELF")"
+CFG="${LINUX_ACCOUNT_HOME:-$HOME/.config/linux-account}"
+STATE="$CFG/state.json"
+CARD="$CFG/profile.json"
+SECRETS="$CFG/secrets"
+QUEUE="$CFG/queue"
+SCHEMA_KNOWN="1"
+
+# Endpoints, as ab_cloud-libs-shared/build.json::auth declares them.
+API_BASE="${LINUX_ACCOUNT_API:-https://api.diegonmarcos.com}"
+ARTIFACT_PATH="/pub/superapp/config/diego"
+CONNECT_START="/pub/profile/connect/start"
+CONNECT_FETCH="/pub/profile/connect/fetch"
+PROFILE_SYNC_URL="${LINUX_ACCOUNT_SYNC_URL:-$API_BASE/c3-infra-api/fleet/profile}"
+VAULT_REPO="diegonmarcos/cloud-me_vault"
+BUNDLE_IN_VAULT="C_A1-configs/profile-secrets.json"
+
+# Where the vault keeps each device's WireGuard material (c0-wireguard/README):
+# <dir>/privatekey + <dir>-public/<profile>. electronics.fleet ids → dirs.
+WG_ROOT="A_A0-Providers/C_TOOLS-INFRA/c0-wireguard"
+wg_dir_of() { case "$1" in galaxy) echo termux ;; surface) echo surface ;; samsung-a37) echo samsung-a37 ;; *) echo "$1" ;; esac; }
+VAULT_GH_TOKEN="A_A0-Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque/token"
+VAULT_SSH_KEY="A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_rsa"
+
+umask 077
+mkdir -p "$CFG" "$SECRETS" "$QUEUE" 2>/dev/null || die "cannot create $CFG"
+chmod 700 "$CFG" "$SECRETS" "$QUEUE"
+
+# ── state ──────────────────────────────────────────────────────────────────
+st_get() { [ -f "$STATE" ] && jq -r --arg k "$1" '.[$k] // empty' "$STATE"; }
+st_set() {  # key value
+    [ -f "$STATE" ] || echo '{}' > "$STATE"
+    jq --arg k "$1" --arg v "$2" '.[$k] = $v' "$STATE" > "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
+}
+st_del() { [ -f "$STATE" ] && jq --arg k "$1" 'del(.[$k])' "$STATE" > "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"; }
+
+git_base() {
+    if [ -n "${GIT_BASE:-}" ] && [ -d "$GIT_BASE" ]; then echo "$GIT_BASE"; return 0; fi
+    for _c in "$HOME/git" "$HOME/cloud-drive-shared-store/git"; do
+        [ -d "$_c/cloud-me_vault" ] || [ -d "$_c/cloud-me_configs" ] || continue
+        echo "$_c"; return 0
+    done
+    for _c in "$HOME/git" "$HOME/cloud-drive-shared-store/git"; do [ -d "$_c" ] && { echo "$_c"; return 0; }; done
+    return 1
+}
+
+# ── the bundle ─────────────────────────────────────────────────────────────
+# VaultFile.classify: a sops-encrypted file is refused outright; a decrypted
+# export carries schema_version, which must be one we know.
+classify() {  # file → prints kind, returns 1 if unusable
+    jq -e . "$1" >/dev/null 2>&1 || { echo "not-json"; return 1; }
+    if jq -e 'has("sops")' "$1" >/dev/null 2>&1 || grep -q 'ENC\[' "$1"; then echo "encrypted"; return 1; fi
+    jq -e '.bundle // . | has("schema_version")' "$1" >/dev/null 2>&1 || { echo "no-schema"; return 1; }
+    echo "bundle"
+}
+
+bundle_path() {
+    local b
+    b="${LINUX_ACCOUNT_BUNDLE:-$(st_get bundle)}"
+    [ -n "$b" ] && [ -f "$b" ] && { echo "$b"; return 0; }
+    return 1
+}
+need_bundle() {
+    B="$(bundle_path)" || die "not connected — run: $ME connect (vault checkout, --file, --github, --bearer or --code)"
+    jq -e '.bundle // .' "$B" >/dev/null 2>&1 || die "bundle at $B is not JSON"
+}
+# jq over the bundle, unwrapping {schema, bundle} as VaultConnect does
+bq() { jq -r "(.bundle // .) | $1" "$B"; }
+bqc() { jq -c "(.bundle // .) | $1" "$B"; }
+pending() { [ "$(bq "$1 | type == \"object\" and .pending == true")" = true ]; }
+present() { [ "$(bq "$1 | . != null")" = true ] && ! pending "$1"; }
+
+adopt_bundle() {  # file source-label
+    local kind sv
+    kind="$(classify "$1")" || die "refused: $1 is $kind ($( [ "$kind" = encrypted ] && echo 'this phone/box holds no age key, by design — hand it the decrypted export' || echo 'expected a profile-secrets.json with schema_version'))"
+    sv="$(jq -r '(.bundle // .) | .schema_version' "$1")"
+    for k in $SCHEMA_KNOWN; do [ "$sv" = "$k" ] && { st_set bundle "$1"; st_set bundle_source "$2"; st_set connected_at "$(date -u +%FT%TZ)"; say "connected: $2 (schema $sv)"; return 0; }; done
+    die "bundle schema_version $sv — this build knows $SCHEMA_KNOWN. Nothing applied."
+}
+
+# ── CONNECT, step 1: sign in = find the bundle ─────────────────────────────
+cmd_connect() {
+    local gb v tok out code
+    case "${1:-}" in
+        --file)
+            [ -f "${2:-}" ] || die "connect --file <path>"
+            cp "$2" "$CFG/bundle.json" && chmod 600 "$CFG/bundle.json"
+            adopt_bundle "$CFG/bundle.json" "file import ($2)" ;;
+        --github)
+            # The token tile: GET the raw file over the contents API with the
+            # GitHub token gh already holds (or GITHUB_TOKEN).
+            tok="${GITHUB_TOKEN:-$(gh auth token 2>/dev/null || true)}"
+            [ -n "$tok" ] || die "no GitHub token: gh auth login, or GITHUB_TOKEN"
+            out="$CFG/bundle.json"
+            curl -fsSL -H "Authorization: Bearer $tok" -H "Accept: application/vnd.github.raw" \
+                "https://api.github.com/repos/$VAULT_REPO/contents/$BUNDLE_IN_VAULT?ref=main" -o "$out" \
+                || die "GitHub fetch of $VAULT_REPO/$BUNDLE_IN_VAULT failed"
+            chmod 600 "$out"; adopt_bundle "$out" "github ($VAULT_REPO)" ;;
+        --bearer)
+            tok="${2:-${AUTHELIA_BEARER:-}}"; [ -n "$tok" ] || die "connect --bearer <authelia token>"
+            out="$CFG/bundle.json"
+            curl -fsSL -H "Authorization: Bearer $tok" "$API_BASE$ARTIFACT_PATH" -o "$out" || die "fetch of $API_BASE$ARTIFACT_PATH failed"
+            chmod 600 "$out"; adopt_bundle "$out" "authelia bearer" ;;
+        --code)
+            # VaultConnect: start mails a one-time code, fetch exchanges it.
+            if [ -z "${2:-}" ]; then
+                curl -fsS -X POST "$API_BASE$CONNECT_START" -H 'Content-Type: application/json' -d '{}' >/dev/null \
+                    || die "could not start the vault connect flow"
+                say "code mailed — run: $ME connect --code <code>"; return 0
+            fi
+            out="$CFG/bundle.json"
+            curl -fsS -X POST "$API_BASE$CONNECT_FETCH" -H 'Content-Type: application/json' \
+                -d "$(jq -nc --arg c "$2" '{code: $c}')" -o "$out" || die "fetch with code failed"
+            chmod 600 "$out"; adopt_bundle "$out" "vault connect (mailed code)" ;;
+        ""|--vault)
+            gb="$(git_base)" || die "no git base"
+            v="$gb/cloud-me_vault/$BUNDLE_IN_VAULT"
+            [ -f "$v" ] || die "no vault checkout at $gb/cloud-me_vault — use --file, --github, --bearer or --code"
+            adopt_bundle "$v" "vault checkout" ;;
+        --forget) rm -f "$CFG/bundle.json"; st_del bundle; st_del bundle_source; say "forgotten (identity and device picks kept)" ;;
+        *) die "connect [--vault | --file <path> | --github | --bearer <tok> | --code [<code>] | --forget]" ;;
+    esac
+}
+
+# ── CONNECT, step 2: who ───────────────────────────────────────────────────
+identities() {  # from the registry when cloud-infra is checked out, else the bundle's about.profile
+    local gb reg
+    gb="$(git_base 2>/dev/null || true)"; reg="$gb/cloud-infra/1_cloud-configs/src/inputs/superapp-users.json"
+    if [ -f "$reg" ]; then
+        jq -r '.users | to_entries[] | .value.identities[]? | "\(.email)\t\(.label // "")\t\(if .primary then "primary" else "" end)"' "$reg"
+    else
+        need_bundle; bq '.about.profile | "\(.email)\t\(.name // "")\tprimary"'
+    fi
+}
+cmd_who() {
+    local pick
+    if [ -n "${1:-}" ]; then
+        identities | cut -f1 | grep -Fxq "$1" || die "$1 is not a declared identity"
+        st_set identity_email "$1"; say "identity: $1"; return 0
+    fi
+    pick="$(st_get identity_email)"
+    identities | while IFS="$(printf '\t')" read -r e l p; do
+        printf '  %s %-32s %s %s\n' "$( [ "$e" = "$pick" ] && echo '●' || echo '○')" "$e" "$l" "${p:+($p)}"
+    done
+    [ -n "$pick" ] || echo "  (none picked — $ME who <email>)"
+}
+
+# ── CONNECT, step 3: which device ──────────────────────────────────────────
+devices() { need_bundle; bq '.electronics.fleet | to_entries[] | "\(.key)\t\(.value.type // "")\t\(.value.wg_peer.name // "")\t\(.value.wg_peer.wg_ip // "")\t\(.value.wg_peer.wg_ipv6 // "")"'; }
+default_device() {  # from the linux-store profile: the phone is galaxy, the desktop is surface
+    case "$(linux-store profile 2>/dev/null || sh "$HERE/../da_linux-store/linux-store" profile 2>/dev/null)" in
+        termux) echo galaxy ;; desktop) echo surface ;; *) echo "" ;;
+    esac
+}
+cmd_device() {
+    local pick
+    if [ -n "${1:-}" ]; then
+        devices | cut -f1 | grep -Fxq "$1" || die "$1 is not a declared device"
+        st_set device_id "$1"; say "device: $1"; return 0
+    fi
+    pick="$(st_get device_id)"; [ -n "$pick" ] || pick="$(default_device)"
+    devices | while IFS="$(printf '\t')" read -r id t wg ip ip6; do
+        printf '  %s %-14s %-9s wg %-16s %-14s %s\n' "$( [ "$id" = "$pick" ] && echo '●' || echo '○')" "$id" "$t" "$wg" "$ip" "$ip6"
+    done
+}
+DEV() { local d; d="$(st_get device_id)"; [ -n "$d" ] || d="$(default_device)"; [ -n "$d" ] || die "no device picked — $ME device <id>"; echo "$d"; }
+
+# ── the plan: section → what Apply would write ─────────────────────────────
+# Prints one line per planned write: "<section>\t<kind>\t<target>\t<note>"
+# kind = store (declared via linux-store fragment) | write (0600 under $CFG) | skip | pending
+sha_of_str() { printf '%s' "$1" | sha256sum | cut -d' ' -f1; }
+
+plan() {
+    local gb dev wgd f p
+    need_bundle; gb="$(git_base)" || die "no git base"; dev="$(DEV)"; wgd="$(wg_dir_of "$dev")"
+    # about → contact card seed + git identity
+    if present '.about.profile'; then
+        printf 'about\twrite\t%s\tcontact card seed (8 fields, like ui.profile_default)\n' "$CARD"
+    else printf 'about\tpending\t-\t%s\n' "not in bundle"; fi
+    # git → Drive credentials, declared from the vault's files
+    if present '.git'; then
+        f="$gb/cloud-me_vault/$VAULT_SSH_KEY"
+        if [ -f "$f" ]; then
+            printf 'git\tstore\t.ssh/id_rsa\tsecret file vault:%s (600)\n' "$VAULT_SSH_KEY"
+            [ -f "$f.pub" ] && printf 'git\tstore\t.ssh/id_rsa.pub\tsecret file vault:%s.pub (644)\n' "$VAULT_SSH_KEY"
+        else printf 'git\twrite\t.ssh/id_rsa\tfrom the bundle (no vault checkout at %s)\n' "$f"; fi
+        f="$gb/cloud-me_vault/$VAULT_GH_TOKEN"
+        if [ -f "$f" ]; then printf 'git\tstore\t.config/gh/hosts.yml\ttemplate, GH_TOKEN = secret file vault:%s\n' "$VAULT_GH_TOKEN"
+        else printf 'git\twrite\t.config/gh/hosts.yml\tfrom the bundle\n'; fi
+        printf 'git\twrite\t%s/repos.json\tfleet repo list (%s)\n' "$CFG" "$(bq '.git.repos | length') repos"
+    else printf 'git\tpending\t-\tnot in bundle\n'; fi
+    # mesh → WireGuard profiles for THIS device
+    if present '.mesh.profiles'; then
+        p="$gb/cloud-me_vault/$WG_ROOT/$wgd-public"
+        if [ -d "$p" ]; then
+            for f in "$p"/*; do
+                [ -f "$f" ] || continue
+                if grep -q 'PROVIDED_BY_DEVICE' "$f"; then
+                    printf 'mesh\tstore\t.config/wireguard/%s-%s.conf\ttemplate vault:%s/%s-public/%s + WG_PRIVATE_KEY = secret file %s/%s/privatekey\n' "$wgd" "$(basename "$f")" "$WG_ROOT" "$wgd" "$(basename "$f")" "$WG_ROOT" "$wgd"
+                else
+                    printf 'mesh\tstore\t.config/wireguard/%s-%s.conf\tsecret file vault:%s/%s-public/%s (600)\n' "$wgd" "$(basename "$f")" "$WG_ROOT" "$wgd" "$(basename "$f")"
+                fi
+            done
+        else
+            bq '.mesh.profiles | keys[]' | while read -r n; do printf 'mesh\twrite\t.config/wireguard/%s.conf\tfrom the bundle (no vault dir %s)\n' "$n" "$p"; done
+        fi
+        f="$gb/cloud-u-android/aa_cloud-superapp/data/mesh.json"
+        [ -f "$f" ] && printf 'mesh\twrite\t.ssh/config.d/fleet\tHost entries for every mesh node (wg_ip) from data/mesh.json\n'
+    else printf 'mesh\tpending\t-\tnot in bundle\n'; fi
+    # mail → env for the identity's account
+    if present '.mail.accounts'; then printf 'mail\twrite\t%s/mail.env\tendpoints + the identity account (0600)\n' "$SECRETS"
+    else printf 'mail\tpending\t-\tnot in bundle\n'; fi
+    # ai → tokens env
+    if present '.ai.tokens'; then printf 'ai\twrite\t%s/ai.env\t%s tokens as env (0600)\n' "$SECRETS" "$(bq '.ai.tokens | length')"
+    else printf 'ai\tpending\t-\tnot in bundle\n'; fi
+    present '.ai.configs' && printf 'ai\tskip\t-\tconfigs (claude folder, mcps, hermes) are linux-store etc entries already\n'
+    # autocomplete → lists
+    if present '.autocomplete'; then printf 'autocomplete\twrite\t%s/autocomplete/\t%s lists (0600, keyboard runtime data)\n' "$SECRETS" "$(bq '.autocomplete | keys | length')"
+    else printf 'autocomplete\tpending\t-\tnot in bundle\n'; fi
+    # electronics → fleet.json
+    present '.electronics.fleet' && printf 'electronics\twrite\t%s/fleet.json\tdevice list (%s)\n' "$CFG" "$(bq '.electronics.fleet | length') devices"
+    # settings / apps / peers → report
+    if present '.settings.items' && [ "$(bq '[.settings.items[] | select(.kind != "pending")] | length')" != 0 ]; then
+        printf 'settings\tskip\t-\tper-app settings are phone stores; on Linux they are linux-store etc entries\n'
+    else printf 'settings\tpending\t-\tevery app pending in the bundle\n'; fi
+    present '.apps.devices' && printf 'apps\tskip\t-\tcompared by `apps`, never installed\n' || printf 'apps\tpending\t-\tstaged section, not in bundle\n'
+    bq 'keys[] | select(IN("schema_version","_generated","mesh","mail","ai","git","about","autocomplete","electronics","settings","apps","peers") | not)' \
+        | while read -r k; do printf '%s\tskip\t-\tunknown section ignored\n' "$k"; done
+}
+cmd_plan() { plan | awk -F'\t' '{ printf "  %-12s %-8s %-40s %s\n", $1, $2, $3, $4 }'; }
+
+# ── COMMIT ─────────────────────────────────────────────────────────────────
+rec() { st_set "sha:$1" "$(sha256sum "$2" | cut -d' ' -f1)"; }   # remember what apply wrote
+
+write_fragment() {  # the linux-store include fragment: paths only, never values
+    local gb dev wgd dir frag p f n v
+    gb="$(git_base)"; dev="$(DEV)"; wgd="$(wg_dir_of "$dev")"
+    dir="$gb/cloud-me_configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"
+    [ -d "$dir" ] || die "no deb-user-configs at $dir"
+    frag="$dir/account.json"
+    v='{}'
+    [ -f "$gb/cloud-me_vault/$VAULT_SSH_KEY" ] && v="$(printf '%s' "$v" | jq -c --arg k "$VAULT_SSH_KEY" '.[".ssh/id_rsa"] = {file: ("vault:" + $k)} | .[".ssh/id_rsa.pub"] = {file: ("vault:" + $k + ".pub"), mode: "644"}')"
+    if [ -f "$gb/cloud-me_vault/$VAULT_GH_TOKEN" ]; then
+        mkdir -p "$dir/src/gh"
+        [ -f "$dir/src/gh/hosts.yml.tpl" ] || printf 'github.com:\n    user: diegonmarcos\n    oauth_token: @GH_TOKEN@\n    git_protocol: https\n' > "$dir/src/gh/hosts.yml.tpl"
+        v="$(printf '%s' "$v" | jq -c --arg k "$VAULT_GH_TOKEN" '.[".config/gh/hosts.yml"] = {template: "me:src/gh/hosts.yml.tpl", values: {GH_TOKEN: {file: ("vault:" + $k)}}}')"
+    fi
+    p="$gb/cloud-me_vault/$WG_ROOT/$wgd-public"
+    if [ -d "$p" ]; then
+        for f in "$p"/*; do
+            [ -f "$f" ] || continue; n="$(basename "$f")"
+            if grep -q 'PROVIDED_BY_DEVICE' "$f"; then
+                v="$(printf '%s' "$v" | jq -c --arg t ".config/wireguard/$wgd-$n.conf" --arg tpl "vault:$WG_ROOT/$wgd-public/$n" --arg key "vault:$WG_ROOT/$wgd/privatekey" '.[$t] = {template: $tpl, values: {WG_PRIVATE_KEY: {file: $key, placeholder: "<PROVIDED_BY_DEVICE>"}}}')"
+            else
+                v="$(printf '%s' "$v" | jq -c --arg t ".config/wireguard/$wgd-$n.conf" --arg s "vault:$WG_ROOT/$wgd-public/$n" '.[$t] = {file: $s}')"
+            fi
+        done
+    fi
+    jq -n --argjson s "$v" --arg dev "$dev" --arg at "$(date -u +%FT%TZ)" '{
+        _doc: "GENERATED by linux-account apply — the Account tab'"'"'s declared secrets for device \($dev), \($at). Paths into cloud-me_vault only, never values. Included by linux-store.json settings.include; regenerate with `linux-account apply`.",
+        settings: {roots: {vault: "cloud-me_vault"}},
+        common: {secret: $s}
+    }' > "$frag.tmp" && mv -f "$frag.tmp" "$frag"
+    # make sure the main declaration includes it
+    if ! jq -e '.settings.include // [] | index("me:account.json")' "$dir/linux-store.json" >/dev/null; then
+        jq --indent 2 '.settings.include = ((.settings.include // []) + ["me:account.json"])' "$dir/linux-store.json" > "$dir/linux-store.json.tmp" \
+            && mv -f "$dir/linux-store.json.tmp" "$dir/linux-store.json"
+        say "linux-store.json: settings.include += me:account.json"
+    fi
+    say "fragment: $frag ($(printf '%s' "$v" | jq 'length') declared secrets)"
+}
+
+commit_writes() {
+    local gb dev acct email f n
+    gb="$(git_base)"; dev="$(DEV)"; email="$(st_get identity_email)"
+    # about → card seed (only fields present; an absent key keeps the local value)
+    if present '.about.profile'; then
+        bqc '.about.profile | {name, email, phone: (.phone // ""), birth: (.birth // ""), titles: ((.titles_v2 // .titles // "") | if type == "array" then join(" | ") else . end), company, location, website} | with_entries(select(.value != null))' > "$CFG/.seed.json"
+        if [ -f "$CARD" ]; then jq -s '.[0] + .[1]' "$CARD" "$CFG/.seed.json" > "$CARD.tmp"; else cp "$CFG/.seed.json" "$CARD.tmp"; fi
+        mv -f "$CARD.tmp" "$CARD"; rm -f "$CFG/.seed.json"; chmod 600 "$CARD"; say "about: contact card seeded"
+    fi
+    # git → repos (and bundle-only fallbacks when the vault is not checked out)
+    if present '.git'; then
+        bqc '.git.repos' > "$CFG/repos.json"; chmod 600 "$CFG/repos.json"
+        if [ ! -f "$gb/cloud-me_vault/$VAULT_SSH_KEY" ]; then
+            mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+            bq '.git.ssh_private_key' > "$HOME/.ssh/id_rsa.tmp" && chmod 600 "$HOME/.ssh/id_rsa.tmp" && mv -f "$HOME/.ssh/id_rsa.tmp" "$HOME/.ssh/id_rsa"; rec ".ssh/id_rsa" "$HOME/.ssh/id_rsa"
+            bq '.git.ssh_public_key' > "$HOME/.ssh/id_rsa.pub.tmp" && chmod 644 "$HOME/.ssh/id_rsa.pub.tmp" && mv -f "$HOME/.ssh/id_rsa.pub.tmp" "$HOME/.ssh/id_rsa.pub"
+            say "git: ssh key written from the bundle"
+        fi
+        if [ ! -f "$gb/cloud-me_vault/$VAULT_GH_TOKEN" ]; then
+            mkdir -p "$HOME/.config/gh"
+            bq '.git.github_token | "github.com:\n    user: diegonmarcos\n    oauth_token: \(.)\n    git_protocol: https"' > "$HOME/.config/gh/hosts.yml.tmp" && chmod 600 "$HOME/.config/gh/hosts.yml.tmp" && mv -f "$HOME/.config/gh/hosts.yml.tmp" "$HOME/.config/gh/hosts.yml"
+            rec ".config/gh/hosts.yml" "$HOME/.config/gh/hosts.yml"; say "git: gh hosts.yml written from the bundle"
+        fi
+    fi
+    # mesh → profiles from the bundle only when the vault dir is absent; fleet ssh hosts always
+    if present '.mesh.profiles' && [ ! -d "$gb/cloud-me_vault/$WG_ROOT/$(wg_dir_of "$dev")-public" ]; then
+        mkdir -p "$HOME/.config/wireguard"; chmod 700 "$HOME/.config/wireguard"
+        bq '.mesh.profiles | keys[]' | while read -r n; do
+            jq -r --arg n "$n" '(.bundle // .) | .mesh.profiles[$n]' "$B" > "$HOME/.config/wireguard/$n.conf.tmp"
+            chmod 600 "$HOME/.config/wireguard/$n.conf.tmp"; mv -f "$HOME/.config/wireguard/$n.conf.tmp" "$HOME/.config/wireguard/$n.conf"
+            rec ".config/wireguard/$n.conf" "$HOME/.config/wireguard/$n.conf"
+        done; say "mesh: profiles written from the bundle"
+    fi
+    f="$gb/cloud-u-android/aa_cloud-superapp/data/mesh.json"
+    if [ -f "$f" ]; then
+        mkdir -p "$HOME/.ssh/config.d"; chmod 700 "$HOME/.ssh" "$HOME/.ssh/config.d"
+        { echo "# GENERATED by linux-account apply from aa_cloud-superapp/data/mesh.json — the fleet over WireGuard"
+          jq -r '.nodes | (if type == "object" then to_entries | map(.value + {name: (.value.name // .key)}) else . end)[] | select(.wg_ip != null) | "Host \(.name)\(if .alias then " " + .alias else "" end)\n    HostName \(.wg_ip)\n    User diego\n"' "$f"
+        } > "$HOME/.ssh/config.d/fleet.tmp" && chmod 600 "$HOME/.ssh/config.d/fleet.tmp" && mv -f "$HOME/.ssh/config.d/fleet.tmp" "$HOME/.ssh/config.d/fleet"
+        rec ".ssh/config.d/fleet" "$HOME/.ssh/config.d/fleet"
+        grep -qs 'config.d/fleet\|config.d/\*' "$HOME/.ssh/config" 2>/dev/null || say "mesh: add 'Include config.d/*' to ~/.ssh/config to use the fleet hosts"
+        say "mesh: $(grep -c '^Host ' "$HOME/.ssh/config.d/fleet") fleet hosts -> ~/.ssh/config.d/fleet"
+    fi
+    # mail → env for the identity's account
+    if present '.mail.accounts'; then
+        acct="$(jq -r --arg e "$email" '(.bundle // .) | .mail.accounts | to_entries[] | select(.value.name == $e or .key == ($e | split("@")[0])) | .key' "$B" 2>/dev/null | head -1)"
+        [ -n "$acct" ] || acct="$(bq '.mail.accounts | keys[0]')"
+        jq -r --arg a "$acct" '(.bundle // .) | .mail as $m
+            | ["# GENERATED by linux-account apply (0600) — mail for account \($a)",
+               "export MAIL_DOMAIN=\(($m.endpoints.domain // "") | @sh)",
+               "export MAIL_IMAP=\(($m.endpoints.imap // $m.endpoints.imaps // "") | @sh)",
+               "export MAIL_SMTP=\(($m.endpoints.smtp // $m.endpoints.smtps // "") | @sh)",
+               "export MAIL_JMAP=\(($m.endpoints.jmap // "") | @sh)",
+               "export MAIL_USER=\(($m.accounts[$a].name // $a) | @sh)",
+               "export MAIL_PASS=\((($m.passwords[$a] // $m.passwords[$m.accounts[$a].pass_env // ""] // "") | tostring) | @sh)"] | .[]' "$B" > "$SECRETS/mail.env.tmp" \
+            && chmod 600 "$SECRETS/mail.env.tmp" && mv -f "$SECRETS/mail.env.tmp" "$SECRETS/mail.env"
+        rec "secrets/mail.env" "$SECRETS/mail.env"; st_set mail_account "$acct"; say "mail: account $acct -> $SECRETS/mail.env"
+    fi
+    # ai → tokens env (names upper-snaked)
+    if present '.ai.tokens'; then
+        jq -r '(.bundle // .) | .ai.tokens | to_entries
+            | ["# GENERATED by linux-account apply (0600) — ai tokens; source it, never commit it"]
+              + map("export \(.key | ascii_upcase | gsub("[^A-Z0-9]"; "_"))_API_KEY=\(.value | tostring | @sh)")
+              + (if (map(.key) | index("claude")) != null then ["export ANTHROPIC_API_KEY=\(.[] | select(.key == "claude") | .value | tostring | @sh)"] else [] end)
+            | .[]' "$B" > "$SECRETS/ai.env.tmp" && chmod 600 "$SECRETS/ai.env.tmp" && mv -f "$SECRETS/ai.env.tmp" "$SECRETS/ai.env"
+        rec "secrets/ai.env" "$SECRETS/ai.env"; say "ai: $(bq '.ai.tokens | length') tokens -> $SECRETS/ai.env"
+    fi
+    # autocomplete → lists
+    if present '.autocomplete'; then
+        mkdir -p "$SECRETS/autocomplete"; chmod 700 "$SECRETS/autocomplete"
+        bq '.autocomplete | keys[]' | while read -r n; do
+            jq -c --arg n "$n" '(.bundle // .) | .autocomplete[$n]' "$B" > "$SECRETS/autocomplete/$n.json" && chmod 600 "$SECRETS/autocomplete/$n.json"
+        done; say "autocomplete: $(ls "$SECRETS/autocomplete" | wc -l | tr -d ' ') lists"
+    fi
+    # electronics → fleet.json
+    if present '.electronics.fleet'; then bqc '.electronics.fleet' > "$CFG/fleet.json"; chmod 600 "$CFG/fleet.json"; say "electronics: fleet.json ($(bq '.electronics.fleet | length') devices)"; fi
+}
+
+cmd_apply() {
+    local noswitch=0
+    [ "${1:-}" = --no-switch ] && noswitch=1
+    need_bundle; DEV >/dev/null
+    say "plan:"; cmd_plan
+    [ "$(plan | awk -F'\t' '$2 == "store" || $2 == "write"' | wc -l)" -gt 0 ] || die "nothing applicable in this bundle — no store was written."
+    write_fragment
+    commit_writes
+    st_set applied_at "$(date -u +%FT%TZ)"; st_set applied_device "$(DEV)"
+    if [ "$noswitch" = 1 ]; then say "declared; --no-switch given — run: linux-store switch"; return 0; fi
+    say "switch: linux-store switch (realises the declared secrets)"
+    if command -v linux-store >/dev/null 2>&1; then linux-store switch
+    else sh "$HERE/../da_linux-store/linux-store" switch; fi
+}
+
+# ── FLEET: the cockpit ─────────────────────────────────────────────────────
+# Row: label, declared-vs-device state. Values are compared by sha256 only.
+row() { printf '%s\t%s\t%s\n' "$1" "$2" "${3:-}"; }   # label state note
+file_state() {  # label  home-rel-path  expected-sha(or empty = recorded)
+    local f="$HOME/$2" want="$3"
+    [ -n "$want" ] || want="$(st_get "sha:$2")"
+    if [ ! -f "$f" ]; then row "$1" ABSENT "$2"
+    elif [ -z "$want" ]; then row "$1" DIFFERS "$2 exists but was never applied by $ME"
+    elif [ "$(sha256sum "$f" | cut -d' ' -f1)" = "$want" ]; then row "$1" MATCH "$2"
+    else row "$1" DIFFERS "$2 changed since apply"; fi
+}
+light() {  # observed(0|1) rows-file → ON|OFF|UNKNOWN|UNVERIFIABLE
+    [ "$1" = 1 ] || { echo UNVERIFIABLE; return; }
+    [ -s "$2" ] || { echo UNKNOWN; return; }
+    if grep -qE "$(printf '\t')(DIFFERS|ABSENT)" "$2"; then echo OFF
+    elif grep -qE "$(printf '\t')MATCH" "$2"; then echo ON
+    else echo UNKNOWN; fi
+}
+card() {  # title observed rows-file  → prints card, returns via global LIGHT
+    local l m d a p
+    LIGHT="$(light "$2" "$3")"
+    m="$(grep -c "$(printf '\t')MATCH" "$3" 2>/dev/null || echo 0)"; d="$(grep -cE "$(printf '\t')(DIFFERS|ABSENT)" "$3" 2>/dev/null || echo 0)"; p="$(grep -c "$(printf '\t')PENDING" "$3" 2>/dev/null || echo 0)"
+    case "$LIGHT" in ON) l='●' ;; OFF) l='○' ;; UNVERIFIABLE) l='◌' ;; *) l='◍' ;; esac
+    printf '  %s %-24s %s  %s\n' "$l" "$1" "$LIGHT" "$m match / $d differ / $p pending"
+    [ "${VERBOSE:-0}" = 1 ] && awk -F'\t' '{ printf "      %-9s %-28s %s\n", $2, $1, $3 }' "$3"
+    return 0
+}
+
+cmd_fleet() {
+    local gb dev wgd R t n f sha email acct declared installed lsok
+    need_bundle; gb="$(git_base)"; dev="$(DEV)"; wgd="$(wg_dir_of "$dev")"; R="$CFG/.rows"
+    [ "${1:-}" = -v ] && VERBOSE=1
+    printf '  device %s   wg %s %s   bundle: %s (%s)\n\n' "$dev" "$(bq --arg d "$dev" '.electronics.fleet[$d].wg_peer.name // "?"')" "$(bq --arg d "$dev" '.electronics.fleet[$d].wg_peer.wg_ip // ""')" "$(st_get bundle_source)" "$(st_get connected_at | cut -c1-10)"
+
+    # Mail
+    : > "$R"
+    if present '.mail.accounts'; then
+        acct="$(st_get mail_account)"
+        if [ -n "$acct" ]; then
+            f="$SECRETS/mail.env"
+            if [ ! -f "$f" ]; then row "account $acct" ABSENT "secrets/mail.env"
+            elif [ "$(sha256sum "$f" | cut -d' ' -f1)" = "$(st_get 'sha:secrets/mail.env')" ]; then row "account $acct" MATCH "secrets/mail.env"
+            else row "account $acct" DIFFERS "secrets/mail.env changed"; fi >> "$R"
+            row "jmap host" "$( [ -n "$(bq '.mail.endpoints.jmap // empty')" ] && echo MATCH || echo PENDING)" "$(bq '.mail.endpoints.domain // ""')" >> "$R"
+        else row "account" ABSENT "never applied" >> "$R"; fi
+    else row "mail" PENDING "not in bundle" >> "$R"; fi
+    card "Mail" 1 "$R"
+
+    # Keyboard & Clipboards — observed: false, as in the app
+    : > "$R"; bq '.autocomplete | keys[]?' | while read -r n; do row "$n" PENDING "runtime data"; done >> "$R"
+    card "Keyboard & Clipboards" 0 "$R"
+
+    # Mesh — one row per profile of this device + fleet hosts
+    : > "$R"
+    if [ -d "$gb/cloud-me_vault/$WG_ROOT/$wgd-public" ]; then
+        lsok=1; { command -v linux-store >/dev/null 2>&1 && linux-store check >/dev/null 2>&1; } || lsok=0
+        for f in "$gb/cloud-me_vault/$WG_ROOT/$wgd-public"/*; do
+            [ -f "$f" ] || continue; n="$wgd-$(basename "$f").conf"
+            t="$HOME/.config/wireguard/$n"
+            if [ ! -f "$t" ]; then row "$n" ABSENT ".config/wireguard/$n"
+            elif [ "$lsok" = 1 ]; then row "$n" MATCH "declared via linux-store"
+            else row "$n" DIFFERS "linux-store check fails"; fi
+        done
+    else bq '.mesh.profiles | keys[]?' | while read -r n; do file_state "$n" ".config/wireguard/$n.conf" ""; done; fi >> "$R"
+    [ -f "$gb/cloud-u-android/aa_cloud-superapp/data/mesh.json" ] && file_state "fleet ssh hosts" ".ssh/config.d/fleet" "" >> "$R"
+    card "Mesh" 1 "$R"
+
+    # Drive (private repos)
+    : > "$R"
+    if present '.git'; then
+        if [ -f "$HOME/.config/gh/hosts.yml" ]; then
+            sha="$(bq '.git.github_token' | tr -d '\n' | sha256sum | cut -d' ' -f1)"
+            [ "$(sed -n 's/^ *oauth_token: *//p' "$HOME/.config/gh/hosts.yml" | head -1 | tr -d '\n' | sha256sum | cut -d' ' -f1)" = "$sha" ] \
+                && row "github token" MATCH "gh hosts.yml" || row "github token" DIFFERS "gh hosts.yml holds another token"
+        else row "github token" ABSENT ".config/gh/hosts.yml"; fi
+        if [ -f "$HOME/.ssh/id_rsa" ]; then
+            sha="$(bq '.git.ssh_private_key' | sed -e '$a\' | sha256sum | cut -d' ' -f1)"
+            [ "$(sed -e '$a\' "$HOME/.ssh/id_rsa" | sha256sum | cut -d' ' -f1)" = "$sha" ] && row "ssh key" MATCH ".ssh/id_rsa" || row "ssh key" DIFFERS ".ssh/id_rsa is another key"
+        else row "ssh key" ABSENT ".ssh/id_rsa"; fi
+        declared="$(bq '.git.repos | length')"; installed="$(bq '.git.repos[] | (if type == "object" then (.name // .repo // .url // "") else . end) | tostring | split("/") | last | sub("\\.git$"; "")' | while read -r n; do [ -n "$n" ] && [ -d "$gb/$n" ] && echo 1; done | wc -l | tr -d ' ')"
+        [ "$installed" = "$declared" ] && row "repos" MATCH "$installed/$declared checked out" || row "repos" DIFFERS "$installed/$declared checked out under $gb"
+    else row "git" PENDING "not in bundle"; fi >> "$R"
+    card "Drive (private repos)" 1 "$R"
+
+    # AI
+    : > "$R"
+    if present '.ai.tokens'; then
+        f="$SECRETS/ai.env"
+        if [ ! -f "$f" ]; then row "tokens" ABSENT "secrets/ai.env"
+        elif [ "$(sha256sum "$f" | cut -d' ' -f1)" = "$(st_get 'sha:secrets/ai.env')" ]; then row "tokens ($(bq '.ai.tokens | length'))" MATCH "secrets/ai.env"
+        else row "tokens" DIFFERS "secrets/ai.env changed"; fi
+        [ -n "${ANTHROPIC_API_KEY:-}" ] && row "ANTHROPIC_API_KEY" MATCH "exported in this shell" || row "ANTHROPIC_API_KEY" ABSENT "not in this shell (source secrets/ai.env)"
+    else row "ai" PENDING "not in bundle"; fi >> "$R"
+    card "AI" 1 "$R"
+
+    # Apps — declared = linux-store bin entries; installed = resolvable
+    : > "$R"
+    if [ -f "$HOME/.linux-store/current/manifest.json" ]; then
+        jq -r '.entries[] | select(.layer == "bin") | .name' "$HOME/.linux-store/current/manifest.json" | while read -r n; do
+            [ -x "$HOME/.linux-store/current/bin/$n" ] && row "$n" MATCH "bin" || row "$n" ABSENT "bin/$n dangling"
+        done >> "$R"
+    else row "linux-store" ABSENT "no live generation" >> "$R"; fi
+    present '.apps.devices' || row "bundle apps.devices" PENDING "staged section" >> "$R"
+    card "Apps" 1 "$R"
+
+    # Raw — sections no card consumes
+    : > "$R"; for n in settings peers; do present ".$n" && row "$n" PENDING "read-only" || row "$n" PENDING "pending in bundle"; done >> "$R"
+    card "Raw (uncovered sections)" 0 "$R"
+    rm -f "$R"
+}
+
+# ── INFOS: the contact card + ProfileSync ──────────────────────────────────
+FIELDS="name email phone birth titles company location website"
+ensure_install() {
+    [ -n "$(st_get install_id)" ] || st_set install_id "$(cat /proc/sys/kernel/random/uuid 2>/dev/null || od -An -N16 -tx1 /dev/urandom | tr -d ' \n' | sed 's/\(........\)\(....\)\(....\)\(....\)\(............\)/\1-\2-\3-\4-\5/')"
+    [ -n "$(st_get install_secret)" ] || st_set install_secret "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+}
+card_doc() {  # the POST body: 8-field allowlist, nothing else
+    [ -f "$CARD" ] || echo '{}' > "$CARD"
+    jq -c --arg id "$(st_get install_id)" --arg at "$(date -u +%FT%TZ)" --arg v "$(linux-store status 2>/dev/null | sed -n 's/^Live: *//p' | cut -d' ' -f1)" \
+        '{schema: 1, install_id: $id, app_version_code: 1, app_version_name: ("linux-account/" + ($v // "")), updated_at: $at,
+          profile: ({name, email, phone, birth, location, company, website, titles} | with_entries(select(.value != null and .value != "")))}' "$CARD"
+}
+cmd_infos() {
+    local k v body rc
+    case "${1:-show}" in
+        show)
+            [ -f "$CARD" ] || { echo "  (empty — $ME infos set name=… email=…, or apply seeds it from the bundle)"; return 0; }
+            for k in $FIELDS; do printf '  %-9s %s\n' "$k" "$(jq -r --arg k "$k" '.[$k] // ""' "$CARD")"; done
+            printf '\n  required: name, email   sync: %s   last push: %s\n' "$PROFILE_SYNC_URL" "$(st_get pushed_at || echo never)"
+            ;;
+        set)
+            shift; [ -f "$CARD" ] || echo '{}' > "$CARD"
+            for kv in "$@"; do
+                k="${kv%%=*}"; v="${kv#*=}"
+                echo " $FIELDS " | grep -q " $k " || die "unknown field $k (fields: $FIELDS)"
+                # DOB: DD-MM-YYYY → ISO, as the app converts on blur
+                [ "$k" = birth ] && v="$(printf '%s' "$v" | sed -E 's/^([0-9]{2})-([0-9]{2})-([0-9]{4})$/\3-\2-\1/')"
+                jq --arg k "$k" --arg v "$v" '.[$k] = $v' "$CARD" > "$CARD.tmp" && mv -f "$CARD.tmp" "$CARD"
+            done; chmod 600 "$CARD"; say "saved"
+            ;;
+        push)
+            [ -f "$CARD" ] && [ -n "$(jq -r '.name // ""' "$CARD")" ] && [ -n "$(jq -r '.email // ""' "$CARD")" ] || die "name and email are required before a push"
+            case "$PROFILE_SYNC_URL" in https://*) ;; *) die "sync url must be https" ;; esac
+            ensure_install; body="$(card_doc)"
+            rc="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$PROFILE_SYNC_URL" -H "X-Install-Id: $(st_get install_id)" -H "Authorization: Bearer $(st_get install_secret)" -H 'Content-Type: application/json; charset=utf-8' -d "$body" 2>/dev/null)" || rc=000
+            case "$rc" in
+                200) st_set pushed_at "$(date -u +%FT%TZ)"; say "pushed ($rc)" ;;
+                429|000|5*) printf '%s' "$body" > "$QUEUE/$(date +%s).json"; say "queued for retry ($rc) — $ME infos flush" ;;
+                *) say "rejected ($rc) — not retried" ;;
+            esac
+            ;;
+        flush)
+            for f in "$QUEUE"/*.json; do
+                [ -f "$f" ] || continue
+                rc="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$PROFILE_SYNC_URL" -H "X-Install-Id: $(st_get install_id)" -H "Authorization: Bearer $(st_get install_secret)" -H 'Content-Type: application/json; charset=utf-8' -d @"$f" 2>/dev/null)" || rc=000
+                case "$rc" in 200|4*) rm -f "$f"; say "flushed $(basename "$f") ($rc)" ;; *) say "still queued ($rc)"; break ;; esac
+            done
+            ;;
+        erase)
+            # DELETE with the credential first (it is the only proof), then rotate the install id regardless.
+            if [ -n "$(st_get install_id)" ]; then
+                rc="$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE "$PROFILE_SYNC_URL" -H "X-Install-Id: $(st_get install_id)" -H "Authorization: Bearer $(st_get install_secret)" 2>/dev/null)" || rc=000
+                [ "$rc" = 200 ] && say "server record deleted" || say "server delete failed ($rc) — reported, not hidden"
+            fi
+            rm -f "$CARD" "$QUEUE"/*.json; st_del install_id; st_del install_secret; st_del pushed_at
+            say "local profile erased; install id rotated on next push"
+            ;;
+        *) die "infos [show | set k=v… | push | flush | erase]" ;;
+    esac
+}
+
+# ── APPS: compare + export (AppInventory) ──────────────────────────────────
+cmd_apps() {
+    local m="$HOME/.linux-store/current/manifest.json" n d i
+    case "${1:-compare}" in
+        compare)
+            [ -f "$m" ] || die "no live linux-store generation"
+            d=0; i=0
+            jq -r '.entries[] | select(.layer == "bin") | "\(.name)\t\(.kind)\t\(.host // .target)"' "$m" | while IFS="$(printf '\t')" read -r n k t; do
+                if [ -x "$HOME/.linux-store/current/bin/$n" ]; then printf '  ● %-14s %-10s %s\n' "$n" "$k" "$t"; else printf '  ○ %-14s %-10s MISSING %s\n' "$n" "$k" "$t"; fi
+            done
+            printf '\n  declared %s (linux-store bin) · installed %s · bundle apps.devices: %s\n' \
+                "$(jq '[.entries[] | select(.layer == "bin")] | length' "$m")" \
+                "$(jq -r '.entries[] | select(.layer == "bin") | .name' "$m" | while read -r n; do [ -x "$HOME/.linux-store/current/bin/$n" ] && echo 1; done | wc -l | tr -d ' ')" \
+                "$( (need_bundle 2>/dev/null && present '.apps.devices') && echo declared || echo pending)"
+            ;;
+        export)
+            [ -f "$m" ] || die "no live linux-store generation"
+            jq -c --arg host "$(hostname 2>/dev/null || uname -n)" --arg at "$(date -u +%FT%TZ)" '
+                {kind: "linux-account.app-inventory", schema: 1, host: $host, exported_at: $at,
+                 apps: [.entries[] | select(.layer == "bin") | {name, origin: .kind, path: (.host // .target), ours: (.kind != "host")}]}' "$m" > "${2:-linux-account-apps.json}"
+            say "exported $(jq '.apps | length' "${2:-linux-account-apps.json}") apps -> ${2:-linux-account-apps.json}"
+            ;;
+        *) die "apps [compare | export [file]]" ;;
+    esac
+}
+
+# ── WIREGUARD / AI links ───────────────────────────────────────────────────
+cmd_wg() {
+    local n
+    case "${1:-list}" in
+        list)
+            for n in "$HOME"/.config/wireguard/*.conf; do [ -f "$n" ] || continue; printf '  %-32s %s\n' "$(basename "$n" .conf)" "$(sed -n 's/^Address *= *//p' "$n" | head -1)"; done
+            command -v wg >/dev/null 2>&1 && wg show 2>/dev/null | head -3 || echo "  (wg not installed — profiles are declared; bring one up with wg-quick up <path>)"
+            ;;
+        up|down) command -v wg-quick >/dev/null 2>&1 || die "wg-quick not installed"; wg-quick "$1" "$HOME/.config/wireguard/${2:?profile}.conf" ;;
+        *) die "wg [list | up <profile> | down <profile>]" ;;
+    esac
+}
+cmd_ai() {
+    [ -f "$SECRETS/ai.env" ] && { printf '  tokens: %s (source %s)\n' "$(grep -c '^export' "$SECRETS/ai.env")" "$SECRETS/ai.env"; } || echo "  no tokens applied yet"
+    [ -d "$HOME/.claude/agents" ] && printf '  claude: %s agents, settings %s\n' "$(ls "$HOME/.claude/agents" | wc -l | tr -d ' ')" "$( [ -f "$HOME/.claude/settings.json" ] && echo rendered || echo missing)"
+}
+
+# ── status / journey ───────────────────────────────────────────────────────
+step_state() {  # prints DONE|ACTIVE|LOCKED per step
+    local s1 s2 s3 s4
+    bundle_path >/dev/null 2>&1 && s1=DONE || s1=ACTIVE
+    [ "$s1" = DONE ] && { [ -n "$(st_get identity_email)" ] && s2=DONE || s2=ACTIVE; } || s2=LOCKED
+    [ "$s2" = DONE ] && { [ -n "$(st_get device_id)" ] || [ -n "$(default_device)" ]; } && s3=DONE || { [ "$s2" = DONE ] && s3=ACTIVE || s3=LOCKED; }
+    [ "$s3" = DONE ] && { [ -n "$(st_get applied_at)" ] && s4=DONE || s4=ACTIVE; } || s4=LOCKED
+    echo "$s1 $s2 $s3 $s4"
+}
+cmd_journey() {
+    set -- $(step_state)
+    printf '  %s 1 Sign in       %s\n' "$(dot "$1")" "$( bundle_path >/dev/null 2>&1 && echo "$(st_get bundle_source)" || echo 'connect [--vault|--file|--github|--bearer|--code]')"
+    printf '  %s 2 Who           %s\n' "$(dot "$2")" "$(st_get identity_email || echo '-')"
+    printf '  %s 3 Which device  %s\n' "$(dot "$3")" "$(st_get device_id || default_device || echo '-')"
+    printf '  %s 4 Get everything %s\n' "$(dot "$4")" "$( [ -n "$(st_get applied_at)" ] && echo "applied $(st_get applied_at) on $(st_get applied_device)" || echo 'apply')"
+}
+dot() { case "$1" in DONE) echo '●' ;; ACTIVE) echo '◍' ;; LOCKED) echo '◌' ;; *) echo '○' ;; esac; }
+cmd_status() { cmd_journey; echo; bundle_path >/dev/null 2>&1 && cmd_fleet; }
+
+# ── tui ────────────────────────────────────────────────────────────────────
+C_B="$(printf '\033[1m')"; C_C="$(printf '\033[36m')"; C_G="$(printf '\033[32m')"; C_Y="$(printf '\033[33m')"; C_N="$(printf '\033[0m')"; C_D="$(printf '\033[2m')"
+pause() { printf '\n%sEnter%s ' "$C_D" "$C_N"; read -r _ || true; }
+ask() { printf '%s%s%s ' "$C_B" "$1" "$C_N"; read -r REPLY || REPLY=q; }
+hdr() { clear 2>/dev/null || printf '\033[H\033[2J'; printf '%s┌─ linux-account ─ %s ─────────────────────────────────┐%s\n' "$C_C" "$1" "$C_N"; cmd_journey; printf '%s└──────────────────────────────────────────────────────────┘%s\n\n' "$C_C" "$C_N"; }
+cmd_tui() {
+    [ -t 0 ] || [ -n "${LINUX_ACCOUNT_TUI_TEST:-}" ] || die "tui needs a terminal"
+    while :; do
+        hdr "Account"
+        printf '  %s1)%s Fleet      the cockpit\n  %s2)%s Connect    sign in · who · device · get everything\n  %s3)%s Infos      contact card + sync\n  %s4)%s WireGuard  %s5)%s AI   %s6)%s Apps\n  %sq)%s quit\n\n' "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_Y" "$C_N"
+        ask "Choice:"
+        case "$REPLY" in
+            1) hdr Fleet; cmd_fleet -v 2>&1 || true; pause ;;
+            2) while :; do hdr Connect
+                   printf '  %s1)%s sign in: vault checkout   %s2)%s --file <path>   %s3)%s --github   %s4)%s --bearer   %s5)%s --code\n  %s6)%s who   %s7)%s device   %s8)%s plan   %s9)%s APPLY (get everything)   %sb)%s back\n\n' "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_Y" "$C_N"
+                   ask "Choice:"
+                   case "$REPLY" in
+                       1) cmd_connect --vault || true; pause ;;
+                       2) ask "path:"; cmd_connect --file "$REPLY" || true; pause ;;
+                       3) cmd_connect --github || true; pause ;;
+                       4) ask "bearer:"; cmd_connect --bearer "$REPLY" || true; pause ;;
+                       5) ask "code (empty = mail me one):"; cmd_connect --code $REPLY || true; pause ;;
+                       6) cmd_who; ask "email (empty = keep):"; [ -n "$REPLY" ] && cmd_who "$REPLY"; pause ;;
+                       7) cmd_device; ask "device id (empty = keep):"; [ -n "$REPLY" ] && cmd_device "$REPLY"; pause ;;
+                       8) cmd_plan 2>&1 || true; pause ;;
+                       9) cmd_apply 2>&1 || true; pause ;;
+                       b|q) break ;;
+                   esac; done ;;
+            3) hdr Infos; cmd_infos show; printf '\n  %sp)%s push   %se)%s erase   %ss)%s set field   %sb)%s back\n' "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_Y" "$C_N"; ask "Choice:"
+               case "$REPLY" in p) cmd_infos push || true; pause ;; e) cmd_infos erase || true; pause ;; s) ask "field=value:"; cmd_infos set "$REPLY" || true; pause ;; esac ;;
+            4) hdr WireGuard; cmd_wg list; pause ;;
+            5) hdr AI; cmd_ai; pause ;;
+            6) hdr Apps; cmd_apps compare 2>&1 || true; pause ;;
+            q|Q) return 0 ;;
+        esac
+    done
+}
+
+usage() {
+    cat <<'EOF'
+linux-account — cloud-superapp's Account tab for the Linux userlands
+
+  CONNECT (the journey)
+    connect [--vault | --file <p> | --github | --bearer <t> | --code [<c>] | --forget]   1 · sign in = find the bundle
+    who [<email>]                                                                   2 · identity
+    device [<id>]                                                                   3 · which device (peer)
+    plan                                                                            what apply would write
+    apply [--no-switch]                                                             4 · get everything: declare + write + linux-store switch
+  FLEET
+    fleet [-v]        the cockpit: Mail · Keyboard & Clipboards · Mesh · Drive · AI · Apps · Raw
+    status            journey + cockpit
+  INFOS
+    infos [show | set k=v… | push | flush | erase]     contact card; push = ProfileSync POST
+  LINKS
+    wg [list | up <p> | down <p>]      ai      apps [compare | export [file]]
+  tui               the Account tab in the terminal
+
+State: ~/.config/linux-account/ (0700). Bundle: cloud-me_vault/C_A1-configs/profile-secrets.json (schema 1).
+Secrets that are files in the vault are DECLARED (deb-user-configs/account.json → linux-store); the rest is written 0600 under state.
+EOF
+}
+
+cmd="${1:-help}"; [ $# -gt 0 ] && shift
+case "$cmd" in
+    connect) cmd_connect "$@" ;;
+    who)     cmd_who "$@" ;;
+    device)  cmd_device "$@" ;;
+    plan)    cmd_plan ;;
+    apply)   cmd_apply "$@" ;;
+    fleet)   cmd_fleet "$@" ;;
+    status)  cmd_status ;;
+    journey) cmd_journey ;;
+    infos)   cmd_infos "$@" ;;
+    apps)    cmd_apps "$@" ;;
+    wg)      cmd_wg "$@" ;;
+    ai)      cmd_ai ;;
+    tui)     cmd_tui ;;
+    help|-h|--help) usage ;;
+    *) usage >&2; exit 2 ;;
+esac

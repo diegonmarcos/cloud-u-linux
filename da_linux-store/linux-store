@@ -123,6 +123,8 @@ need_decl() {
                  | "unknown layer \"\(.)\" in \($s)" )
     ' "$DECL")"
     [ -z "$_bad" ] || die "$DECL: $_bad"
+    _bad="$(jq -r '.settings.include[]? // empty | select(type != "string") | "settings.include entries must be strings"' "$DECL")"
+    [ -z "$_bad" ] || die "$DECL: $_bad"
 }
 
 # ── profile ────────────────────────────────────────────────────────────────
@@ -153,7 +155,7 @@ resolve_src() {
         /*) echo "$s" ;;
         *:*)
             root="${s%%:*}"; rest="${s#*:}"
-            rp="$(jq -r --arg r "$root" '.settings.roots[$r] // empty' "$DECL")"
+            rp="$(jq -r --arg r "$root" '.settings.roots[$r] // empty' "${RESOLVE_DECL:-$DECL}")"
             [ -n "$rp" ] || die "'$s' names root '$root', which settings.roots does not declare"
             rp="$(resolve_src "$rp")" || exit 1
             echo "$rp/$rest"
@@ -225,7 +227,29 @@ add_store() {
 stage_tmp() { _n=$((_n + 1)); TMPP="$OBJTMP/$_n"; }
 
 # ── build: declaration → sealed generation (no switch) ─────────────────────
+# The effective declaration: the main file deep-merged with settings.include
+# fragments (each a path like any source), later wins, null removes — the same
+# overlay rules the profiles use. linux-account writes such a fragment.
+# After the merge, roots declared by a fragment resolve too (RESOLVE_DECL).
+merged_decl() {
+    local inc files=""
+    RESOLVE_DECL="$DECL"
+    for inc in $(jq -r '.settings.include[]? // empty' "$DECL"); do
+        inc="$(resolve_src "$inc")" || exit 1
+        [ -f "$inc" ] || die "settings.include: $inc does not exist"
+        jq -e 'type == "object"' "$inc" >/dev/null 2>&1 || die "settings.include: $inc is not a JSON object"
+        files="$files $inc"
+    done
+    # shellcheck disable=SC2086
+    jq -s 'reduce .[] as $x ({}; . * $x)' "$DECL" $files > "$ROOT/.merged.$$" || die "could not merge the declaration"
+    RESOLVE_DECL="$ROOT/.merged.$$"
+    cat "$ROOT/.merged.$$"
+}
+
 plan() {
+    # merged_decl runs HERE, not in a pipeline, so RESOLVE_DECL survives for
+    # the resolve_src calls that follow in build_entry.
+    merged_decl >/dev/null
     jq -c --arg p "$1" '
         def ents($d; $l):
             ((($d.common // {})[$l] // {}) + (($d[$p] // {})[$l] // {}))
@@ -245,7 +269,7 @@ plan() {
               v: ( $c + $o
                    + (if ($c.render != null or $o.render != null)
                       then {render: (($c.render // []) + ($o.render // []))} else {} end) ) }
-    ' "$DECL"
+    ' "$RESOLVE_DECL"
 }
 
 entry() {  # layer name kind target source host
@@ -424,11 +448,21 @@ sops_to() {  # file extract out
 }
 
 build_secret() {
-    local k="$1" v="$2" mode f x tpl name vals src
-    command -v sops >/dev/null 2>&1 || die "secret/$k: needs sops on PATH"
+    local k="$1" v="$2" mode f x tpl name vals src ph
+    [ "$(printf '%s' "$v" | jq 'has("file") and (has("template") | not)')" = true ] \
+        || command -v sops >/dev/null 2>&1 || die "secret/$k: needs sops on PATH"
     mode="$(printf '%s' "$v" | jq -r '.mode // "600"')"
     case "$mode" in [0-7][0-7][0-7]) ;; *) die "secret/$k: mode '$mode' is not octal like 600" ;; esac
-    if [ "$(printf '%s' "$v" | jq 'has("sops")')" = true ]; then
+    if [ "$(printf '%s' "$v" | jq 'has("file")')" = true ]; then
+        # A plaintext file that is itself the secret (the vault is a private
+        # repo: b0-github/api-key_opaque/token, c2-system/ssh/id_rsa). Checked
+        # here, copied at realise, never into store/.
+        f="$(resolve_src "$(printf '%s' "$v" | jq -r .file)")" || exit 1
+        [ -f "$f" ] && [ -r "$f" ] || die "secret/$k: $f does not exist or is unreadable"
+        [ -s "$f" ] || die "secret/$k: $f is empty"
+        src="$(jq -nc --arg f "$f" --arg m "$mode" '{kind:"file", file:$f, mode:$m}')"
+        entry secret "$k" file "" "$src"
+    elif [ "$(printf '%s' "$v" | jq 'has("sops")')" = true ]; then
         f="$(resolve_src "$(printf '%s' "$v" | jq -r .sops)")" || exit 1
         [ -f "$f" ] || die "secret/$k: $f does not exist"
         x="$(printf '%s' "$v" | jq -r '.extract // empty')"
@@ -442,18 +476,28 @@ build_secret() {
         vals='{}'
         for name in $(printf '%s' "$v" | jq -r '.values // {} | keys[]'); do
             printf '%s' "$name" | grep -qE '^[A-Z][A-Z0-9_]*$' || die "secret/$k: value name '$name' must be UPPER_SNAKE"
-            grep -qF "@$name@" "$tpl" || die "secret/$k: template has no @$name@"
+            # The marker in the template: @NAME@ unless the value names its
+            # own (the vault's WireGuard profiles carry <PROVIDED_BY_DEVICE>,
+            # the same marker the phone splices its stored key into).
+            ph="$(printf '%s' "$v" | jq -r --arg n "$name" '.values[$n].placeholder // ("@" + $n + "@")')"
+            grep -qF "$ph" "$tpl" || die "secret/$k: template has no $ph"
+            if [ "$(printf '%s' "$v" | jq --arg n "$name" '.values[$n] | has("file")')" = true ]; then
+                f="$(resolve_src "$(printf '%s' "$v" | jq -r --arg n "$name" '.values[$n].file')")" || exit 1
+                [ -s "$f" ] || die "secret/$k: $name: $f does not exist or is empty"
+                vals="$(printf '%s' "$vals" | jq -c --arg n "$name" --arg f "$f" --arg ph "$ph" '. + {($n): {file:$f, plain:true, placeholder:$ph}}')"
+                continue
+            fi
             f="$(resolve_src "$(printf '%s' "$v" | jq -r --arg n "$name" '.values[$n].sops // empty')")" || exit 1
             [ -f "$f" ] || die "secret/$k: $name: $f does not exist"
             x="$(printf '%s' "$v" | jq -r --arg n "$name" '.values[$n].extract // empty')"
             sops_check "$f" "$x" "secret/$k: $name"
-            vals="$(printf '%s' "$vals" | jq -c --arg n "$name" --arg f "$f" --arg x "$x" '. + {($n): {file:$f, extract:$x}}')"
+            vals="$(printf '%s' "$vals" | jq -c --arg n "$name" --arg f "$f" --arg x "$x" --arg ph "$ph" '. + {($n): {file:$f, extract:$x, placeholder:$ph}}')"
         done
         [ "$vals" != '{}' ] || die "secret/$k: template declares no values"
         src="$(jq -nc --arg t "$OBJ" --argjson v "$vals" --arg m "$mode" '{kind:"template", template:$t, values:$v, mode:$m}')"
         entry secret "$k" template "$OBJ" "$src"
     else
-        die "secret/$k: declare sops or template"
+        die "secret/$k: declare file, sops or template"
     fi
 }
 
@@ -461,6 +505,10 @@ build_secret() {
 render_secret() {
     local src="$1" out="$2" d i=0 name f x args filter
     case "$(printf '%s' "$src" | jq -r .kind)" in
+        file)
+            cp "$(printf '%s' "$src" | jq -r .file)" "$out" || return 1
+            [ -z "$(tail -c1 "$out")" ] || echo >> "$out"
+            ;;
         sops)
             sops_to "$(printf '%s' "$src" | jq -r .file)" "$(printf '%s' "$src" | jq -r .extract)" "$out" \
                 || return 1
@@ -473,10 +521,16 @@ render_secret() {
             for name in $(printf '%s' "$src" | jq -r '.values | keys[]'); do
                 i=$((i + 1))
                 f="$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].file')"
-                x="$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].extract')"
-                sops_to "$f" "$x" "$d/v$i" || { rm -rf "$d"; return 1; }
-                args="$args --rawfile v$i $d/v$i"
-                filter="$filter | gsub(\"@$name@\"; (\$v$i | sub(\"\\n\$\"; \"\")))"
+                if [ "$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].plain // false')" = true ]; then
+                    cp "$f" "$d/v$i" || { rm -rf "$d"; return 1; }
+                else
+                    x="$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].extract')"
+                    sops_to "$f" "$x" "$d/v$i" || { rm -rf "$d"; return 1; }
+                fi
+                printf '%s' "$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].placeholder // ("@" + $n + "@")')" > "$d/p$i"
+                args="$args --rawfile v$i $d/v$i --rawfile p$i $d/p$i"
+                # split/join: a literal replacement, no regex to escape
+                filter="$filter | split(\$p$i) | join(\$v$i | sub(\"\\n\$\"; \"\"))"
             done
             # shellcheck disable=SC2086
             jq -nj --rawfile t "$(printf '%s' "$src" | jq -r .template)" $args "$filter" > "$out" \
@@ -565,7 +619,7 @@ build() {  # profile  →  sets GEN
 
     objs="$(sort -u "$STAGE/.objects" | jq -R . | jq -sc .)"
     jq -s --arg p "$p" --arg g "$p-$n" --arg gb "$GB" --arg decl "$DECL" \
-          --arg dsha "$(sha256sum "$DECL" | cut -d' ' -f1)" --arg at "$(date -u +%FT%TZ)" \
+          --arg dsha "$(merged_decl | sha256sum | cut -d' ' -f1)" --arg at "$(date -u +%FT%TZ)" \
           --argjson objs "$objs" \
         '{profile:$p, generation:$g, created:$at, git_base:$gb, declaration:$decl,
           declaration_sha256:$dsha, entries:., objects:$objs}' \

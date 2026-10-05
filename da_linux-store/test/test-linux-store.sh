@@ -217,6 +217,31 @@ chmod 644 "$HOME/.ssh/id_test"
 ls_ check; check "loosened mode is caught" '[ $? -ne 0 ] && grep -q "has mode 644" "$T/out"'
 ls_ repair; check "repair re-decrypts both" '[ $? -eq 0 ] && [ "$(stat -c %a "$HOME/.ssh/id_test")" = 600 ] && ! grep -q tampered "$HOME/.config/gh/hosts.yml"'
 
+section "secret file kind + settings.include"
+mkdir -p "$C/vault/gh" "$C/vault/ssh"
+printf 'ghp_PLAIN_TEST_TOKEN\n' > "$C/vault/gh/token"
+printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nPLAINKEY\n-----END OPENSSH PRIVATE KEY-----' > "$C/vault/ssh/id_rsa"
+cat > "$C/account.json" <<EOF
+{ "common": { "secret": {
+    ".ssh/id_rsa":          { "file": "c:vault/ssh/id_rsa" },
+    ".config/gh/hosts.yml": { "template": "c:gh-hosts.yml.tpl", "values": { "GH_TOKEN": { "file": "c:vault/gh/token" } } },
+    ".ssh/id_test": null
+} } }
+EOF
+jq '.settings.include = ["c:account.json"]' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
+ls_ switch; rc=$?
+check "include: switch succeeds" '[ $rc -eq 0 ]'
+[ $rc -eq 0 ] || cat "$T/out"
+check "file secret: ssh key copied, 600, newline-terminated" \
+    '[ "$(stat -c %a "$HOME/.ssh/id_rsa")" = 600 ] && grep -q PLAINKEY "$HOME/.ssh/id_rsa" && [ -z "$(tail -c1 "$HOME/.ssh/id_rsa")" ]'
+check "file value in template: token rendered without its trailing newline" \
+    'grep -qx "    oauth_token: ghp_PLAIN_TEST_TOKEN" "$HOME/.config/gh/hosts.yml"'
+check "include: null in a fragment removes an entry" '! jq -e ".entries[] | select(.name == \".ssh/id_test\")" "$(readlink "$R/current")/manifest.json" >/dev/null'
+check "no plaintext secret under the store root" '! grep -rqs -e ghp_PLAIN_TEST_TOKEN -e PLAINKEY "$R"'
+ls_ check; check "check passes with file secrets" '[ $? -eq 0 ]'
+: > "$C/vault/gh/token"; ls_ build; check "empty secret file is refused at build" '[ $? -ne 0 ] && grep -q "is empty" "$T/out"'
+printf 'ghp_PLAIN_TEST_TOKEN\n' > "$C/vault/gh/token"
+
 section "declaration from cloud-me_configs"
 CM="$GIT_BASE/cloud-me_configs"; UD="$CM/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"
 mkdir -p "$UD"
