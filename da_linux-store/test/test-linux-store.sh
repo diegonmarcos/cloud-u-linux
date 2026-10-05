@@ -250,7 +250,7 @@ ls_ switch; rc=$?
 check "optional absent sources do not fail the switch" '[ $rc -eq 0 ] && grep -q "ghost: .*absent — declared, skipped" "$T/out" && grep -q "phantom: host .*absent" "$T/out" && grep -q "unreach: .*unreachable" "$T/out"'
 check "absent entries are recorded in the manifest with their app" '[ "$(jq -r ".entries[] | select(.name == \"ghost\") | .kind + \" \" + .app" "$(readlink "$R/current")/manifest.json")" = "absent ghost-app" ]'
 ls_ check; check "check ignores absent entries" '[ $? -eq 0 ]'
-jq --arg s "$(printf 1%.0s $(seq 64))" '.common.lib.moved = {"fetch": ("file://" + $ENV.T + "/payload"), "sha256": $s, "optional": true}' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
+jq --arg s "$(printf 1%.0s $(seq 64))" --arg t "$T" '.common.lib.moved = {"fetch": ("file://" + $t + "/payload"), "sha256": $s, "optional": true}' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
 ls_ switch; check "optional fetch with a moved hash is refused loudly, nothing installed, switch goes on" '[ $? -eq 0 ] && grep -q "moved: .*REFUSED, not installed" "$T/out" && [ ! -e "$R/current/lib/moved" ]'
 check "no store object was kept for the refused download" '! ls "$R/store" | grep -q -- "-moved$"'
 jq 'del(.common.lib.moved)' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
