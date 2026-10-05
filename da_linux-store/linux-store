@@ -748,10 +748,10 @@ same_profile() {
 }
 
 # ── verify ─────────────────────────────────────────────────────────────────
-verify() {
+check() {
     local gen mp gp o l k kind t s h want got
     BAD=0
-    if [ ! -L "$CUR" ]; then fail "$CUR is missing — nothing is live; run apply"; return 1; fi
+    if [ ! -L "$CUR" ]; then fail "$CUR is missing — nothing is live; run switch"; return 1; fi
     gen="$(readlink "$CUR")"
     if [ ! -f "$gen/manifest.json" ]; then fail "$CUR points at $gen, which is not a generation"; return 1; fi
     mp="$(detect_profile)" || exit 1; gp="$(jq -r .profile "$gen/manifest.json")"
@@ -819,7 +819,7 @@ cmd_build() {
     echo "$GEN"
 }
 
-cmd_apply() {
+cmd_switch() {
     local backup=0 p prev
     [ "${1:-}" = --backup ] && backup=1
     p="$(detect_profile)" || exit 1
@@ -833,10 +833,10 @@ cmd_apply() {
     printf '%s\n' "$DECL" > "$ROOT/declaration"
     prune "$p"
     say "${GEN##*/} is live"
-    verify
+    check
 }
 
-cmd_switch() {  # target-gen
+cmd_switch_generation() {  # target-gen
     local g prev
     g="$(gen_path "$1")"
     [ -f "$g/manifest.json" ] || die "no generation ${1}"
@@ -847,7 +847,7 @@ cmd_switch() {  # target-gen
     switch_to "$g"
     realise "$g" "$prev"
     say "switched to ${g##*/}"
-    verify
+    check
 }
 
 cmd_rollback() {
@@ -863,10 +863,10 @@ cmd_rollback() {
         best="$b"
     done
     [ -n "$best" ] || die "$p-$cur is the oldest generation kept; nothing to roll back to"
-    cmd_switch "$p-$best"
+    cmd_switch_generation "$p-$best"
 }
 
-cmd_generations() {
+cmd_list_generations() {
     local live g
     live="$(readlink "$CUR" 2>/dev/null || true)"
     for g in $(cd "$GENS" 2>/dev/null && ls -1d *-* 2>/dev/null | sort -t- -k1,1 -k2,2n); do
@@ -928,21 +928,70 @@ cmd_dev() {  # [--off] rel   |   (no args: list)
     fi
 }
 
+cmd_status() {
+    local live
+    live="$(readlink "$CUR" 2>/dev/null || true)"
+    printf 'Profile:      %s\n' "$(detect_profile 2>/dev/null || echo '?')"
+    printf 'System:       %s (%s)  user %s  home %s\n' "$(uname -s)" "$(uname -m)" "$(id -un)" "$HOME"
+    printf 'Store root:   %s\n' "$ROOT"
+    printf 'Declaration:  %s\n' "${DECL:-<none>}"
+    if [ -n "$live" ] && [ -f "$live/manifest.json" ]; then
+        printf 'Live:         %s  (built %s)\n' "${live##*/}" "$(jq -r .created "$live/manifest.json")"
+        printf 'Entries:      %s\n' "$(jq -r '.entries | group_by(.layer) | map("\(.[0].layer)=\(length)") | join(" ")' "$live/manifest.json")"
+    else
+        printf 'Live:         none — run switch\n'
+    fi
+    printf 'Generations:  %s\n' "$(cd "$GENS" 2>/dev/null && ls -1d *-* 2>/dev/null | wc -l | tr -d ' ')"
+    printf 'Store:        %s objects, %s\n' "$(ls -1 "$STORE" 2>/dev/null | wc -l | tr -d ' ')" "$(du -sh "$STORE" 2>/dev/null | cut -f1)"
+    [ ! -s "$DEVLIST" ] || printf 'Dev mode:     %s\n' "$(paste -sd' ' "$DEVLIST")"
+}
+
+# What the declaration resolves to for this profile — the flake's `show`.
+cmd_show() {
+    local p
+    need_decl
+    p="$(detect_profile)" || exit 1
+    printf '%s  (profile %s)\n' "$DECL" "$p"
+    plan "$p" | jq -r '"  \(.l)/\(.k)  \(.v | del(.[] | select(. == null)) | tojson)"'
+}
+
+# The flake's `update`: refresh the checkouts the declaration reads from,
+# then switch. Each root is pulled fast-forward only; a root that cannot be
+# pulled (no auth, no remote) is reported and the switch still runs on what is
+# there, like the flake deploying committed copies when a SoT is absent.
+cmd_update() {
+    local noswitch=0 r d gb
+    [ "${1:-}" = --no-switch ] && noswitch=1
+    need_decl
+    gb="$(git_base)" || exit 1
+    for r in "$gb/cloud-me_configs" $(jq -r '.settings.roots // {} | .[]' "$DECL" | sed "s|^|$gb/|" | cut -d/ -f1-"$(printf '%s' "$gb" | tr -cd / | wc -c | awk '{print $1+2}')" | sort -u); do
+        d="$(cd "$r" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)" || continue
+        if git -C "$d" pull -q --ff-only 2>/dev/null; then say "updated ${d##*/}"
+        else say "warning — ${d##*/}: pull failed (no auth or not fast-forward); using the checkout as is"; fi
+    done
+    [ "$noswitch" = 1 ] || cmd_switch
+}
+
 usage() {
     cat <<'EOF'
 linux-store — nix-store semantics for the termux and desktop Linux userlands
 
-  apply [--backup]       build a generation from the declaration and switch to it
-  build [--profile p]    build without switching (p = termux | desktop)
-  verify                 check every link, store object hash and activated file
-  repair                 verify; if anything is wrong, apply
-  rollback               switch to the previous generation of this profile
-  switch <gen>           switch to <gen> (e.g. termux-3, or just 3)
-  generations            list generations, marking the live one
-  diff <a> [<b>]         compare two generations (b defaults to the live one)
-  gc                     delete store objects no kept generation references
-  dev [--off] <etc path> link an etc entry straight to its repo source (or back)
-  profile                print the detected profile
+Same verbs as nix / home-manager / the flakes' build.sh:
+
+  switch [--backup]          build a generation from the declaration and make it live
+  build [--profile p]        build only, no switch (p = termux | desktop)
+  update [--no-switch]       pull the checkouts the declaration reads, then switch
+  rollback                   make the previous generation of this profile live
+  switch-generation <gen>    make <gen> live (e.g. termux-3, or just 3)
+  list-generations           list generations, marking the live one
+  check                      every link, store object hash, activated file and secret
+  repair                     check; if anything is wrong, switch
+  diff <a> [<b>]             compare two generations (b defaults to the live one)
+  gc                         delete store objects no kept generation references
+  dev [--off] <etc path>     link an etc entry straight to its repo source (or back)
+  show                       what the declaration resolves to for this profile
+  status                     profile, live generation, store size
+  profile                    print the detected profile
 
 Declaration: <git base>/cloud-me_configs/<configs-user>/deb-user-configs/linux-store.json
 
@@ -953,13 +1002,16 @@ EOF
 
 cmd="${1:-help}"; [ $# -gt 0 ] && shift
 case "$cmd" in
-    apply)       cmd_apply "$@" ;;
+    switch)      cmd_switch "$@" ;;
     build)       cmd_build "$@" ;;
-    verify)      verify ;;
-    repair)      if verify; then say "nothing to repair"; else say "repairing from the declaration"; cmd_apply "$@"; fi ;;
+    update)      cmd_update "$@" ;;
+    check)       check ;;
+    repair)      if check; then say "nothing to repair"; else say "repairing from the declaration"; cmd_switch "$@"; fi ;;
     rollback)    cmd_rollback ;;
-    switch)      [ $# -eq 1 ] || die "usage: switch <gen>"; cmd_switch "$1" ;;
-    generations) cmd_generations ;;
+    switch-generation) [ $# -eq 1 ] || die "usage: switch-generation <gen>"; cmd_switch_generation "$1" ;;
+    list-generations)  cmd_list_generations ;;
+    show)        cmd_show ;;
+    status)      cmd_status ;;
     diff)        cmd_diff "$@" ;;
     gc)          cmd_gc ;;
     dev)         cmd_dev "$@" ;;

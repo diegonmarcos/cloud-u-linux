@@ -131,15 +131,41 @@ linux-store dev [--off] <etc path>   link straight to the repo source while edit
 - **Undeclared means unlinked.** An `etc` entry dropped from the declaration is
   removed from `$HOME` on the next apply (unless it is in dev mode).
 
-## Setup
+## Commands
 
-```sh
-sh da_linux-store/linux-store apply          # from the repo; afterwards it is on PATH:
-echo 'source ~/.linux-store/env.fish' >> ~/.config/fish/config.fish   # or env.sh for sh/bash
+The verbs are nix's / home-manager's, plus the ones the flakes' `build.sh` had:
+
+```
+linux-store switch [--backup]        build + make live + realise $HOME + check
+linux-store build [--profile p]      build only, on any machine, for any profile
+linux-store update [--no-switch]     pull the checkouts the declaration reads, then switch
+linux-store rollback                 previous generation of this profile
+linux-store switch-generation <gen>  e.g. termux-3, or 3
+linux-store list-generations
+linux-store check                    links, store hashes, host binaries, activated files, secrets
+linux-store repair                   check, else switch
+linux-store diff <a> [<b>] | gc | show | status | profile
+linux-store dev [--off] <etc path>   link straight to the repo source while editing
 ```
 
-The first apply on a machine with existing `~/.claude/agents` etc. as real
-directories stops and names them. Re-run with `--backup` to move them aside.
+Like the flakes, the declaration directory has its own `build.sh`:
+`cloud-me_configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs/build.sh switch`
+renders `dist/` and switches, exactly where `bb_flakes_termux/build.sh switch` used to.
+
+## Setup: bootstrap
+
+One script on a fresh phone or desktop:
+
+```sh
+sh cloud-u-linux/da_linux-store/bootstrap.sh --backup
+```
+
+It installs the tools (apt on termux), finds or clones the checkouts, sets
+`core.createObject=rename` on a FUSE git base, renders `deb-user-configs/dist/`,
+and runs `linux-store switch --backup`. The switched fish/bash config already
+sources `~/.linux-store/env.{fish,sh}`, so a new shell has `current/bin` on
+PATH. Re-running is the repair path. `--backup` moves existing real files
+(`~/.claude/agents`, `~/.config/fish/config.fish`, …) aside the first time.
 
 ## Tests
 

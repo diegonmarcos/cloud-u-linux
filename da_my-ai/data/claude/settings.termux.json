@@ -34,5 +34,8 @@
         ]
       }
     ]
-  }
+  },
+  "_doc_device_prefs": "theme/model are THIS device's Claude Code UI prefs (what /config writes). They live in the overlay, not base, so a linux-store switch — which renders settings.json whole — keeps them.",
+  "theme": "dark",
+  "model": "fable"
 }
