@@ -1,0 +1,60 @@
+{
+  "_doc": "linux-store declaration. `common` applies to both profiles; `termux` and `desktop` overlay it per key (a profile value of null REMOVES a common entry; activate.render lists are concatenated, common first). Keys starting with _ are documentation. Engine: ./linux-store, semantics in README.md.",
+
+  "settings": {
+    "_doc_git_base": "First directory that exists wins; GIT_BASE overrides. The phone keeps its checkouts on the CloudDrive mount, the desktop under ~/git.",
+    "git_base": ["$HOME/git", "$HOME/cloud-drive-shared-store/git"],
+    "_doc_roots": "Short names for source trees: \"claude:agents\" = <git base>/cloud-u-linux/da_my-ai/data/claude/agents. The Claude SoT stays where it is; this file only points at it.",
+    "roots": {
+      "claude": "cloud-u-linux/da_my-ai/data/claude"
+    }
+  },
+
+  "common": {
+    "bin": {
+      "jq":   { "host": "jq" },
+      "git":  { "host": "git" },
+      "curl": { "host": "curl" }
+    },
+
+    "_doc_lib": "Shared objects and script libraries. Nothing here is exported globally: a bin entry lists the libs it needs (\"libs\": [...]) and gets a wrapper with a pinned LD_LIBRARY_PATH. Script libs are reachable at ~/.linux-store/current/lib/<name>.",
+    "lib": {},
+
+    "_doc_etc": "Inert config, mirrored into $HOME as links through `current`. The same set da_my-ai's cmd_assets copies, minus settings.json and ~/.claude.json, which Claude Code rewrites and so belong to activate.",
+    "etc": {
+      ".claude/agents":              { "path": "claude:agents" },
+      ".claude/cloud-marketplace":   { "path": "claude:cloud-marketplace" },
+      ".claude/claude-plugins.json": { "path": "claude:claude-plugins.json" },
+      ".claude/claude-flags.json":   { "path": "claude:claude-flags.json" },
+      ".claude/rgignore":            { "path": "claude:rgignore" },
+      ".claude/mcp-auth-headers.sh": { "path": "claude:mcp-auth-headers.sh", "exe": true }
+    },
+
+    "_doc_activate": "Written, not linked. render = deep merge of the listed JSON files (arrays replaced, @HOME@ substituted), laid down whole — the flakes' and cmd_assets' semantics. keys = the .keys object of the named file, set one top-level key at a time into an existing file and never written wholesale.",
+    "activate": {
+      ".claude/settings.json": { "render": ["claude:settings.base.json"] },
+      ".claude.json":          { "keys": "claude:claude-json.json" }
+    }
+  },
+
+  "termux": {
+    "bin": {
+      "_doc_claude": "MALLOC_ARENA_MAX=2 is claude-termux's phone-RAM tuning, carried by the wrapper instead of a hand-kept script.",
+      "claude": { "host": "/usr/local/bin/claude", "env": { "MALLOC_ARENA_MAX": "2" } },
+      "fd":     { "host": "fd" }
+    },
+    "activate": {
+      ".claude/settings.json": { "render": ["claude:settings.termux.json"] }
+    }
+  },
+
+  "desktop": {
+    "bin": {
+      "claude": { "host": "claude" },
+      "fd":     { "host": "fd" }
+    },
+    "activate": {
+      ".claude/settings.json": { "render": ["claude:settings.desktop.json"] }
+    }
+  }
+}

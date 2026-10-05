@@ -1,0 +1,790 @@
+#!/bin/sh
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║ linux-store — a nix-store equivalent for the Linux userlands             ║
+# ║                                                                          ║
+# ║ Usage: linux-store <command> [args]       (linux-store help)             ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+#
+# Two profiles, never mixed: `termux` (the proot Debian on the phone) and
+# `desktop`. cloud-store is the ANDROID engine (MyTerminal's link farm); this is
+# its Linux sibling and shares no code with it on purpose — it may rely on GNU
+# coreutils, util-linux and real symlinks, and does.
+#
+# Three layers, one generation:
+#   bin/   what goes on PATH        — host binaries, store objects, or wrappers
+#   lib/   .so files + script libs  — never exported globally; a bin entry that
+#                                     needs them gets a wrapper (makeWrapper)
+#   etc/   config mirrored into $HOME — $HOME/<rel> -> current/etc/<rel>
+# plus `activate`: files Claude Code et al. rewrite at runtime, so they are
+# WRITTEN (rendered whole, or patched key by key), never linked.
+#
+# Semantics are nix's:
+#   store/<hash>-<name>   immutable, content-addressed, shared by both profiles
+#   generations/<p>-<n>   a complete link tree + manifest.json, sealed by rename
+#   current               ONE symlink, switched with one rename(2) (mv -T)
+#   rollback / switch     flip `current`, re-realise $HOME, no rebuild
+#   gc                    drop every store object no kept generation references
+#
+# Sources of a store object:
+#   path   a file/dir in a repo (relative to the git base, or "<root>:<rest>")
+#   fetch  a URL with a fixed sha256 — refused on mismatch
+#   host   a binary the host provides (apt, nix, cargo): linked, never copied
+#
+# Fault injection: LINUX_STORE_FAULT=<populate|seal|switch|activate> stops the
+# run at that stage, so test/test-linux-store.sh can PROVE that `current` never
+# points at a half-built generation.
+set -u
+
+ME=linux-store
+
+die()  { printf '%s: %s\n' "$ME" "$*" >&2; exit 1; }
+say()  { printf '%s: %s\n' "$ME" "$*"; }
+fail() { printf '%s: FAIL — %s\n' "$ME" "$*" >&2; BAD=1; }
+
+fault() {
+    [ "${LINUX_STORE_FAULT:-}" = "$1" ] || return 0
+    printf '%s: fault injected at stage %s — stopping\n' "$ME" "$1" >&2
+    exit 90
+}
+
+# ── strict: Linux, GNU, and the tools the semantics depend on ──────────────
+[ "$(uname -s)" = Linux ] || die "Linux only (this is $(uname -s)); the Android app terminal uses cloud-store"
+for _c in jq sha256sum flock find mv readlink cmp; do
+    command -v "$_c" >/dev/null 2>&1 || die "requires $_c on PATH"
+done
+find / -maxdepth 0 -printf '' 2>/dev/null || die "requires GNU find (-printf)"
+mv --help 2>&1 | grep -q -- '--no-target-directory' \
+    || die "requires GNU mv: the switch is mv -T, and there is no non-atomic fallback"
+
+SELF="$(readlink -f "$0")"
+HERE="$(dirname "$SELF")"
+
+ROOT="${LINUX_STORE_ROOT:-$HOME/.linux-store}"
+STORE="$ROOT/store"
+GENS="$ROOT/generations"
+CUR="$ROOT/current"
+DEVLIST="$ROOT/dev.list"
+
+# The declaration: explicit override, else the store.json beside the engine,
+# else the one the last apply recorded (the engine copy in store/ has no
+# neighbour).
+if [ -n "${LINUX_STORE_DECLARATION:-}" ]; then
+    DECL="$LINUX_STORE_DECLARATION"
+elif [ -f "$HERE/store.json" ]; then
+    DECL="$HERE/store.json"
+elif [ -f "$ROOT/declaration" ]; then
+    DECL="$(cat "$ROOT/declaration")"
+else
+    DECL=""
+fi
+
+need_decl() {
+    [ -n "$DECL" ] && [ -r "$DECL" ] || die "no declaration (set LINUX_STORE_DECLARATION or keep store.json beside the engine)"
+    jq -e 'type == "object"' "$DECL" >/dev/null 2>&1 || die "$DECL is not a JSON object"
+    _bad="$(jq -r '
+        ( keys[] | select(startswith("_") | not)
+                 | select(IN("settings","common","termux","desktop") | not)
+                 | "unknown top-level key \"\(.)\"" ),
+        ( ["common","termux","desktop"][] as $s | (.[$s] // {}) | keys[]
+                 | select(startswith("_") | not)
+                 | select(IN("bin","lib","etc","activate") | not)
+                 | "unknown layer \"\(.)\" in \($s)" )
+    ' "$DECL")"
+    [ -z "$_bad" ] || die "$DECL: $_bad"
+}
+
+# ── profile ────────────────────────────────────────────────────────────────
+detect_profile() {
+    if [ -n "${LINUX_STORE_PROFILE:-}" ]; then
+        _p="$LINUX_STORE_PROFILE"
+    else
+        case "$(uname -r)" in
+            *[Aa]ndroid*) _p=termux ;;
+            *)
+                _p=desktop
+                [ -z "${TERMUX_VERSION:-}" ] || _p=termux
+                case "${PREFIX:-}" in *com.termux*) _p=termux ;; esac
+                ;;
+        esac
+    fi
+    case "$_p" in
+        termux|desktop) echo "$_p" ;;
+        *) die "profile '$_p' is neither termux nor desktop" ;;
+    esac
+}
+
+# ── sources ────────────────────────────────────────────────────────────────
+git_base() {
+    if [ -n "${GIT_BASE:-}" ]; then echo "$GIT_BASE"; return 0; fi
+    for _c in $(jq -r '.settings.git_base[]? // empty' "$DECL"); do
+        _c="$(printf '%s' "$_c" | sed "s|^\\\$HOME|$HOME|")"
+        if [ -d "$_c" ]; then echo "$_c"; return 0; fi
+    done
+    die "no git base: set GIT_BASE, or create one of settings.git_base in $DECL"
+}
+
+# "/abs" | "<root>:<rest>" | "relative/to/git/base"
+resolve_src() {
+    local s="$1" root rest rp
+    case "$s" in
+        /*) echo "$s" ;;
+        *:*)
+            root="${s%%:*}"; rest="${s#*:}"
+            rp="$(jq -r --arg r "$root" '.settings.roots[$r] // empty' "$DECL")"
+            [ -n "$rp" ] || die "'$s' names root '$root', which settings.roots does not declare"
+            rp="$(resolve_src "$rp")" || exit 1
+            echo "$rp/$rest"
+            ;;
+        *) echo "$GB/$s" ;;
+    esac
+}
+
+# A host binary, found WITHOUT our own bin/ on PATH (it would find itself), and
+# resolved through every link so the generation records what actually runs.
+resolve_host() {
+    local h="$1" p
+    case "$h" in
+        /*) p="$h" ;;
+        *)
+            p="$(PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vFx "$CUR/bin" | paste -sd: -)" \
+                 command -v "$h" 2>/dev/null)" || return 1
+            ;;
+    esac
+    [ -e "$p" ] || return 1
+    readlink -f "$p"
+}
+
+# ── the store ──────────────────────────────────────────────────────────────
+# Content hash. Covers names, types, the executable bit, link targets and
+# bytes — not other mode bits (a sealed object is a-w; it is the same object).
+hash_path() {
+    if [ -d "$1" ] && [ ! -L "$1" ]; then
+        ( cd "$1" && {
+            find . -mindepth 1 -printf '%y %P\n' | LC_ALL=C sort
+            find . -type f -perm -u=x -printf 'x %P\n' | LC_ALL=C sort
+            find . -type l -printf 'l %P %l\n' | LC_ALL=C sort
+            find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum
+        } ) | sha256sum | cut -d' ' -f1
+    else
+        { if [ -x "$1" ]; then echo 'f x'; else echo 'f'; fi; cat "$1"; } | sha256sum | cut -d' ' -f1
+    fi
+}
+
+seal()   { chmod -R a-w "$1" 2>/dev/null || true; }
+unseal() { chmod -R u+w "$1" 2>/dev/null || true; }
+
+# add_store <staged path> <name>  →  sets OBJ, OBJ_HASH
+# The staged copy is hashed AFTER normalisation (exe), so verify re-derives the
+# same hash from the sealed object. An existing object is reused only if it
+# still hashes to its name; one edited in place is replaced, not trusted.
+add_store() {
+    local staged="$1" name h dest
+    name="$(basename "$2" | sed 's/^\.//')"
+    h="$(hash_path "$staged")"
+    dest="$STORE/$(printf '%s' "$h" | cut -c1-32)-$name"
+    if [ -e "$dest" ] || [ -L "$dest" ]; then
+        if [ "$(hash_path "$dest")" = "$h" ]; then
+            unseal "$staged"; rm -rf "$staged"
+        else
+            say "store object $dest no longer matches its hash — replacing it"
+            unseal "$dest"; rm -rf "$dest"
+            mv -T "$staged" "$dest" || die "could not place $dest"
+            seal "$dest"
+        fi
+    else
+        mv -T "$staged" "$dest" || die "could not place $dest"
+        seal "$dest"
+    fi
+    echo "$dest" >> "$STAGE/.objects"
+    OBJ="$dest"; OBJ_HASH="$h"
+}
+
+stage_tmp() { _n=$((_n + 1)); TMPP="$OBJTMP/$_n"; }
+
+# ── build: declaration → sealed generation (no switch) ─────────────────────
+plan() {
+    jq -c --arg p "$1" '
+        def ents($d; $l):
+            ((($d.common // {})[$l] // {}) + (($d[$p] // {})[$l] // {}))
+            | to_entries[]
+            | select(.key | startswith("_") | not)
+            | select(.value != null);
+        . as $d
+        | ( ["lib","etc","bin"][] as $l | ents($d; $l) | {l: $l, k: .key, v: .value} ),
+          ( ( (($d.common // {}).activate // {} | keys)
+            + (($d[$p] // {}).activate // {} | keys) )
+            | unique[] | select(startswith("_") | not) ) as $k
+          | (($d.common // {}).activate // {})[$k] as $c
+          | (($d[$p] // {}).activate // {})[$k] as $o
+          | select($o != null or ($c != null and (($d[$p] // {}).activate // {} | has($k) | not)))
+          | ($c // {}) as $c | ($o // {}) as $o
+          | { l: "activate", k: $k,
+              v: ( $c + $o
+                   + (if ($c.render != null or $o.render != null)
+                      then {render: (($c.render // []) + ($o.render // []))} else {} end) ) }
+    ' "$DECL"
+}
+
+entry() {  # layer name kind target source host
+    jq -nc --arg l "$1" --arg k "$2" --arg kind "$3" --arg t "$4" --arg s "$5" --arg h "${6:-}" \
+        '{layer:$l, name:$k, kind:$kind, target:$t, source:$s, host:$h}' >> "$STAGE/.entries"
+}
+
+genlink() {  # target  layer  rel
+    mkdir -p "$(dirname "$STAGE/$2/$3")"
+    ln -s "$1" "$STAGE/$2/$3" || die "could not link $2/$3"
+}
+
+build_entry() {
+    local line="$1" l k v nk host path url src t kind tmp sha sub
+    l="$(printf '%s' "$line" | jq -r .l)"
+    k="$(printf '%s' "$line" | jq -r .k)"
+    v="$(printf '%s' "$line" | jq -c .v)"
+    case "$k" in
+        ''|/*|*..*) die "$l/$k: names are relative and may not contain '..'" ;;
+    esac
+    case "$l" in
+        bin|lib) case "$k" in */*) die "$l/$k: $l names are flat (no '/')" ;; esac ;;
+    esac
+
+    if [ "$l" = activate ]; then build_activate "$k" "$v"; return; fi
+
+    nk="$(printf '%s' "$v" | jq '[has("host"), has("path"), has("fetch")] | map(select(.)) | length')"
+    [ "$nk" = 1 ] || die "$l/$k: declare exactly one of host, path, fetch"
+    host="$(printf '%s' "$v" | jq -r '.host // empty')"
+    path="$(printf '%s' "$v" | jq -r '.path // empty')"
+    url="$(printf '%s' "$v" | jq -r '.fetch // empty')"
+
+    if [ -n "$host" ]; then
+        [ "$l" != etc ] || die "etc/$k: a host file is not ours to mirror — use path or fetch"
+        t="$(resolve_host "$host")" || die "$l/$k: host '$host' not found"
+        kind=host; src="$host"
+    elif [ -n "$path" ]; then
+        src="$(resolve_src "$path")" || exit 1
+        [ -e "$src" ] || die "$l/$k: source $src does not exist"
+        stage_tmp; tmp="$TMPP"
+        cp -R -P --preserve=mode,links "$src" "$tmp" || die "$l/$k: could not copy $src"
+        unseal "$tmp"
+        [ "$(printf '%s' "$v" | jq -r '.exe // false')" = true ] && chmod +x "$tmp"
+        add_store "$tmp" "$k"; t="$OBJ"; kind=path
+    else
+        sha="$(printf '%s' "$v" | jq -r '.sha256 // empty')"
+        [ -n "$sha" ] || die "$l/$k: fetch without sha256 is not reproducible — refused"
+        command -v curl >/dev/null 2>&1 || die "$l/$k: fetch needs curl"
+        stage_tmp; tmp="$TMPP"
+        curl -fsSL -o "$tmp" "$url" || die "$l/$k: download of $url failed"
+        [ "$(sha256sum "$tmp" | cut -d' ' -f1)" = "$sha" ] \
+            || die "$l/$k: $url does not match the declared sha256 — refused"
+        [ "$(printf '%s' "$v" | jq -r '.exe // false')" = true ] && chmod +x "$tmp"
+        add_store "$tmp" "$k"; t="$OBJ"; kind=fetch; src="$url"
+    fi
+
+    sub="$(printf '%s' "$v" | jq -r '.entry // empty')"
+    [ -z "$sub" ] || t="$t/$sub"
+    [ -e "$t" ] || die "$l/$k: $t does not exist"
+
+    if [ "$l" = bin ]; then
+        [ -x "$t" ] || die "bin/$k: $t is not executable"
+        if [ "$(printf '%s' "$v" | jq '(.env // {} | length) + (.libs // [] | length)')" != 0 ]; then
+            [ "$kind" = host ] && host="$t"
+            build_wrapper "$k" "$v" "$t"; t="$OBJ"; kind="$kind+wrap"
+        fi
+    fi
+
+    genlink "$t" "$l" "$k"
+    [ "$kind" = host ] && host="$t"
+    entry "$l" "$k" "$kind" "$t" "$src" "$host"
+}
+
+# makeWrapper: env + a PINNED LD_LIBRARY_PATH for exactly this tool. A lib that
+# is a directory goes on the path as-is; single .so files are gathered into a
+# farm object of links, so the path names store objects and nothing else.
+build_wrapper() {
+    local k="$1" v="$2" real="$3" w farm ld lt name envs nenv nok
+    ld=""
+    stage_tmp; farm="$TMPP"; mkdir -p "$farm"
+    for name in $(printf '%s' "$v" | jq -r '.libs // [] | .[]'); do
+        [ -L "$STAGE/lib/$name" ] || die "bin/$k wants lib '$name', which this profile does not declare"
+        lt="$(readlink "$STAGE/lib/$name")"
+        if [ -d "$lt" ]; then ld="$ld${ld:+:}$lt"; else ln -s "$lt" "$farm/$name"; fi
+    done
+    if [ -n "$(ls -A "$farm")" ]; then
+        add_store "$farm" "$k-libs"; ld="$OBJ${ld:+:}$ld"
+    else
+        rm -rf "$farm"
+    fi
+
+    nenv="$(printf '%s' "$v" | jq '.env // {} | length')"
+    nok="$(printf '%s' "$v" | jq '.env // {} | keys | map(select(test("^[A-Za-z_][A-Za-z0-9_]*$"))) | length')"
+    [ "$nenv" = "$nok" ] || die "bin/$k: env names must be shell identifiers"
+    envs="$(printf '%s' "$v" | jq -r '.env // {} | to_entries[] | "export \(.key)=\(.value | tostring | @sh)"')"
+
+    stage_tmp; w="$TMPP"
+    {
+        echo '#!/bin/sh'
+        echo "# linux-store wrapper for $k — generated, lives in the store"
+        [ -z "$envs" ] || printf '%s\n' "$envs"
+        [ -z "$ld" ] || printf 'LD_LIBRARY_PATH=%s${LD_LIBRARY_PATH:+":$LD_LIBRARY_PATH"}; export LD_LIBRARY_PATH\n' "'$ld'"
+        printf "exec '%s' \"\$@\"\n" "$real"
+    } > "$w"
+    chmod 0755 "$w"
+    add_store "$w" "$k-wrapper"
+}
+
+build_activate() {
+    local k="$1" v="$2" f files tmp n
+    n="$(printf '%s' "$v" | jq '[has("render"), has("keys")] | map(select(.)) | length')"
+    [ "$n" = 1 ] || die "activate/$k: declare exactly one of render, keys"
+    stage_tmp; tmp="$TMPP"
+    if [ "$(printf '%s' "$v" | jq 'has("render")')" = true ]; then
+        files=""
+        for f in $(printf '%s' "$v" | jq -r '.render[]'); do
+            f="$(resolve_src "$f")" || exit 1
+            [ -f "$f" ] || die "activate/$k: $f does not exist"
+            jq empty "$f" 2>/dev/null || die "activate/$k: $f is not valid JSON"
+            files="$files $f"
+        done
+        [ -n "$files" ] || die "activate/$k: render lists no files"
+        # Same merge as da_my-ai's cmd_assets and the flakes: deep merge, arrays
+        # replaced, @HOME@ substituted (Claude Code stores env values verbatim).
+        # shellcheck disable=SC2086
+        jq -s --arg home "$HOME" '
+            reduce .[] as $x ({}; . * $x)
+            | walk(if type == "string" then gsub("@HOME@"; $home) else . end)
+        ' $files > "$tmp" || die "activate/$k: merge failed"
+        add_store "$tmp" "$k"
+        genlink "$OBJ" activate "$k"
+        entry activate "$k" render "$OBJ" "$(printf '%s' "$v" | jq -c .render)"
+    else
+        f="$(resolve_src "$(printf '%s' "$v" | jq -r .keys)")" || exit 1
+        [ -f "$f" ] || die "activate/$k: $f does not exist"
+        jq -e '.keys | type == "object"' "$f" >/dev/null 2>&1 || die "activate/$k: $f has no .keys object"
+        jq '.keys' "$f" > "$tmp"
+        add_store "$tmp" "$k-keys"
+        genlink "$OBJ" activate "$k"
+        entry activate "$k" keys "$OBJ" "$f"
+    fi
+}
+
+next_gen() {
+    _max=0
+    for _g in "$GENS/$1"-*; do
+        [ -d "$_g" ] || continue
+        _b="${_g##*/$1-}"
+        case "$_b" in ''|*[!0-9]*) continue ;; esac
+        [ "$_b" -le "$_max" ] || _max="$_b"
+    done
+    echo $((_max + 1))
+}
+
+build() {  # profile  →  sets GEN
+    local p="$1" n line objs
+    need_decl
+    GB="$(git_base)" || exit 1
+    mkdir -p "$STORE" "$GENS"
+    n="$(next_gen "$p")"
+    STAGE="$GENS/.build.$$"; OBJTMP="$STORE/.stage.$$"; _n=0
+    rm -rf "$STAGE" "$OBJTMP"
+    mkdir -p "$STAGE/bin" "$STAGE/lib" "$STAGE/etc" "$STAGE/activate" "$OBJTMP"
+    : > "$STAGE/.objects"; : > "$STAGE/.entries"
+
+    # The engine is a store object like any other: `linux-store` on PATH is the
+    # exact copy that built this generation.
+    stage_tmp; cp "$SELF" "$TMPP"; chmod 0755 "$TMPP"
+    add_store "$TMPP" linux-store
+    genlink "$OBJ" bin linux-store
+    entry bin linux-store self "$OBJ" "$SELF"
+
+    plan "$p" > "$STAGE/.plan" || die "could not plan $DECL for $p"
+    while IFS= read -r line; do
+        build_entry "$line"
+    done < "$STAGE/.plan"
+    fault populate
+
+    objs="$(sort -u "$STAGE/.objects" | jq -R . | jq -sc .)"
+    jq -s --arg p "$p" --arg g "$p-$n" --arg gb "$GB" --arg decl "$DECL" \
+          --arg dsha "$(sha256sum "$DECL" | cut -d' ' -f1)" --arg at "$(date -u +%FT%TZ)" \
+          --argjson objs "$objs" \
+        '{profile:$p, generation:$g, created:$at, git_base:$gb, declaration:$decl,
+          declaration_sha256:$dsha, entries:., objects:$objs}' \
+        "$STAGE/.entries" > "$STAGE/manifest.json" || die "could not write the manifest"
+    rm -f "$STAGE/.plan" "$STAGE/.objects" "$STAGE/.entries"
+    rm -rf "$OBJTMP"
+
+    # Visible under its name only once complete.
+    mv -T "$STAGE" "$GENS/$p-$n" || die "could not seal generation $p-$n"
+    fault seal
+    GEN="$GENS/$p-$n"
+}
+
+# ── switch + realise $HOME ─────────────────────────────────────────────────
+switch_to() {
+    local tmp="$ROOT/.current.$$"
+    [ -f "$1/manifest.json" ] || die "$1 is not a generation"
+    rm -f "$tmp"
+    ln -s "$1" "$tmp" || die "could not stage the current link"
+    fault switch
+    mv -T "$tmp" "$CUR" || { rm -f "$tmp"; die "could not switch to $1"; }
+}
+
+in_dev() { [ -f "$DEVLIST" ] && grep -Fxq "$1" "$DEVLIST"; }
+
+etc_names()      { [ -f "$1/manifest.json" ] && jq -r '.entries[] | select(.layer == "etc") | .name' "$1/manifest.json"; }
+activate_lines() { jq -r '.entries[] | select(.layer == "activate") | [.name, .kind, .target] | join("\u001f")' "$1/manifest.json"; }
+
+# A $HOME path we may take over: absent, already ours, or (with --backup) moved
+# aside. Anything nix owns is refused outright — one manager per file.
+claim() {  # rel  backup(0|1)  what(etc|activate)
+    local dst="$HOME/$1" t r par b
+    par="$(dirname "$dst")"
+    if [ -e "$par" ]; then
+        case "$(readlink -f "$par")" in
+            /nix/store/*) die "$par resolves into /nix/store — that tree belongs to nix/home-manager" ;;
+        esac
+    fi
+    if [ -L "$dst" ]; then
+        t="$(readlink "$dst")"; r="$(readlink -f "$dst" 2>/dev/null || true)"
+        if [ "$3" = etc ]; then
+            [ "$t" = "$CUR/etc/$1" ] && return 0
+            in_dev "$1" && return 0
+        else
+            [ "$t" = "$CUR/etc/$1" ] && return 0   # was etc, now activate: realise unlinks it
+        fi
+        case "$t $r" in
+            */nix/store/*) die "$dst links into nix ($t) — that file belongs to nix/home-manager; remove it from one of the two" ;;
+        esac
+    elif [ ! -e "$dst" ]; then
+        return 0
+    elif [ "$3" = activate ] && [ -f "$dst" ]; then
+        return 0   # activate writes real files; an existing one is what it updates
+    fi
+    [ "$2" = 1 ] || die "$dst exists and is not managed by linux-store — move it away, or re-run with --backup"
+    b="$dst.linux-store-backup.$(date +%Y%m%d%H%M%S)"
+    mv "$dst" "$b" || die "could not back up $dst"
+    say "backed up $dst -> $b"
+}
+
+preflight() {  # gen backup
+    local rel name kind t
+    for rel in $(etc_names "$1"); do claim "$rel" "$2" etc; done
+    # a file, not a pipe: claim() dies, and a die inside a pipeline's subshell
+    # would not stop the switch
+    activate_lines "$1" > "$ROOT/.preflight.$$"
+    while IFS="$(printf '\037')" read -r name kind t; do
+        claim "$name" "$2" activate
+    done < "$ROOT/.preflight.$$"
+    rm -f "$ROOT/.preflight.$$"
+}
+
+link_home() {  # rel target
+    local dst="$HOME/$1" tmp
+    [ "$(readlink "$dst" 2>/dev/null || true)" = "$2" ] && return 0
+    mkdir -p "$(dirname "$dst")"
+    tmp="$dst.linux-store.$$"
+    rm -f "$tmp"
+    ln -s "$2" "$tmp" && mv -T "$tmp" "$dst" || { rm -f "$tmp"; die "could not link $dst"; }
+}
+
+write_atomic() {  # src dst
+    local tmp="$2.linux-store.$$"
+    mkdir -p "$(dirname "$2")"
+    cp "$1" "$tmp" && chmod u+w "$tmp" && mv -T "$tmp" "$2" || { rm -f "$tmp"; die "could not write $2"; }
+}
+
+realise() {  # new-gen  prev-gen(may be empty)
+    local new="$1" prev="$2" rel name kind t dst
+    # 1. links the previous generation owned that this one does not
+    if [ -n "$prev" ] && [ -f "$prev/manifest.json" ]; then
+        for rel in $(etc_names "$prev"); do
+            etc_names "$new" | grep -Fxq "$rel" && continue
+            dst="$HOME/$rel"
+            if [ "$(readlink "$dst" 2>/dev/null || true)" = "$CUR/etc/$rel" ]; then
+                rm -f "$dst"; say "unlinked $dst (no longer declared)"
+            elif in_dev "$rel"; then
+                say "warning — $rel is no longer declared but is still in dev mode; left as is"
+            fi
+        done
+    fi
+    # 2. every declared etc path points through `current`
+    for rel in $(etc_names "$new"); do
+        in_dev "$rel" && continue
+        link_home "$rel" "$CUR/etc/$rel"
+    done
+    # 3. activate: render whole, or patch keys
+    fault activate
+    activate_lines "$new" > "$ROOT/.activate.$$"
+    while IFS="$(printf '\037')" read -r name kind t; do
+        dst="$HOME/$name"
+        [ -L "$dst" ] && [ "$(readlink "$dst")" = "$CUR/etc/$name" ] && rm -f "$dst"
+        case "$kind" in
+            render)
+                cmp -s "$t" "$dst" 2>/dev/null || { write_atomic "$t" "$dst"; say "rendered $dst"; }
+                ;;
+            keys)
+                if [ ! -f "$dst" ]; then
+                    say "$dst does not exist yet — nothing to patch before its first run"
+                    continue
+                fi
+                if ! jq -e --slurpfile f "$t" '. as $e | $f[0] | to_entries | all(. as $kv | $e[$kv.key] == $kv.value)' "$dst" >/dev/null 2>&1; then
+                    jq --slurpfile f "$t" '. + $f[0]' "$dst" > "$dst.linux-store.$$" && [ -s "$dst.linux-store.$$" ] \
+                        && mv -T "$dst.linux-store.$$" "$dst" \
+                        || { rm -f "$dst.linux-store.$$"; die "could not patch $dst"; }
+                    say "patched $dst ($(jq -r 'keys | join(", ")' "$t"))"
+                fi
+                ;;
+        esac
+    done < "$ROOT/.activate.$$"
+    rm -f "$ROOT/.activate.$$"
+}
+
+write_env() {
+    cat > "$ROOT/env.sh" <<EOF
+# generated by linux-store — source from your shell rc
+case ":\$PATH:" in *":$CUR/bin:"*) ;; *) PATH="$CUR/bin:\$PATH"; export PATH ;; esac
+EOF
+    cat > "$ROOT/env.fish" <<EOF
+# generated by linux-store — source from config.fish
+contains -- $CUR/bin \$PATH; or set -gx PATH $CUR/bin \$PATH
+EOF
+}
+
+prune() {
+    local p="$1" keep="${LINUX_STORE_KEEP:-5}" live drop g
+    live="$(readlink "$CUR" 2>/dev/null || true)"
+    # basenames, not paths: a path may itself contain '-'
+    drop=$(( $(cd "$GENS" && ls -1d "$p"-* 2>/dev/null | wc -l) - keep ))
+    [ "$drop" -gt 0 ] || return 0
+    for g in $(cd "$GENS" && ls -1d "$p"-* | sort -t- -k2,2n); do
+        [ "$drop" -gt 0 ] || break
+        [ "$GENS/$g" = "$live" ] && continue
+        rm -rf "${GENS:?}/$g"; drop=$((drop - 1))
+    done
+}
+
+lock() {
+    mkdir -p "$ROOT"
+    exec 9>>"$ROOT/lock"
+    flock -n 9 || die "another linux-store holds $ROOT/lock"
+}
+
+gen_path() {  # "termux-3" | "3" | path
+    case "$1" in
+        /*) echo "$1" ;;
+        *-*) echo "$GENS/$1" ;;
+        *) _gp="$(detect_profile)" || exit 1; echo "$GENS/$_gp-$1" ;;
+    esac
+}
+
+same_profile() {
+    local gp mp
+    gp="$(jq -r .profile "$1/manifest.json")"; mp="$(detect_profile)" || exit 1 || exit 1
+    [ "$gp" = "$mp" ] || die "${1##*/} is a $gp generation and this machine is $mp — refused (LINUX_STORE_PROFILE overrides detection)"
+}
+
+# ── verify ─────────────────────────────────────────────────────────────────
+verify() {
+    local gen mp gp o l k kind t s h want got
+    BAD=0
+    if [ ! -L "$CUR" ]; then fail "$CUR is missing — nothing is live; run apply"; return 1; fi
+    gen="$(readlink "$CUR")"
+    if [ ! -f "$gen/manifest.json" ]; then fail "$CUR points at $gen, which is not a generation"; return 1; fi
+    mp="$(detect_profile)" || exit 1; gp="$(jq -r .profile "$gen/manifest.json")"
+    [ "$gp" = "$mp" ] || fail "live generation is $gp, this machine is $mp"
+
+    for o in $(jq -r '.objects[]' "$gen/manifest.json"); do
+        if [ ! -e "$o" ]; then fail "store object $o is gone"; continue; fi
+        want="$(basename "$o" | cut -c1-32)"; got="$(hash_path "$o" | cut -c1-32)"
+        [ "$want" = "$got" ] || fail "store object $o does not match its hash (edited in place?) — repair replaces it"
+    done
+
+    jq -r '.entries[] | [.layer, .name, .kind, .target, .source, .host] | join("\u001f")' "$gen/manifest.json" > "$ROOT/.verify.$$"
+    while IFS="$(printf '\037')" read -r l k kind t s h; do
+        [ -z "$h" ] || [ -e "$h" ] || fail "$l/$k: host binary $h is gone (apt/nix upgraded it?) — repair re-resolves it"
+        if [ "$l" = activate ]; then
+            case "$kind" in
+                render) cmp -s "$t" "$HOME/$k" || fail "$HOME/$k differs from the rendered declaration (edited since apply?) — repair rewrites it" ;;
+                keys)
+                    if [ -f "$HOME/$k" ] && ! jq -e --slurpfile f "$t" '. as $e | $f[0] | to_entries | all(. as $kv | $e[$kv.key] == $kv.value)' "$HOME/$k" >/dev/null 2>&1; then
+                        fail "$HOME/$k: declared keys $(jq -r 'keys | join(", ")' "$t") are not all set"
+                    fi ;;
+            esac
+            continue
+        fi
+        [ "$(readlink "$gen/$l/$k" 2>/dev/null || true)" = "$t" ] || fail "$l/$k: generation link does not point at $t"
+        [ -e "$gen/$l/$k" ] || fail "$l/$k: $t is dangling"
+        if [ "$l" = etc ]; then
+            if in_dev "$k"; then
+                [ "$(readlink "$HOME/$k" 2>/dev/null || true)" = "$s" ] \
+                    || fail "$HOME/$k is in dev mode but does not point at $s"
+            else
+                [ "$(readlink "$HOME/$k" 2>/dev/null || true)" = "$CUR/etc/$k" ] \
+                    || fail "$HOME/$k is not linked to $CUR/etc/$k"
+            fi
+        fi
+    done < "$ROOT/.verify.$$"
+    rm -f "$ROOT/.verify.$$"
+
+    if [ "$BAD" -eq 0 ]; then
+        say "ok — ${gen##*/}, every declared link, object and file checks out"
+        [ ! -s "$DEVLIST" ] || say "dev mode (out-of-store) for: $(paste -sd' ' "$DEVLIST")"
+    fi
+    return "$BAD"
+}
+
+# ── commands ───────────────────────────────────────────────────────────────
+cmd_build() {
+    local p
+    p="$(detect_profile)" || exit 1
+    if [ "${1:-}" = --profile ]; then p="${2:-}"; LINUX_STORE_PROFILE="$p" detect_profile >/dev/null; fi
+    lock
+    build "$p"
+    say "built ${GEN##*/} (not switched)"
+    echo "$GEN"
+}
+
+cmd_apply() {
+    local backup=0 p prev
+    [ "${1:-}" = --backup ] && backup=1
+    p="$(detect_profile)" || exit 1
+    lock
+    prev="$(readlink "$CUR" 2>/dev/null || true)"
+    build "$p"
+    preflight "$GEN" "$backup"
+    switch_to "$GEN"
+    realise "$GEN" "$prev"
+    write_env
+    printf '%s\n' "$DECL" > "$ROOT/declaration"
+    prune "$p"
+    say "${GEN##*/} is live"
+    verify
+}
+
+cmd_switch() {  # target-gen
+    local g prev
+    g="$(gen_path "$1")"
+    [ -f "$g/manifest.json" ] || die "no generation ${1}"
+    same_profile "$g"
+    lock
+    prev="$(readlink "$CUR" 2>/dev/null || true)"
+    preflight "$g" 0
+    switch_to "$g"
+    realise "$g" "$prev"
+    say "switched to ${g##*/}"
+    verify
+}
+
+cmd_rollback() {
+    local live p cur g b best=""
+    live="$(readlink "$CUR" 2>/dev/null || true)"
+    [ -n "$live" ] || die "nothing is live, so there is nothing to roll back from"
+    p="$(jq -r .profile "$live/manifest.json")"; cur="${live##*/$p-}"
+    for g in "$GENS/$p"-*; do
+        b="${g##*/$p-}"
+        case "$b" in ''|*[!0-9]*) continue ;; esac
+        [ "$b" -lt "$cur" ] || continue
+        [ -z "$best" ] || [ "$b" -gt "$best" ] || continue
+        best="$b"
+    done
+    [ -n "$best" ] || die "$p-$cur is the oldest generation kept; nothing to roll back to"
+    cmd_switch "$p-$best"
+}
+
+cmd_generations() {
+    local live g
+    live="$(readlink "$CUR" 2>/dev/null || true)"
+    for g in $(cd "$GENS" 2>/dev/null && ls -1d *-* 2>/dev/null | sort -t- -k1,1 -k2,2n); do
+        g="$GENS/$g"
+        [ -f "$g/manifest.json" ] || continue
+        if [ "$g" = "$live" ]; then echo "${g##*/}  (live)  $(jq -r .created "$g/manifest.json")"
+        else echo "${g##*/}  $(jq -r .created "$g/manifest.json")"; fi
+    done
+}
+
+cmd_diff() {
+    local a b live
+    live="$(readlink "$CUR" 2>/dev/null || true)"
+    if [ $# -ge 2 ]; then a="$(gen_path "$1")"; b="$(gen_path "$2")"
+    elif [ $# -eq 1 ]; then a="$(gen_path "$1")"; b="$live"
+    else die "usage: diff <gen> [<gen>]"; fi
+    [ -f "$a/manifest.json" ] && [ -f "$b/manifest.json" ] || die "both generations must exist"
+    _q='.entries[] | "\(.layer)/\(.name)\t\(.kind)\t\(.target | sub("^.*/store/"; "store/"))"'
+    jq -r "$_q" "$a/manifest.json" | LC_ALL=C sort > "$ROOT/.diff.a.$$"
+    jq -r "$_q" "$b/manifest.json" | LC_ALL=C sort > "$ROOT/.diff.b.$$"
+    diff -u --label "${a##*/}" --label "${b##*/}" "$ROOT/.diff.a.$$" "$ROOT/.diff.b.$$"
+    rm -f "$ROOT/.diff.a.$$" "$ROOT/.diff.b.$$"
+    return 0
+}
+
+cmd_gc() {
+    local live o n=0
+    lock
+    [ -d "$STORE" ] || { say "empty store"; return 0; }
+    cat "$GENS"/*/manifest.json 2>/dev/null | jq -r '.objects[]' | sort -u > "$ROOT/.roots.$$"
+    for o in "$STORE"/* "$STORE"/.stage.*; do
+        [ -e "$o" ] || continue
+        grep -Fxq "$o" "$ROOT/.roots.$$" && continue
+        unseal "$o"; rm -rf "$o"; n=$((n + 1))
+    done
+    rm -rf "$GENS"/.build.* 2>/dev/null
+    rm -f "$ROOT/.roots.$$"
+    say "gc: removed $n unreferenced store object(s)"
+}
+
+cmd_dev() {  # [--off] rel   |   (no args: list)
+    local off=0 rel live s
+    if [ $# -eq 0 ]; then [ -f "$DEVLIST" ] && cat "$DEVLIST"; return 0; fi
+    [ "$1" = --off ] && { off=1; shift; }
+    rel="${1:?usage: dev [--off] <etc path>}"
+    live="$(readlink "$CUR" 2>/dev/null || true)"
+    [ -n "$live" ] || die "nothing is live; apply first"
+    s="$(jq -r --arg k "$rel" '.entries[] | select(.layer == "etc" and .name == $k) | select(.kind == "path") | .source' "$live/manifest.json")"
+    [ -n "$s" ] || die "$rel is not a path-sourced etc entry of ${live##*/}"
+    lock
+    if [ "$off" = 1 ]; then
+        [ -f "$DEVLIST" ] && grep -Fxv "$rel" "$DEVLIST" > "$DEVLIST.tmp"; mv -f "$DEVLIST.tmp" "$DEVLIST" 2>/dev/null || true
+        link_home "$rel" "$CUR/etc/$rel"
+        say "$rel back in the store"
+    else
+        in_dev "$rel" || echo "$rel" >> "$DEVLIST"
+        link_home "$rel" "$s"
+        say "$rel -> $s (out of store; edits are live, 'dev --off' to freeze)"
+    fi
+}
+
+usage() {
+    cat <<'EOF'
+linux-store — nix-store semantics for the termux and desktop Linux userlands
+
+  apply [--backup]       build a generation from the declaration and switch to it
+  build [--profile p]    build without switching (p = termux | desktop)
+  verify                 check every link, store object hash and activated file
+  repair                 verify; if anything is wrong, apply
+  rollback               switch to the previous generation of this profile
+  switch <gen>           switch to <gen> (e.g. termux-3, or just 3)
+  generations            list generations, marking the live one
+  diff <a> [<b>]         compare two generations (b defaults to the live one)
+  gc                     delete store objects no kept generation references
+  dev [--off] <etc path> link an etc entry straight to its repo source (or back)
+  profile                print the detected profile
+
+Environment: LINUX_STORE_ROOT  LINUX_STORE_DECLARATION  LINUX_STORE_PROFILE
+             LINUX_STORE_KEEP  GIT_BASE  LINUX_STORE_FAULT (tests)
+EOF
+}
+
+cmd="${1:-help}"; [ $# -gt 0 ] && shift
+case "$cmd" in
+    apply)       cmd_apply "$@" ;;
+    build)       cmd_build "$@" ;;
+    verify)      verify ;;
+    repair)      if verify; then say "nothing to repair"; else say "repairing from the declaration"; cmd_apply "$@"; fi ;;
+    rollback)    cmd_rollback ;;
+    switch)      [ $# -eq 1 ] || die "usage: switch <gen>"; cmd_switch "$1" ;;
+    generations) cmd_generations ;;
+    diff)        cmd_diff "$@" ;;
+    gc)          cmd_gc ;;
+    dev)         cmd_dev "$@" ;;
+    profile)     detect_profile ;;
+    help|-h|--help) usage ;;
+    *)           usage >&2; exit 2 ;;
+esac
