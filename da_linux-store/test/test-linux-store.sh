@@ -242,6 +242,25 @@ ls_ check; check "check passes with file secrets" '[ $? -eq 0 ]'
 : > "$C/vault/gh/token"; ls_ build; check "empty secret file is refused at build" '[ $? -ne 0 ] && grep -q "is empty" "$T/out"'
 printf 'ghp_PLAIN_TEST_TOKEN\n' > "$C/vault/gh/token"
 
+section "optional entries + html"
+jq '.common.bin.ghost = {"path": "c:nothing-here", "exe": true, "optional": true, "app": "ghost-app"}
+  | .common.bin.phantom = {"host": "no-such-binary-xyz", "optional": true}
+  | .common.lib.unreach = {"fetch": "file:///nonexistent/payload", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "optional": true}' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
+ls_ switch; rc=$?
+check "optional absent sources do not fail the switch" '[ $rc -eq 0 ] && grep -q "ghost: .*absent — declared, skipped" "$T/out" && grep -q "phantom: host .*absent" "$T/out" && grep -q "unreach: .*unreachable" "$T/out"'
+check "absent entries are recorded in the manifest with their app" '[ "$(jq -r ".entries[] | select(.name == \"ghost\") | .kind + \" \" + .app" "$(readlink "$R/current")/manifest.json")" = "absent ghost-app" ]'
+ls_ check; check "check ignores absent entries" '[ $? -eq 0 ]'
+jq --arg s "$(printf 1%.0s $(seq 64))" '.common.lib.moved = {"fetch": ("file://" + $ENV.T + "/payload"), "sha256": $s, "optional": true}' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
+ls_ switch; check "optional fetch with a moved hash is refused loudly, nothing installed, switch goes on" '[ $? -eq 0 ] && grep -q "moved: .*REFUSED, not installed" "$T/out" && [ ! -e "$R/current/lib/moved" ]'
+check "no store object was kept for the refused download" '! ls "$R/store" | grep -q -- "-moved$"'
+jq 'del(.common.lib.moved)' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
+jq '.common.bin.required = {"path": "c:nothing-here", "exe": true}' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
+ls_ build; check "a non-optional absent source still fails" '[ $? -ne 0 ] && grep -q "required: source .* does not exist" "$T/out"'
+jq 'del(.common.bin.required)' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
+ls_ html; check "html renders the two tiers" '[ $? -eq 0 ] && grep -q "OS · Terraforms" "$R/ui/index.html" && grep -q "Home-Manager · Desktop" "$R/ui/index.html"'
+check "html lists present and absent entries by app" 'grep -q "<tr class=\"absent\">.*ghost.*ghost-app" "$R/ui/index.html" && grep -q "<tr class=\"present\">.*<td>hello</td>" "$R/ui/index.html"'
+check "html holds no secret value" '! grep -q -e ghp_ -e FAKEKEY -e PLAINKEY "$R/ui/index.html"'
+
 section "declaration from cloud-me_configs"
 CM="$GIT_BASE/cloud-me_configs"; UD="$CM/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"
 mkdir -p "$UD"

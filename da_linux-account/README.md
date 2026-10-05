@@ -84,10 +84,31 @@ to `c3-infra-api/fleet/profile`; 429/5xx/offline are queued, `infos flush`
 retries; `infos erase` DELETEs with the credential first, then rotates the
 install id. No credential ever enters the document.
 
+## Bootstrap: the engine that clones, authenticates and fetches
+
+A box with nothing on it:
+
+```sh
+linux-account signin            # GitHub device flow (gh auth login -w); or --token <ghp_…>
+linux-account connect --github  # the bundle, over the contents API with that login
+linux-account who / device
+linux-account apply             # ssh key + github token + WireGuard land, declaratively, via linux-store
+linux-account repos clone       # every private repo of the fleet into the git base (ssh once the key is in)
+```
+
+`repos list|clone|pull` covers `cloud-me_configs`, `cloud-me_vault`, `cloud-u-linux` plus the bundle's
+`git.repos`; on a FUSE git base it sets `core.createObject=rename` on each clone.
+
 ## Links
 
 `wg [list|up|down]`, `ai`, `apps [compare|export]` (AppInventory-shaped
 `linux-account.app-inventory`).
+
+## The page
+
+`linux-account html` writes `~/.linux-store/ui/account.html` beside the Store page — the journey's four
+lights, every cockpit card with its rows and light, the contact card — reusing the Store page's stylesheet.
+`linux-store serve` serves both.
 
 ## Tests
 

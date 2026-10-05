@@ -29,6 +29,7 @@ printf 'ssh-ed25519 AAAAFAKE me@example\n' > "$V/A_A0-Providers/C_TOOLS-INFRA/c2
 printf 'FAKEWGPRIVATEKEY=\n' > "$WG/termux/privatekey"
 printf '[Interface]\nPrivateKey = <PROVIDED_BY_DEVICE>\nAddress = 10.0.0.9/24\n[Peer]\nPublicKey = FAKEPUB=\nEndpoint = 1.2.3.4:51820\n' > "$WG/termux-public/config-v4-full"
 printf '[Interface]\nPrivateKey = FAKEINLINE=\nAddress = 10.0.0.9/24\n' > "$WG/termux-public/config"
+printf 'FAKEPUBKEY=\n' > "$WG/termux-public/publickey"; printf 'notes\n' > "$WG/termux-public/README.md"
 cat > "$V/C_A1-configs/profile-secrets.json" <<'EOF'
 { "schema_version": 1, "_generated": {"emitter": "test"},
   "about": {"profile": {"name": "Ada Lovelace", "email": "ada@example.com", "company": "LEAFY", "location": "Berlin/DE", "website": "example.com", "titles_v2": ["Engineer", "Analyst"]}},
@@ -94,6 +95,7 @@ check "ssh key realised by linux-store, 600" '[ "$(stat -c %a "$HOME/.ssh/id_rsa
 check "gh token rendered from the vault file" 'grep -qx "    oauth_token: ghp_FAKE_VAULT_TOKEN" "$HOME/.config/gh/hosts.yml"'
 check "wireguard: private key spliced into the public profile" 'grep -qx "PrivateKey = FAKEWGPRIVATEKEY=" "$HOME/.config/wireguard/termux-config-v4-full.conf" && [ "$(stat -c %a "$HOME/.config/wireguard/termux-config-v4-full.conf")" = 600 ]'
 check "wireguard: inline profile copied" 'grep -q FAKEINLINE "$HOME/.config/wireguard/termux-config.conf"'
+check "wireguard: publickey lands as ~/.config/wireguard/publickey (644), README is not ours" '[ "$(stat -c %a "$HOME/.config/wireguard/publickey")" = 644 ] && grep -q FAKEPUBKEY "$HOME/.config/wireguard/publickey" && [ ! -e "$HOME/.config/wireguard/termux-README.md.conf" ]'
 check "fleet ssh hosts generated" 'grep -q "^Host oci-apps apps" "$HOME/.ssh/config.d/fleet" && grep -q "HostName 10.0.0.1" "$HOME/.ssh/config.d/fleet"'
 check "mail: identity account picked, env 600" '[ "$(jq -r .mail_account "$CFG/state.json")" = ada ] && grep -q "^export MAIL_PASS=.fake-mail-pass." "$CFG/secrets/mail.env" && [ "$(stat -c %a "$CFG/secrets/mail.env")" = 600 ]'
 check "ai: tokens env with ANTHROPIC_API_KEY" 'grep -q "^export CLAUDE_API_KEY=" "$CFG/secrets/ai.env" && grep -q "^export ANTHROPIC_API_KEY=.sk-ant-FAKE." "$CFG/secrets/ai.env"'

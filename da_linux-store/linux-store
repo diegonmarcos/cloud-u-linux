@@ -272,9 +272,9 @@ plan() {
     ' "$RESOLVE_DECL"
 }
 
-entry() {  # layer name kind target source host
-    jq -nc --arg l "$1" --arg k "$2" --arg kind "$3" --arg t "$4" --arg s "$5" --arg h "${6:-}" \
-        '{layer:$l, name:$k, kind:$kind, target:$t, source:$s, host:$h}' >> "$STAGE/.entries"
+entry() {  # layer name kind target source host app
+    jq -nc --arg l "$1" --arg k "$2" --arg kind "$3" --arg t "$4" --arg s "$5" --arg h "${6:-}" --arg a "${7:-}" \
+        '{layer:$l, name:$k, kind:$kind, target:$t, source:$s, host:$h, app:$a}' >> "$STAGE/.entries"
 }
 
 genlink() {  # target  layer  rel
@@ -283,7 +283,7 @@ genlink() {  # target  layer  rel
 }
 
 build_entry() {
-    local line="$1" l k v nk host path url src t kind tmp sha sub
+    local line="$1" l k v nk host path url src t kind tmp sha sub opt app
     l="$(printf '%s' "$line" | jq -r .l)"
     k="$(printf '%s' "$line" | jq -r .k)"
     v="$(printf '%s' "$line" | jq -c .v)"
@@ -303,13 +303,24 @@ build_entry() {
     path="$(printf '%s' "$v" | jq -r '.path // empty')"
     url="$(printf '%s' "$v" | jq -r '.fetch // empty')"
 
+    # optional: declared now, present later (an app not yet built or fetched on
+    # this box). An absent source is recorded as kind "absent" — the UI shows
+    # it as declared · absent — instead of failing the whole switch.
+    opt="$(printf '%s' "$v" | jq -r '.optional // false')"
+    app="$(printf '%s' "$v" | jq -r '.app // empty')"
     if [ -n "$host" ]; then
         [ "$l" != etc ] || die "etc/$k: a host file is not ours to mirror — use path or fetch"
-        t="$(resolve_host "$host")" || die "$l/$k: host '$host' not found"
+        if ! t="$(resolve_host "$host")"; then
+            [ "$opt" = true ] || die "$l/$k: host '$host' not found"
+            say "$l/$k: host '$host' absent — declared, skipped (optional)"; entry "$l" "$k" absent "" "$host" "" "$app"; return 0
+        fi
         kind=host; src="$host"
     elif [ -n "$path" ]; then
         src="$(resolve_src "$path")" || exit 1
-        [ -e "$src" ] || die "$l/$k: source $src does not exist"
+        if [ ! -e "$src" ]; then
+            [ "$opt" = true ] || die "$l/$k: source $src does not exist"
+            say "$l/$k: $src absent — declared, skipped (optional)"; entry "$l" "$k" absent "" "$src" "" "$app"; return 0
+        fi
         stage_tmp; tmp="$TMPP"
         cp -R -P --preserve=mode,links "$src" "$tmp" || die "$l/$k: could not copy $src"
         unseal "$tmp"
@@ -320,9 +331,19 @@ build_entry() {
         [ -n "$sha" ] || die "$l/$k: fetch without sha256 is not reproducible — refused"
         command -v curl >/dev/null 2>&1 || die "$l/$k: fetch needs curl"
         stage_tmp; tmp="$TMPP"
-        curl -fsSL -o "$tmp" "$url" || die "$l/$k: download of $url failed"
-        [ "$(sha256sum "$tmp" | cut -d' ' -f1)" = "$sha" ] \
-            || die "$l/$k: $url does not match the declared sha256 — refused"
+        if ! curl -fsSL -o "$tmp" "$url"; then
+            [ "$opt" = true ] || die "$l/$k: download of $url failed"
+            rm -f "$tmp"; say "$l/$k: $url unreachable — declared, skipped (optional)"; entry "$l" "$k" absent "" "$url" "" "$app"; return 0
+        fi
+        if [ "$(sha256sum "$tmp" | cut -d' ' -f1)" != "$sha" ]; then
+            # A mismatch is never installed. On an optional entry (a rolling
+            # release tag whose pinned hash moved) it is refused loudly and the
+            # switch goes on; the page shows it declared · absent.
+            rm -f "$tmp"
+            [ "$opt" = true ] || die "$l/$k: $url does not match the declared sha256 — refused"
+            printf '%s: %s/%s: %s does not match the declared sha256 — REFUSED, not installed (optional: bump the hash from nix/hashes.json)\n' "$ME" "$l" "$k" "$url" >&2
+            entry "$l" "$k" absent "" "$url" "" "$app"; return 0
+        fi
         [ "$(printf '%s' "$v" | jq -r '.exe // false')" = true ] && chmod +x "$tmp"
         add_store "$tmp" "$k"; t="$OBJ"; kind=fetch; src="$url"
     fi
@@ -341,7 +362,7 @@ build_entry() {
 
     genlink "$t" "$l" "$k"
     [ "$kind" = host ] && host="$t"
-    entry "$l" "$k" "$kind" "$t" "$src" "$host"
+    entry "$l" "$k" "$kind" "$t" "$src" "$host" "$app"
 }
 
 # makeWrapper: env + a PINNED LD_LIBRARY_PATH for exactly this tool. A lib that
@@ -822,6 +843,7 @@ check() {
 
     jq -r '.entries[] | [.layer, .name, .kind, .target, .source, .host] | join("\u001f")' "$gen/manifest.json" > "$ROOT/.verify.$$"
     while IFS="$(printf '\037')" read -r l k kind t s h; do
+        [ "$kind" != absent ] || continue   # declared, not present on this box: never a failure
         [ -z "$h" ] || [ -e "$h" ] || fail "$l/$k: host binary $h is gone (apt/nix upgraded it?) — repair re-resolves it"
         if [ "$l" = secret ]; then
             want="$(printf '%s' "$s" | jq -r .mode)"
@@ -994,7 +1016,7 @@ cmd_status() {
     printf 'Declaration:  %s\n' "${DECL:-<none>}"
     if [ -n "$live" ] && [ -f "$live/manifest.json" ]; then
         printf 'Live:         %s  (built %s)\n' "${live##*/}" "$(jq -r .created "$live/manifest.json")"
-        printf 'Entries:      %s\n' "$(jq -r '.entries | group_by(.layer) | map("\(.[0].layer)=\(length)") | join(" ")' "$live/manifest.json")"
+        printf 'Entries:      %s   (declared · absent: %s)\n' "$(jq -r '.entries | map(select(.kind != "absent")) | group_by(.layer) | map("\(.[0].layer)=\(length)") | join(" ")' "$live/manifest.json")" "$(jq -r '[.entries[] | select(.kind == "absent")] | length' "$live/manifest.json")"
     else
         printf 'Live:         none — run switch\n'
     fi
@@ -1129,6 +1151,124 @@ cmd_tui() {
     done
 }
 
+# ── html: the Store as a page, served by my-webserver ──────────────────────
+# Two tiers, drawn apart on purpose: OS · Terraforms (the machine: what
+# cloud-me_configs/B_CONFIGS-MACHINES/<machine> owns — NixOS flakes, OS
+# configs, terraform) versus Home-Manager · Desktop (the user: what this store
+# realises — binaries, scripts/libs, configs, secrets), grouped by app.
+UI="${LINUX_STORE_UI:-$ROOT/ui}"
+machine_of() { case "$1" in termux) echo samsung-s21plus ;; desktop) echo surface-8pro ;; *) echo "" ;; esac; }
+hesc() { sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+
+html_css() {
+    cat <<'EOF'
+:root{--bg:#0f1117;--fg:#d6d9e0;--dim:#8b90a0;--card:#171a23;--line:#262a36;--on:#3fb950;--off:#f85149;--unk:#d29922;--acc:#58a6ff;--os:#bc8cff;--hm:#39d2c0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+header{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;gap:24px;align-items:baseline;flex-wrap:wrap}
+header h1{margin:0;font-size:18px}header nav a{color:var(--acc);margin-right:14px;text-decoration:none}header .meta{color:var(--dim)}
+main{padding:20px 24px;display:grid;gap:22px;grid-template-columns:1fr}@media(min-width:1100px){main.two{grid-template-columns:1fr 1.6fr}}
+section.tier{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:16px 18px}
+section.tier>h2{margin:0 0 4px;font-size:15px;letter-spacing:.04em;text-transform:uppercase}section.tier>p.lead{margin:0 0 14px;color:var(--dim)}
+.os>h2{color:var(--os)}.hm>h2{color:var(--hm)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:14px}
+.tile{border:1px solid var(--line);border-radius:8px;padding:10px 12px}.tile b{display:block}.tile span{color:var(--dim)}
+h3{margin:16px 0 6px;font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+table{width:100%;border-collapse:collapse}td,th{padding:4px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--dim);font-weight:normal}
+td.state{white-space:nowrap}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.ON{background:var(--on)}.OFF{background:var(--off)}.UNKNOWN{background:var(--unk)}.UNVERIFIABLE{background:var(--dim)}
+.present .dot{background:var(--on)}.absent .dot{background:var(--off)}
+.app{color:var(--acc)}.kind{color:var(--dim)}td.path{color:var(--dim);word-break:break-all}
+footer{padding:14px 24px;color:var(--dim);border-top:1px solid var(--line)}code{color:var(--fg)}
+.gen{display:inline-block;margin:2px 6px 2px 0;padding:1px 8px;border:1px solid var(--line);border-radius:12px}.gen.live{border-color:var(--on);color:var(--on)}
+.card{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px}.card h4{margin:0 0 6px;font-size:13px}.card .sum{color:var(--dim);float:right}
+.steps{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 12px}.steps div{color:var(--dim)}.steps b{color:var(--fg)}
+EOF
+}
+
+html_head() {  # title  active(store|account)
+    printf '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>%s</title><style>' "$1"
+    html_css
+    printf '</style></head><body><header><h1>%s</h1><nav><a href="index.html"%s>Store</a><a href="account.html"%s>Account</a></nav><span class="meta">%s · %s · generated %s</span></header>\n' \
+        "$1" "$( [ "$2" = store ] && echo ' style="color:var(--fg)"')" "$( [ "$2" = account ] && echo ' style="color:var(--fg)"')" \
+        "$(id -un)@$(uname -n)" "$(uname -s) $(uname -m)" "$(date -u +%FT%TZ)"
+}
+
+cmd_html() {
+    local p live gb m mdir out n app
+    p="$(detect_profile)" || exit 1
+    live="$(readlink "$CUR" 2>/dev/null || true)"; gb="$(git_base 2>/dev/null || true)"
+    m="$(machine_of "$p")"; mdir="$gb/cloud-me_configs/B_CONFIGS-MACHINES"
+    [ -d "$mdir" ] && mdir="$(ls -d "$mdir"/*-"$m" 2>/dev/null | head -1)" || mdir=""
+    mkdir -p "$UI"; out="$UI/index.html"
+    {
+        html_head "linux-store · $p" store
+        echo '<main class="two">'
+        # ── OS · Terraforms ──
+        printf '<section class="tier os"><h2>OS · Terraforms</h2><p class="lead">The machine, not the user: owned by <code>cloud-me_configs/B_CONFIGS-MACHINES/%s</code>. linux-store reads it, never writes it.</p>\n' "$(basename "${mdir:-<none>}" | hesc)"
+        echo '<div class="tiles">'
+        printf '<div class="tile"><b>%s</b><span>machine · %s</span></div>' "$m" "$p"
+        printf '<div class="tile"><b>%s</b><span>kernel</span></div>' "$(uname -r | hesc)"
+        printf '<div class="tile"><b>%s</b><span>userland</span></div>' "$( (. /etc/os-release 2>/dev/null && printf '%s' "$PRETTY_NAME") | hesc)"
+        for t in nix-os-flakes deb-os-configs cloud-terraforms; do
+            if [ -n "$mdir" ] && [ -d "$mdir/$t" ]; then n="$(find "$mdir/$t" -type f ! -name .gitkeep | wc -l | tr -d ' ')"; else n="—"; fi
+            printf '<div class="tile"><b>%s</b><span>%s</span></div>' "$t" "$( [ "$n" = "—" ] && echo 'not checked out' || echo "$n files")"
+        done
+        echo '</div>'
+        [ -n "$mdir" ] && [ -f "$mdir/README.md" ] && { echo '<pre style="color:var(--dim);white-space:pre-wrap">'; head -12 "$mdir/README.md" | hesc; echo '</pre>'; }
+        echo '</section>'
+        # ── Home-Manager · Desktop ──
+        printf '<section class="tier hm"><h2>Home-Manager · Desktop</h2><p class="lead">The user: what this store realises in <code>%s</code> from <code>%s</code>.</p>\n' "$(printf '%s' "$HOME" | hesc)" "$(printf '%s' "${DECL:-}" | sed "s|^$gb/||" | hesc)"
+        if [ -n "$live" ] && [ -f "$live/manifest.json" ]; then
+            printf '<div class="tiles"><div class="tile"><b>%s</b><span>live generation</span></div><div class="tile"><b>%s</b><span>store objects · %s</span></div><div class="tile"><b>%s</b><span>declared · absent</span></div></div>\n' \
+                "${live##*/}" "$(ls -1 "$STORE" 2>/dev/null | wc -l | tr -d ' ')" "$(du -sh "$STORE" 2>/dev/null | cut -f1)" "$(jq -r '[.entries[] | select(.kind == "absent")] | length' "$live/manifest.json")"
+            for sec in "bin:Binaries" "lib:Scripts · Libs" "etc:Configs" "activate:Rendered configs" "secret:Secrets"; do
+                l="${sec%%:*}"
+                [ "$(jq -r --arg l "$l" '[.entries[] | select(.layer == $l)] | length' "$live/manifest.json")" != 0 ] || continue
+                printf '<h3>%s</h3><table><tr><th></th><th>name</th><th>app</th><th>kind</th><th>%s</th></tr>\n' "${sec#*:}" "$( [ "$l" = secret ] && echo mode || echo where)"
+                jq -r --arg l "$l" --arg gb "$gb" --arg home "$HOME" '
+                    .entries[] | select(.layer == $l)
+                    | (if (.app // "") != "" then .app
+                       elif (.source | startswith($gb + "/")) then (.source | ltrimstr($gb + "/") | split("/")[1] // split("/")[0])
+                       elif .kind == "host" or .kind == "host+wrap" then "host"
+                       elif .kind == "fetch" then (.source | split("/")[-2] // "release")
+                       else "" end) as $app
+                    | (if $l == "secret" then (.source | fromjson | .mode) else (.target | sub("^" + $home + "/"; "~/") | sub("^.*/store/"; "store/")) end) as $where
+                    | "<tr class=\"\(if .kind == "absent" then "absent" else "present" end)\"><td class=\"state\"><span class=\"dot\"></span>\(if .kind == "absent" then "absent" else "present" end)</td><td>\(.name)</td><td class=\"app\">\($app)</td><td class=\"kind\">\(.kind)</td><td class=\"path\">\($where)</td></tr>"' "$live/manifest.json" | hesc | sed 's/&lt;\(\/\?\(tr\|td\|span\)[^&]*\)&gt;/<\1>/g'
+                echo '</table>'
+            done
+            echo '<h3>Generations</h3><div>'
+            for g in $(cd "$GENS" 2>/dev/null && ls -1d "$p"-* 2>/dev/null | sort -t- -k2,2n); do
+                [ "$GENS/$g" = "$live" ] && printf '<span class="gen live">%s</span>' "$g" || printf '<span class="gen">%s</span>' "$g"
+            done; echo '</div>'
+        else
+            echo '<p>Nothing live — <code>linux-store switch</code>.</p>'
+        fi
+        echo '</section></main>'
+        printf '<footer>linux-store · <code>switch</code> <code>check</code> <code>rollback</code> <code>tui</code> · page: <code>linux-store html</code> · served by my-webserver: <code>linux-store serve</code></footer></body></html>\n'
+    } > "$out.tmp" && mv -f "$out.tmp" "$out"
+    say "html: $out"
+}
+
+# serve: my-webserver (ours) on $HOME, so the page is /.linux-store/ui/index.html.
+cmd_serve() {
+    local port="${1:-8000}" pidf="$UI/webserver.pid" rel
+    cmd_html >/dev/null
+    rel="$(printf '%s' "$UI" | sed "s|^$HOME/||")"
+    if [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null; then
+        say "already serving (pid $(cat "$pidf")): http://localhost:$port/$rel/index.html"; return 0
+    fi
+    if command -v my-webserver >/dev/null 2>&1; then
+        nohup my-webserver "$port" "$HOME" > "$UI/webserver.log" 2>&1 &
+        echo $! > "$pidf"; say "my-webserver started (pid $!) — http://localhost:$port/$rel/index.html"
+    else
+        command -v python3 >/dev/null 2>&1 || die "neither my-webserver nor python3 on PATH"
+        say "my-webserver not on PATH (declare it in the store: it is a release asset) — falling back to python3 http.server"
+        (cd "$HOME" && nohup python3 -m http.server "$port" --bind 127.0.0.1 > "$UI/webserver.log" 2>&1 &
+         echo $! > "$pidf")
+        say "serving — http://localhost:$port/$rel/index.html"
+    fi
+}
+
 usage() {
     cat <<'EOF'
 linux-store — nix-store semantics for the termux and desktop Linux userlands
@@ -1149,6 +1289,8 @@ Same verbs as nix / home-manager / the flakes' build.sh:
   show                       what the declaration resolves to for this profile
   status                     profile, live generation, store size
   tui                        the Store tab in the terminal (PHONE | CLOUD), like the flakes' build.sh tui
+  html                       render ~/.linux-store/ui/index.html: OS · Terraforms vs Home-Manager · Desktop
+  serve [port]               html, then serve $HOME with my-webserver → /.linux-store/ui/index.html
   profile                    print the detected profile
 
 Declaration: <git base>/cloud-me_configs/<configs-user>/deb-user-configs/linux-store.json
@@ -1171,6 +1313,8 @@ case "$cmd" in
     show)        cmd_show ;;
     status)      cmd_status ;;
     tui)         cmd_tui ;;
+    html)        cmd_html ;;
+    serve)       cmd_serve "$@" ;;
     diff)        cmd_diff "$@" ;;
     gc)          cmd_gc ;;
     dev)         cmd_dev "$@" ;;

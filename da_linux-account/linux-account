@@ -65,6 +65,15 @@ BUNDLE_IN_VAULT="C_A1-configs/profile-secrets.json"
 WG_ROOT="A_A0-Providers/C_TOOLS-INFRA/c0-wireguard"
 wg_dir_of() { case "$1" in galaxy) echo termux ;; surface) echo surface ;; samsung-a37) echo samsung-a37 ;; *) echo "$1" ;; esac; }
 VAULT_GH_TOKEN="A_A0-Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque/token"
+# <dev>-public/<file> → $HOME path + mode, as bb_flakes_termux's wireguard.nix laid them out:
+# config* are profiles (.conf), privatekey/publickey are the device's keypair, anything else is not ours.
+wg_target() {  # dev file → "path\tmode" or nothing
+    case "$2" in
+        config*)    printf '.config/wireguard/%s-%s.conf\t600\n' "$1" "$2" ;;
+        privatekey) printf '.config/wireguard/privatekey\t600\n' ;;
+        publickey)  printf '.config/wireguard/publickey\t644\n' ;;
+    esac
+}
 VAULT_SSH_KEY="A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_rsa"
 
 umask 077
@@ -94,7 +103,9 @@ git_base() {
 # export carries schema_version, which must be one we know.
 classify() {  # file → prints kind, returns 1 if unusable
     jq -e . "$1" >/dev/null 2>&1 || { echo "not-json"; return 1; }
-    if jq -e 'has("sops")' "$1" >/dev/null 2>&1 || grep -q 'ENC\[' "$1"; then echo "encrypted"; return 1; fi
+    # VaultFile.classify: a sops block, or any VALUE that is a sops ciphertext.
+    # Not a substring grep: the bundle's own docs mention "ENC[…]" in prose.
+    if jq -e 'has("sops") or ([.. | strings | select(startswith("ENC["))] | length > 0)' "$1" >/dev/null 2>&1; then echo "encrypted"; return 1; fi
     jq -e '.bundle // . | has("schema_version")' "$1" >/dev/null 2>&1 || { echo "no-schema"; return 1; }
     echo "bundle"
 }
@@ -216,7 +227,7 @@ DEV() { local d; d="$(st_get device_id)"; [ -n "$d" ] || d="$(default_device)"; 
 sha_of_str() { printf '%s' "$1" | sha256sum | cut -d' ' -f1; }
 
 plan() {
-    local gb dev wgd f p
+    local gb dev wgd f p n tgt
     need_bundle; gb="$(git_base)" || die "no git base"; dev="$(DEV)"; wgd="$(wg_dir_of "$dev")"
     # about → contact card seed + git identity
     if present '.about.profile'; then
@@ -239,11 +250,12 @@ plan() {
         p="$gb/cloud-me_vault/$WG_ROOT/$wgd-public"
         if [ -d "$p" ]; then
             for f in "$p"/*; do
-                [ -f "$f" ] || continue
+                [ -f "$f" ] || continue; n="$(basename "$f")"
+                tgt="$(wg_target "$wgd" "$n")"; [ -n "$tgt" ] || { printf 'mesh\tskip\t-\t%s-public/%s is not a profile or key\n' "$wgd" "$n"; continue; }
                 if grep -q 'PROVIDED_BY_DEVICE' "$f"; then
-                    printf 'mesh\tstore\t.config/wireguard/%s-%s.conf\ttemplate vault:%s/%s-public/%s + WG_PRIVATE_KEY = secret file %s/%s/privatekey\n' "$wgd" "$(basename "$f")" "$WG_ROOT" "$wgd" "$(basename "$f")" "$WG_ROOT" "$wgd"
+                    printf 'mesh\tstore\t%s\ttemplate vault:%s/%s-public/%s + WG_PRIVATE_KEY = secret file %s/%s/privatekey\n' "${tgt%%	*}" "$WG_ROOT" "$wgd" "$n" "$WG_ROOT" "$wgd"
                 else
-                    printf 'mesh\tstore\t.config/wireguard/%s-%s.conf\tsecret file vault:%s/%s-public/%s (600)\n' "$wgd" "$(basename "$f")" "$WG_ROOT" "$wgd" "$(basename "$f")"
+                    printf 'mesh\tstore\t%s\tsecret file vault:%s/%s-public/%s (%s)\n' "${tgt%%	*}" "$WG_ROOT" "$wgd" "$n" "${tgt##*	}"
                 fi
             done
         else
@@ -278,7 +290,7 @@ cmd_plan() { plan | awk -F'\t' '{ printf "  %-12s %-8s %-40s %s\n", $1, $2, $3, 
 rec() { st_set "sha:$1" "$(sha256sum "$2" | cut -d' ' -f1)"; }   # remember what apply wrote
 
 write_fragment() {  # the linux-store include fragment: paths only, never values
-    local gb dev wgd dir frag p f n v
+    local gb dev wgd dir frag p f n v tgt
     gb="$(git_base)"; dev="$(DEV)"; wgd="$(wg_dir_of "$dev")"
     dir="$gb/cloud-me_configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"
     [ -d "$dir" ] || die "no deb-user-configs at $dir"
@@ -294,10 +306,11 @@ write_fragment() {  # the linux-store include fragment: paths only, never values
     if [ -d "$p" ]; then
         for f in "$p"/*; do
             [ -f "$f" ] || continue; n="$(basename "$f")"
+            tgt="$(wg_target "$wgd" "$n")"; [ -n "$tgt" ] || continue
             if grep -q 'PROVIDED_BY_DEVICE' "$f"; then
-                v="$(printf '%s' "$v" | jq -c --arg t ".config/wireguard/$wgd-$n.conf" --arg tpl "vault:$WG_ROOT/$wgd-public/$n" --arg key "vault:$WG_ROOT/$wgd/privatekey" '.[$t] = {template: $tpl, values: {WG_PRIVATE_KEY: {file: $key, placeholder: "<PROVIDED_BY_DEVICE>"}}}')"
+                v="$(printf '%s' "$v" | jq -c --arg t "${tgt%%	*}" --arg m "${tgt##*	}" --arg tpl "vault:$WG_ROOT/$wgd-public/$n" --arg key "vault:$WG_ROOT/$wgd/privatekey" '.[$t] = {template: $tpl, mode: $m, values: {WG_PRIVATE_KEY: {file: $key, placeholder: "<PROVIDED_BY_DEVICE>"}}}')"
             else
-                v="$(printf '%s' "$v" | jq -c --arg t ".config/wireguard/$wgd-$n.conf" --arg s "vault:$WG_ROOT/$wgd-public/$n" '.[$t] = {file: $s}')"
+                v="$(printf '%s' "$v" | jq -c --arg t "${tgt%%	*}" --arg m "${tgt##*	}" --arg s "vault:$WG_ROOT/$wgd-public/$n" '.[$t] = {file: $s, mode: $m}')"
             fi
         done
     fi
@@ -429,6 +442,11 @@ light() {  # observed(0|1) rows-file → ON|OFF|UNKNOWN|UNVERIFIABLE
 card() {  # title observed rows-file  → prints card, returns via global LIGHT
     local l m d a p
     LIGHT="$(light "$2" "$3")"
+    if [ -n "${HTML_BUF:-}" ]; then
+        { printf '<div class="card"><h4><span class="dot %s"></span>%s <span class="sum">%s</span></h4><table>' "$LIGHT" "$1" "$LIGHT"
+          awk -F'\t' '{ gsub(/&/,"\\&amp;"); gsub(/</,"\\&lt;"); printf "<tr><td class=\"state\">%s</td><td>%s</td><td class=\"path\">%s</td></tr>", $2, $1, $3 }' "$3"
+          echo '</table></div>'; } >> "$HTML_BUF"
+    fi
     m="$(grep -c "$(printf '\t')MATCH" "$3" 2>/dev/null || echo 0)"; d="$(grep -cE "$(printf '\t')(DIFFERS|ABSENT)" "$3" 2>/dev/null || echo 0)"; p="$(grep -c "$(printf '\t')PENDING" "$3" 2>/dev/null || echo 0)"
     case "$LIGHT" in ON) l='●' ;; OFF) l='○' ;; UNVERIFIABLE) l='◌' ;; *) l='◍' ;; esac
     printf '  %s %-24s %s  %s\n' "$l" "$1" "$LIGHT" "$m match / $d differ / $p pending"
@@ -437,7 +455,7 @@ card() {  # title observed rows-file  → prints card, returns via global LIGHT
 }
 
 cmd_fleet() {
-    local gb dev wgd R t n f sha email acct declared installed lsok
+    local gb dev wgd R t n f sha email acct declared installed lsok tgt
     need_bundle; gb="$(git_base)"; dev="$(DEV)"; wgd="$(wg_dir_of "$dev")"; R="$CFG/.rows"
     [ "${1:-}" = -v ] && VERBOSE=1
     printf '  device %s   wg %s %s   bundle: %s (%s)\n\n' "$dev" "$(bq --arg d "$dev" '.electronics.fleet[$d].wg_peer.name // "?"')" "$(bq --arg d "$dev" '.electronics.fleet[$d].wg_peer.wg_ip // ""')" "$(st_get bundle_source)" "$(st_get connected_at | cut -c1-10)"
@@ -465,8 +483,8 @@ cmd_fleet() {
     if [ -d "$gb/cloud-me_vault/$WG_ROOT/$wgd-public" ]; then
         lsok=1; { command -v linux-store >/dev/null 2>&1 && linux-store check >/dev/null 2>&1; } || lsok=0
         for f in "$gb/cloud-me_vault/$WG_ROOT/$wgd-public"/*; do
-            [ -f "$f" ] || continue; n="$wgd-$(basename "$f").conf"
-            t="$HOME/.config/wireguard/$n"
+            [ -f "$f" ] || continue; tgt="$(wg_target "$wgd" "$(basename "$f")")"; [ -n "$tgt" ] || continue
+            n="${tgt%%	*}"; n="${n#.config/wireguard/}"; t="$HOME/.config/wireguard/$n"
             if [ ! -f "$t" ]; then row "$n" ABSENT ".config/wireguard/$n"
             elif [ "$lsok" = 1 ]; then row "$n" MATCH "declared via linux-store"
             else row "$n" DIFFERS "linux-store check fails"; fi
@@ -680,6 +698,85 @@ cmd_tui() {
     done
 }
 
+# ── SIGN IN + REPOS: the engine that clones, authenticates and fetches ──────
+# The bootstrap of a box that has NOTHING: a GitHub login (device flow, as the
+# app's "GitHub device flow" provider) is the one credential that reaches the
+# private repos; from it: the bundle (connect --github), then apply lands the
+# ssh key + token declaratively, then every private repo clones.
+cmd_signin() {
+    command -v gh >/dev/null 2>&1 || die "needs gh (GitHub CLI) on PATH"
+    case "${1:-}" in
+        --token) [ -n "${2:-}" ] || die "signin --token <ghp_…>"; printf '%s' "$2" | gh auth login --with-token || die "gh rejected the token" ;;
+        ""|--device) gh auth status >/dev/null 2>&1 && say "already signed in: $(gh api user -q .login 2>/dev/null)" || gh auth login -h github.com -p https -w || die "device flow did not complete" ;;
+        *) die "signin [--device | --token <t>]" ;;
+    esac
+    gh auth setup-git >/dev/null 2>&1 || true
+    st_set signed_in "$(gh api user -q .login 2>/dev/null || echo yes)"
+    say "signed in as $(st_get signed_in) — next: $ME connect --github, then apply, then repos clone"
+}
+
+repo_list() {  # name<TAB>url — the bundle's git.repos plus the three every box needs
+    { printf 'cloud-me_configs\tdiegonmarcos/cloud-me_configs\ncloud-me_vault\tdiegonmarcos/cloud-me_vault\ncloud-u-linux\tdiegonmarcos/cloud-u-linux\n'
+      B="$(bundle_path 2>/dev/null)" && [ -n "$B" ] && bq '.git.repos[]? | (if type == "object" then (.url // .repo // .name // "") else . end) | select(. != "")' | while read -r r; do
+          r="${r#https://github.com/}"; r="${r#git@github.com:}"; r="${r%.git}"; printf '%s\t%s\n' "${r##*/}" "$r"; done
+    } | awk -F'\t' '!seen[$1]++'
+}
+cmd_repos() {
+    local gb n r url proto
+    gb="$(git_base)" || die "no git base"
+    case "${1:-list}" in
+        list) repo_list | while IFS="$(printf '\t')" read -r n r; do printf '  %s %-28s %s\n' "$( [ -d "$gb/$n/.git" ] && echo '●' || echo '○')" "$n" "$r"; done ;;
+        clone|pull)
+            # ssh when the declared key is in place, else https through gh's credential helper
+            if [ -f "$HOME/.ssh/id_rsa" ]; then proto=ssh; else proto=https; fi
+            repo_list | while IFS="$(printf '\t')" read -r n r; do
+                case "$r" in */*) ;; *) continue ;; esac
+                if [ "$proto" = ssh ]; then url="git@github.com:$r.git"; else url="https://github.com/$r.git"; fi
+                if [ -d "$gb/$n/.git" ]; then
+                    [ "$1" = pull ] && { git -C "$gb/$n" -c core.createObject=rename pull -q --ff-only >/dev/null 2>&1 && say "pulled $n" || say "warning — $n: pull failed (dirty, diverged or no auth)"; }
+                    continue
+                fi
+                [ "$1" = clone ] || continue
+                if git clone -q "$url" "$gb/$n" 2>/dev/null; then
+                    case "$gb" in /storage/*|*/cloud-drive-shared-store/*) git -C "$gb/$n" config core.createObject rename ;; esac
+                    say "cloned $n ($proto)"
+                else say "warning — $n: clone failed over $proto (private? sign in first: $ME signin)"; fi
+            done ;;
+        *) die "repos [list | clone | pull]" ;;
+    esac
+}
+
+# ── html: the Account page beside the Store page ───────────────────────────
+UI="${LINUX_STORE_UI:-$HOME/.linux-store/ui}"
+cmd_html() {
+    local out s1 s2 s3 s4
+    mkdir -p "$UI"; out="$UI/account.html"; HTML_BUF="$UI/.account.cards"; : > "$HTML_BUF"
+    bundle_path >/dev/null 2>&1 && cmd_fleet >/dev/null 2>&1
+    set -- $(step_state)
+    {
+        # the Store page owns the stylesheet; reuse it by inlining the same CSS
+        sed -n '/<style>/,/<\/style>/p' "$UI/index.html" 2>/dev/null | head -1 >/dev/null
+        printf '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>linux-account</title><style>'
+        [ -f "$UI/index.html" ] && sed -n 's/.*<style>\(.*\)<\/style>.*/\1/p' "$UI/index.html" | head -c 20000
+        printf '</style></head><body><header><h1>linux-account</h1><nav><a href="index.html">Store</a><a href="account.html" style="color:var(--fg)">Account</a></nav><span class="meta">%s · %s</span></header><main>\n' "$(id -un)@$(uname -n)" "$(date -u +%FT%TZ)"
+        printf '<section class="tier hm"><h2>Connect</h2><div class="steps">'
+        printf '<div><span class="dot %s"></span>1 Sign in<br><b>%s</b></div>' "$(case $1 in DONE) echo ON;; ACTIVE) echo UNKNOWN;; *) echo UNVERIFIABLE;; esac)" "$( bundle_path >/dev/null 2>&1 && st_get bundle_source || echo '—')"
+        printf '<div><span class="dot %s"></span>2 Who<br><b>%s</b></div>' "$(case $2 in DONE) echo ON;; ACTIVE) echo UNKNOWN;; *) echo UNVERIFIABLE;; esac)" "$(st_get identity_email || echo '—')"
+        printf '<div><span class="dot %s"></span>3 Which device<br><b>%s</b></div>' "$(case $3 in DONE) echo ON;; ACTIVE) echo UNKNOWN;; *) echo UNVERIFIABLE;; esac)" "$(st_get device_id || default_device || echo '—')"
+        printf '<div><span class="dot %s"></span>4 Get everything<br><b>%s</b></div>' "$(case $4 in DONE) echo ON;; ACTIVE) echo UNKNOWN;; *) echo UNVERIFIABLE;; esac)" "$(st_get applied_at || echo 'not applied')"
+        echo '</div></section>'
+        printf '<section class="tier hm"><h2>Fleet</h2><p class="lead">Declared (the vault bundle) vs this device. Compared by sha256; no value is on this page.</p>'
+        [ -s "$HTML_BUF" ] && cat "$HTML_BUF" || echo '<p>Not connected — <code>linux-account connect</code>.</p>'
+        echo '</section>'
+        printf '<section class="tier os"><h2>Infos</h2><table>'
+        if [ -f "$CARD" ]; then for k in $FIELDS; do printf '<tr><th>%s</th><td>%s</td></tr>' "$k" "$(jq -r --arg k "$k" '.[$k] // ""' "$CARD" | hesc_la)"; done; else echo '<tr><td>empty</td></tr>'; fi
+        printf '</table><p class="lead">sync: %s · last push: %s</p></section>' "$PROFILE_SYNC_URL" "$(st_get pushed_at || echo never)"
+        printf '</main><footer>linux-account · <code>connect</code> <code>apply</code> <code>fleet</code> <code>infos</code> <code>repos clone</code> · page: <code>linux-account html</code></footer></body></html>\n'
+    } > "$out.tmp" && mv -f "$out.tmp" "$out"; rm -f "$HTML_BUF"; unset HTML_BUF
+    say "html: $out"
+}
+hesc_la() { sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+
 usage() {
     cat <<'EOF'
 linux-account — cloud-superapp's Account tab for the Linux userlands
@@ -695,9 +792,13 @@ linux-account — cloud-superapp's Account tab for the Linux userlands
     status            journey + cockpit
   INFOS
     infos [show | set k=v… | push | flush | erase]     contact card; push = ProfileSync POST
+  BOOTSTRAP (a box with nothing)
+    signin [--device | --token <t>]    GitHub login (device flow) → connect --github → apply → repos clone
+    repos [list | clone | pull]        every private repo of the fleet into the git base
   LINKS
     wg [list | up <p> | down <p>]      ai      apps [compare | export [file]]
   tui               the Account tab in the terminal
+  html              ~/.linux-store/ui/account.html, beside the Store page (linux-store serve)
 
 State: ~/.config/linux-account/ (0700). Bundle: cloud-me_vault/C_A1-configs/profile-secrets.json (schema 1).
 Secrets that are files in the vault are DECLARED (deb-user-configs/account.json → linux-store); the rest is written 0600 under state.
@@ -719,6 +820,9 @@ case "$cmd" in
     wg)      cmd_wg "$@" ;;
     ai)      cmd_ai ;;
     tui)     cmd_tui ;;
+    html)    cmd_html ;;
+    signin)  cmd_signin "$@" ;;
+    repos)   cmd_repos "$@" ;;
     help|-h|--help) usage ;;
     *) usage >&2; exit 2 ;;
 esac

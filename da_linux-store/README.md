@@ -114,7 +114,34 @@ linux-store switch <gen>         e.g. termux-3, or 3
 linux-store generations | diff <a> [<b>] | gc | profile
 linux-store dev [--off] <etc path>   link straight to the repo source while editing
 linux-store tui                      the Store tab in the terminal: PHONE (this device) | CLOUD (the declaration)
+linux-store html                     ~/.linux-store/ui/index.html — OS · Terraforms vs Home-Manager · Desktop
+linux-store serve [port]             html, then my-webserver on $HOME → http://localhost:8000/.linux-store/ui/index.html
 ```
+
+## The page (html · serve)
+
+Two tiers, drawn apart on purpose:
+
+- **OS · Terraforms** — the machine. What `cloud-me_configs/B_CONFIGS-MACHINES/<machine>` owns
+  (`nix-os-flakes`, `deb-os-configs`, `cloud-terraforms`), plus kernel and userland. The store reads it, never writes it.
+- **Home-Manager · Desktop** — the user. What this store realises: Binaries (`bin`), Scripts · Libs (`lib`),
+  Configs (`etc`, `activate`), Secrets (names and modes only), each row with its **app** and whether it is
+  *present* or *declared · absent*; then the generations.
+
+`serve` runs **our own my-webserver** (`my-webserver <port> $HOME`; it resolves explicit dot paths) and
+falls back to `python3 -m http.server` only when my-webserver is not on PATH yet.
+
+### Optional entries — declare an app before it exists
+
+```json
+"my-konsole": { "path": "cloud-u-linux/da__my-konsole/dist/my-konsole", "exe": true, "app": "my-konsole", "optional": true }
+```
+
+An `optional` entry whose source is absent (not built, release unreachable, host binary missing) is
+recorded as kind `absent` and skipped loudly; the switch succeeds, `check` ignores it, and the page shows
+it as *declared · absent* until it appears. A non-optional absent source still fails the build. `app` groups
+rows on the page; without it the app is derived from the source's repo directory.
+
 
 ## Rules it enforces
 
@@ -148,7 +175,34 @@ linux-store repair                   check, else switch
 linux-store diff <a> [<b>] | gc | show | status | profile
 linux-store dev [--off] <etc path>   link straight to the repo source while editing
 linux-store tui                      the Store tab in the terminal: PHONE (this device) | CLOUD (the declaration)
+linux-store html                     ~/.linux-store/ui/index.html — OS · Terraforms vs Home-Manager · Desktop
+linux-store serve [port]             html, then my-webserver on $HOME → http://localhost:8000/.linux-store/ui/index.html
 ```
+
+## The page (html · serve)
+
+Two tiers, drawn apart on purpose:
+
+- **OS · Terraforms** — the machine. What `cloud-me_configs/B_CONFIGS-MACHINES/<machine>` owns
+  (`nix-os-flakes`, `deb-os-configs`, `cloud-terraforms`), plus kernel and userland. The store reads it, never writes it.
+- **Home-Manager · Desktop** — the user. What this store realises: Binaries (`bin`), Scripts · Libs (`lib`),
+  Configs (`etc`, `activate`), Secrets (names and modes only), each row with its **app** and whether it is
+  *present* or *declared · absent*; then the generations.
+
+`serve` runs **our own my-webserver** (`my-webserver <port> $HOME`; it resolves explicit dot paths) and
+falls back to `python3 -m http.server` only when my-webserver is not on PATH yet.
+
+### Optional entries — declare an app before it exists
+
+```json
+"my-konsole": { "path": "cloud-u-linux/da__my-konsole/dist/my-konsole", "exe": true, "app": "my-konsole", "optional": true }
+```
+
+An `optional` entry whose source is absent (not built, release unreachable, host binary missing) is
+recorded as kind `absent` and skipped loudly; the switch succeeds, `check` ignores it, and the page shows
+it as *declared · absent* until it appears. A non-optional absent source still fails the build. `app` groups
+rows on the page; without it the app is derived from the source's repo directory.
+
 
 Like the flakes, the declaration directory has its own `build.sh`:
 `cloud-me_configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs/build.sh switch`
