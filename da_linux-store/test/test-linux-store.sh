@@ -176,5 +176,16 @@ flock "$R/lock" sleep 3 & sleep 1
 ls_ apply; check "a held lock makes a second apply fail fast" '[ $? -ne 0 ] && grep -q "holds" "$T/out"'
 wait
 
+section "declaration from cloud-me_configs"
+CM="$GIT_BASE/cloud-me_configs"; UD="$CM/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"
+mkdir -p "$UD"
+echo '{"kind":"cloud-me.configs","configs_users":[{"id":"diego-admin","path":"A_CONFIGS-USER/a0-diego-admin"}]}' > "$CM/configs.json"
+cp "$T/store.json" "$UD/linux-store.json"
+( unset LINUX_STORE_DECLARATION; ls_ build ); check "found via configs.json for diego-admin" \
+    '[ "$(jq -r .declaration "$(ls -1d "$R"/generations/termux-* | sort -t- -k2,2n | tail -1)/manifest.json")" = "$UD/linux-store.json" ]'
+( unset LINUX_STORE_DECLARATION; LINUX_STORE_USER=nobody ls_ build ); check "unknown configs-user is named in the error" \
+    'grep -q "declares no configs-user .nobody." "$T/out"'
+( unset LINUX_STORE_DECLARATION; ls_ apply; mv "$CM" "$CM.away"; ls_ verify; rc=$?; mv "$CM.away" "$CM"; exit $rc ); check "verify falls back to the recorded declaration when the checkout is gone" '[ $? -eq 0 ]'
+
 printf '\n%d passed, %d failed\n' "$pass" "$failn"
 [ "$failn" -eq 0 ]

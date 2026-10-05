@@ -31,7 +31,25 @@ refuses to start without them.
 $HOME/.claude/agents -> ~/.linux-store/current/etc/.claude/agents   (stable; the switch moves it)
 ```
 
-## The declaration (`store.json`)
+## The declaration
+
+The declaration is config, so it lives with the rest of the user's config in
+**cloud-me_configs**, not beside the engine:
+
+```
+<git base>/cloud-me_configs/configs.json                         binds configs-user id → directory
+<git base>/cloud-me_configs/A_CONFIGS-USER/a0-diego-admin/
+    deb-user-configs/linux-store.json                            ← this user's declaration
+```
+
+The engine resolves it in this order:
+
+1. `LINUX_STORE_DECLARATION`, if set.
+2. `configs.json` → `LINUX_STORE_USER` (default `diego-admin`) → `<path>/deb-user-configs/linux-store.json`.
+3. The path the last `apply` recorded, so `verify` and `rollback` still work while the checkout is unmounted.
+
+The git base is `GIT_BASE`, or else the first of `~/git` (desktop) and `~/cloud-drive-shared-store/git` (phone).
+
 
 `common` applies to both profiles, and `termux` / `desktop` overlay it per key:
 
@@ -105,10 +123,10 @@ directories stops and names them. Re-run with `--backup` to move them aside.
 sh test/test-linux-store.sh     # sandboxed $HOME; never touches the real ~/.claude
 ```
 
-55 checks covering profiles, every layer, idempotence (a re-apply adds zero
+58 checks covering profiles, every layer, idempotence (a re-apply adds zero
 objects), diff/rollback/switch, fault injection at each stage, tamper detection
 and repair, ownership refusals, cross-profile refusal, the fetch hash, dev mode,
-removal, gc and the lock. It takes about 5 minutes on the phone, almost all of
+removal, gc, the lock, and finding the declaration through cloud-me_configs. It takes about 5 minutes on the phone, almost all of
 it jq start-up.
 
 ## Known gaps

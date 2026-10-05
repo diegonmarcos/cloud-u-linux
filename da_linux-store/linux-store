@@ -65,21 +65,46 @@ GENS="$ROOT/generations"
 CUR="$ROOT/current"
 DEVLIST="$ROOT/dev.list"
 
-# The declaration: explicit override, else the store.json beside the engine,
-# else the one the last apply recorded (the engine copy in store/ has no
-# neighbour).
+# The git base: where the checkouts live. The phone keeps them on the
+# CloudDrive mount, the desktop under ~/git. Needed BEFORE the declaration,
+# because the declaration itself lives in a checkout (cloud-me_configs).
+git_base() {
+    if [ -n "${GIT_BASE:-}" ]; then echo "$GIT_BASE"; return 0; fi
+    for _c in "$HOME/git" "$HOME/cloud-drive-shared-store/git"; do
+        if [ -d "$_c" ]; then echo "$_c"; return 0; fi
+    done
+    die "no git base: set GIT_BASE (looked in ~/git and ~/cloud-drive-shared-store/git)"
+}
+
+# The declaration is CONFIG, so it lives with the rest of the user's config in
+# cloud-me_configs — not beside the engine. configs.json binds the user id to
+# its directory; a non-nix user's linux-store declaration is
+#   <user path>/deb-user-configs/linux-store.json
+# LINUX_STORE_USER picks the configs-user (default diego-admin).
+#
+# Order: explicit override, else cloud-me_configs, else the path the last apply
+# recorded (so `linux-store verify` still works with the checkout unmounted).
+configs_decl() {
+    local cfg u up
+    cfg="$(git_base 2>/dev/null)/cloud-me_configs"
+    [ -f "$cfg/configs.json" ] || return 1
+    u="${LINUX_STORE_USER:-diego-admin}"
+    up="$(jq -r --arg u "$u" '.configs_users[]? | select(.id == $u) | .path // empty' "$cfg/configs.json")"
+    [ -n "$up" ] || die "$cfg/configs.json declares no configs-user '$u'"
+    echo "$cfg/$up/deb-user-configs/linux-store.json"
+}
+
 if [ -n "${LINUX_STORE_DECLARATION:-}" ]; then
     DECL="$LINUX_STORE_DECLARATION"
-elif [ -f "$HERE/store.json" ]; then
-    DECL="$HERE/store.json"
+elif DECL="$(configs_decl)" && [ -f "$DECL" ]; then
+    :
 elif [ -f "$ROOT/declaration" ]; then
     DECL="$(cat "$ROOT/declaration")"
-else
-    DECL=""
 fi
+DECL="${DECL:-}"
 
 need_decl() {
-    [ -n "$DECL" ] && [ -r "$DECL" ] || die "no declaration (set LINUX_STORE_DECLARATION or keep store.json beside the engine)"
+    [ -n "$DECL" ] && [ -r "$DECL" ] || die "no declaration: expected cloud-me_configs/<configs-user>/deb-user-configs/linux-store.json (or set LINUX_STORE_DECLARATION)"
     jq -e 'type == "object"' "$DECL" >/dev/null 2>&1 || die "$DECL is not a JSON object"
     _bad="$(jq -r '
         ( keys[] | select(startswith("_") | not)
@@ -114,15 +139,6 @@ detect_profile() {
 }
 
 # ── sources ────────────────────────────────────────────────────────────────
-git_base() {
-    if [ -n "${GIT_BASE:-}" ]; then echo "$GIT_BASE"; return 0; fi
-    for _c in $(jq -r '.settings.git_base[]? // empty' "$DECL"); do
-        _c="$(printf '%s' "$_c" | sed "s|^\\\$HOME|$HOME|")"
-        if [ -d "$_c" ]; then echo "$_c"; return 0; fi
-    done
-    die "no git base: set GIT_BASE, or create one of settings.git_base in $DECL"
-}
-
 # "/abs" | "<root>:<rest>" | "relative/to/git/base"
 resolve_src() {
     local s="$1" root rest rp
@@ -767,8 +783,10 @@ linux-store — nix-store semantics for the termux and desktop Linux userlands
   dev [--off] <etc path> link an etc entry straight to its repo source (or back)
   profile                print the detected profile
 
-Environment: LINUX_STORE_ROOT  LINUX_STORE_DECLARATION  LINUX_STORE_PROFILE
-             LINUX_STORE_KEEP  GIT_BASE  LINUX_STORE_FAULT (tests)
+Declaration: <git base>/cloud-me_configs/<configs-user>/deb-user-configs/linux-store.json
+
+Environment: LINUX_STORE_ROOT  LINUX_STORE_DECLARATION  LINUX_STORE_USER
+             LINUX_STORE_PROFILE  LINUX_STORE_KEEP  GIT_BASE  LINUX_STORE_FAULT (tests)
 EOF
 }
 
