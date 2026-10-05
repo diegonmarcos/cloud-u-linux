@@ -73,7 +73,10 @@ DEVLIST="$ROOT/dev.list"
 # CloudDrive mount, the desktop under ~/git. Needed BEFORE the declaration,
 # because the declaration itself lives in a checkout (cloud-me_configs).
 git_base() {
-    if [ -n "${GIT_BASE:-}" ]; then echo "$GIT_BASE"; return 0; fi
+    if [ -n "${GIT_BASE:-}" ]; then
+        [ -d "$GIT_BASE" ] || die "GIT_BASE=$GIT_BASE is not a directory (set by the environment — on the phone ~/.claude/settings.json env must point it at the CloudDrive mount)"
+        echo "$GIT_BASE"; return 0
+    fi
     for _c in "$HOME/git" "$HOME/cloud-drive-shared-store/git"; do
         if [ -d "$_c" ]; then echo "$_c"; return 0; fi
     done
@@ -972,6 +975,106 @@ cmd_update() {
     [ "$noswitch" = 1 ] || cmd_switch
 }
 
+# ── tui: the Store tab, in the terminal ─────────────────────────────────────
+# Same split as cloud-superapp's Store (Phone | Cloud) and the flake build.sh's
+# numbered tui: PHONE is this device's live store, CLOUD is the declaration in
+# cloud-me_configs. Plain sh + printf; every item calls the same cmd_* the CLI
+# verbs call, so the tui can never do something the CLI cannot.
+C_B="$(printf '\033[1m')"; C_C="$(printf '\033[36m')"; C_G="$(printf '\033[32m')"
+C_Y="$(printf '\033[33m')"; C_R="$(printf '\033[31m')"; C_D="$(printf '\033[2m')"; C_N="$(printf '\033[0m')"
+pause() { printf '\n%sEnter to continue%s ' "$C_D" "$C_N"; read -r _ || true; }
+ask()   { printf '%s%s%s ' "$C_B" "$1" "$C_N"; read -r REPLY || REPLY=q; }
+
+tui_header() {
+    local live p
+    clear 2>/dev/null || printf '\033[H\033[2J'
+    live="$(readlink "$CUR" 2>/dev/null || true)"; p="$(detect_profile 2>/dev/null || echo '?')"
+    printf '%s┌─ linux-store ─ %s ──────────────────────────────────────┐%s\n' "$C_C" "$p" "$C_N"
+    if [ -n "$live" ] && [ -f "$live/manifest.json" ]; then
+        printf '%s│%s  live %s%s%s   %s   %s%s\n' "$C_C" "$C_N" "$C_G" "${live##*/}" "$C_N" \
+            "$(jq -r '.entries | group_by(.layer) | map("\(.[0].layer) \(length)") | join(" · ")' "$live/manifest.json")" "$C_D" "$C_N"
+    else
+        printf '%s│%s  %snothing live — Switch to build the first generation%s\n' "$C_C" "$C_N" "$C_Y" "$C_N"
+    fi
+    printf '%s│%s  %s%s%s\n' "$C_C" "$C_N" "$C_D" "${DECL:-<no declaration>}" "$C_N"
+    printf '%s└──────────────────────────────────────────────────────────────┘%s\n\n' "$C_C" "$C_N"
+}
+
+tui_entries() {  # layer
+    local live
+    live="$(readlink "$CUR" 2>/dev/null || true)"
+    [ -f "$live/manifest.json" ] || { echo "nothing live"; return; }
+    jq -r --arg l "$1" '.entries[] | select(.layer == $l)
+        | "  \(.name)\t\(.kind)\t\(if .layer == "secret" then (.source | fromjson | .file | sub("^.*/"; "")) else (.target | sub("^.*/store/"; "store/")) end)"' \
+        "$live/manifest.json" | column -t -s "$(printf '\t')" 2>/dev/null || cat
+}
+
+tui_phone() {
+    while :; do
+        tui_header
+        printf '%s PHONE — this device%s\n\n' "$C_B" "$C_N"
+        printf '  %s1)%s Status          %s2)%s Check          %s3)%s Repair\n' "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N"
+        printf '  %s4)%s Generations     %s5)%s Rollback       %s6)%s Switch to generation\n' "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N"
+        printf '  %s7)%s bin  %s8)%s lib  %s9)%s etc  %s0)%s activate  %ss)%s secrets   %sd)%s dev mode\n' "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N"
+        printf '  %sg)%s gc              %sb)%s back\n\n' "$C_G" "$C_N" "$C_Y" "$C_N"
+        ask "Choice:"
+        case "$REPLY" in
+            1) cmd_status; pause ;;
+            2) check || true; pause ;;
+            3) if check; then say "nothing to repair"; else cmd_switch; fi; pause ;;
+            4) cmd_list_generations; pause ;;
+            5) cmd_rollback || true; pause ;;
+            6) cmd_list_generations; ask "Generation (e.g. 3):"; [ -n "$REPLY" ] && { cmd_switch_generation "$REPLY" || true; }; pause ;;
+            7) tui_entries bin; pause ;;   8) tui_entries lib; pause ;;
+            9) tui_entries etc; pause ;;   0) tui_entries activate; pause ;;
+            s) tui_entries secret; pause ;;
+            d) cmd_dev; ask "etc path to toggle (empty = none):"; [ -n "$REPLY" ] && { if in_dev "$REPLY"; then cmd_dev --off "$REPLY"; else cmd_dev "$REPLY"; fi || true; }; pause ;;
+            g) cmd_gc || true; pause ;;
+            b|q) return ;;
+        esac
+    done
+}
+
+tui_cloud() {
+    while :; do
+        tui_header
+        printf '%s CLOUD — the declaration (cloud-me_configs)%s\n\n' "$C_B" "$C_N"
+        printf '  %s1)%s Switch   build from the declaration and make it live\n' "$C_G" "$C_N"
+        printf '  %s2)%s Update   pull the checkouts, then switch\n' "$C_G" "$C_N"
+        printf '  %s3)%s Build    build only (no switch)\n' "$C_G" "$C_N"
+        printf '  %s4)%s Show     what the declaration resolves to\n' "$C_G" "$C_N"
+        printf '  %s5)%s Diff     live generation vs the previous one\n' "$C_G" "$C_N"
+        printf '  %s6)%s Edit     open the declaration in $EDITOR\n' "$C_G" "$C_N"
+        printf '  %sb)%s back\n\n' "$C_Y" "$C_N"
+        ask "Choice:"
+        case "$REPLY" in
+            1) cmd_switch || true; pause ;;
+            2) cmd_update || true; pause ;;
+            3) cmd_build || true; pause ;;
+            4) cmd_show 2>&1 | ${PAGER:-less} ;;
+            5) _l="$(readlink "$CUR" 2>/dev/null || true)"; _n="${_l##*-}"; [ -n "$_n" ] && [ "$_n" -gt 1 ] 2>/dev/null && cmd_diff "$((_n - 1))" || echo "no previous generation"; pause ;;
+            6) [ -n "$DECL" ] && ${EDITOR:-vi} "$DECL" ;;
+            b|q) return ;;
+        esac
+    done
+}
+
+cmd_tui() {
+    [ -t 0 ] || [ -n "${LINUX_STORE_TUI_TEST:-}" ] || die "tui needs a terminal"
+    while :; do
+        tui_header
+        printf '  %s1)%s PHONE   this device: status, check, generations, what is installed\n' "$C_G" "$C_N"
+        printf '  %s2)%s CLOUD   the declaration: switch, update, show, edit\n' "$C_G" "$C_N"
+        printf '  %sq)%s quit\n\n' "$C_R" "$C_N"
+        ask "Choice:"
+        case "$REPLY" in
+            1) tui_phone ;;
+            2) tui_cloud ;;
+            q|Q) return 0 ;;
+        esac
+    done
+}
+
 usage() {
     cat <<'EOF'
 linux-store — nix-store semantics for the termux and desktop Linux userlands
@@ -991,6 +1094,7 @@ Same verbs as nix / home-manager / the flakes' build.sh:
   dev [--off] <etc path>     link an etc entry straight to its repo source (or back)
   show                       what the declaration resolves to for this profile
   status                     profile, live generation, store size
+  tui                        the Store tab in the terminal (PHONE | CLOUD), like the flakes' build.sh tui
   profile                    print the detected profile
 
 Declaration: <git base>/cloud-me_configs/<configs-user>/deb-user-configs/linux-store.json
@@ -1012,6 +1116,7 @@ case "$cmd" in
     list-generations)  cmd_list_generations ;;
     show)        cmd_show ;;
     status)      cmd_status ;;
+    tui)         cmd_tui ;;
     diff)        cmd_diff "$@" ;;
     gc)          cmd_gc ;;
     dev)         cmd_dev "$@" ;;

@@ -113,6 +113,7 @@ linux-store rollback             previous generation of this profile
 linux-store switch <gen>         e.g. termux-3, or 3
 linux-store generations | diff <a> [<b>] | gc | profile
 linux-store dev [--off] <etc path>   link straight to the repo source while editing
+linux-store tui                      the Store tab in the terminal: PHONE (this device) | CLOUD (the declaration)
 ```
 
 ## Rules it enforces
@@ -146,6 +147,7 @@ linux-store check                    links, store hashes, host binaries, activat
 linux-store repair                   check, else switch
 linux-store diff <a> [<b>] | gc | show | status | profile
 linux-store dev [--off] <etc path>   link straight to the repo source while editing
+linux-store tui                      the Store tab in the terminal: PHONE (this device) | CLOUD (the declaration)
 ```
 
 Like the flakes, the declaration directory has its own `build.sh`:

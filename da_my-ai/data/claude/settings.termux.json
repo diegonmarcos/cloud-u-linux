@@ -4,7 +4,8 @@
     "refreshInterval": 5
   },
   "env": {
-    "MCP_TIMEOUT": "10000"
+    "MCP_TIMEOUT": "10000",
+    "GIT_BASE": "@HOME@/cloud-drive-shared-store/git"
   },
   "_env_comment": "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC removed 2026-09-07: it also disables feature-flag evaluation, and Remote Control (`claude rc`) refuses to start without it. Saving a little background traffic is not worth losing rc on the phone, which is the machine that needs it most.",
   "effortLevel": "xhigh",
@@ -37,5 +38,6 @@
   },
   "_doc_device_prefs": "theme/model are THIS device's Claude Code UI prefs (what /config writes). They live in the overlay, not base, so a linux-store switch — which renders settings.json whole — keeps them.",
   "theme": "dark",
-  "model": "fable"
+  "model": "fable",
+  "_env_git_base_comment": "GIT_BASE: on the phone the checkouts live on the CloudDrive mount, not ~/git (settings.base.json). linux-store reads this too — a wrong value here sent its switch to /root/git on 2026-10-05."
 }
