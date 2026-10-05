@@ -176,6 +176,41 @@ flock "$R/lock" sleep 3 & sleep 1
 ls_ apply; check "a held lock makes a second apply fail fast" '[ $? -ne 0 ] && grep -q "holds" "$T/out"'
 wait
 
+section "secrets (sops, throwaway age key)"
+# Everything here is generated for the test: a fresh age key and fake values.
+# No real key or secret is read.
+age-keygen -o "$T/age.key" 2>/dev/null
+APUB="$(age-keygen -y "$T/age.key")"
+printf 'ssh:\n  id_test: |\n    -----BEGIN OPENSSH PRIVATE KEY-----\n    FAKEKEYMATERIAL\n    -----END OPENSSH PRIVATE KEY-----\ngithub:\n  token: ghp_FAKE_TEST_TOKEN_123\n' > "$T/plain.yaml"
+sops -e --age "$APUB" --input-type yaml --output-type yaml "$T/plain.yaml" > "$C/keys.sops.yaml" 2>"$T/sops.err" || cat "$T/sops.err"
+rm -f "$T/plain.yaml"
+printf 'github.com:\n    oauth_token: @GH_TOKEN@\n    git_protocol: https\n' > "$C/gh-hosts.yml.tpl"
+jq '.common.secret = {
+      ".ssh/id_test":         {"sops": "c:keys.sops.yaml", "extract": "[\"ssh\"][\"id_test\"]"},
+      ".config/gh/hosts.yml": {"template": "c:gh-hosts.yml.tpl",
+                               "values": {"GH_TOKEN": {"sops": "c:keys.sops.yaml", "extract": "[\"github\"][\"token\"]"}}}
+    }' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
+
+before="$(live)"
+( unset SOPS_AGE_KEY_FILE; ls_ apply ); check "no age key: apply refused before switching, file named" \
+    '[ "$(live)" = "$before" ] && grep -q "cannot decrypt .*keys.sops.yaml" "$T/out"'
+export SOPS_AGE_KEY_FILE="$T/age.key"
+ls_ apply; rc=$?
+check "with the key: apply succeeds and verifies" '[ $rc -eq 0 ] && grep -q "ok — " "$T/out"'
+[ $rc -eq 0 ] || cat "$T/out"
+check "ssh key written, mode 600, ends in newline" \
+    '[ "$(stat -c %a "$HOME/.ssh/id_test")" = 600 ] && grep -q FAKEKEYMATERIAL "$HOME/.ssh/id_test" && [ -z "$(tail -c1 "$HOME/.ssh/id_test")" ]'
+check "~/.ssh is 700" '[ "$(stat -c %a "$HOME/.ssh")" = 700 ]'
+check "token rendered into gh hosts.yml, mode 600" \
+    'grep -qx "    oauth_token: ghp_FAKE_TEST_TOKEN_123" "$HOME/.config/gh/hosts.yml" && [ "$(stat -c %a "$HOME/.config/gh/hosts.yml")" = 600 ]'
+check "no secret value anywhere under the store root" '! grep -rqs -e ghp_FAKE_TEST_TOKEN -e FAKEKEYMATERIAL "$R"'
+check "store root is 700" '[ "$(stat -c %a "$R")" = 700 ]'
+echo tampered >> "$HOME/.config/gh/hosts.yml"
+ls_ verify; check "edited secret is caught (without printing it)" '[ $? -ne 0 ] && grep -q "hosts.yml differs" "$T/out" && ! grep -q ghp_FAKE "$T/out"'
+chmod 644 "$HOME/.ssh/id_test"
+ls_ verify; check "loosened mode is caught" '[ $? -ne 0 ] && grep -q "has mode 644" "$T/out"'
+ls_ repair; check "repair re-decrypts both" '[ $? -eq 0 ] && [ "$(stat -c %a "$HOME/.ssh/id_test")" = 600 ] && ! grep -q tampered "$HOME/.config/gh/hosts.yml"'
+
 section "declaration from cloud-me_configs"
 CM="$GIT_BASE/cloud-me_configs"; UD="$CM/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"
 mkdir -p "$UD"

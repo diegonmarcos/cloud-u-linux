@@ -78,7 +78,31 @@ path as they are, and single `.so` files are gathered into a `<tool>-libs` farm 
 - `keys: file`: that file's `.keys` object, set one top-level key at a time into
   an existing file, atomically. A missing file is left for its first run.
 
-## Commands
+## Secrets (`secret` layer)
+
+SSH keys and tokens are decrypted with **sops** while `$HOME` is being set up,
+on the machine itself, using **your** age key (`SOPS_AGE_KEY_FILE`). They are
+written as real files with mode `600`, and `~/.ssh` is set to `700`.
+
+```json
+"secret": {
+  ".ssh/id_ed25519":      { "sops": "vault:<path>/ssh.sops.yaml", "extract": "[\"id_ed25519\"]" },
+  ".config/gh/hosts.yml": { "template": "vault:<path>/gh-hosts.yml.tpl",
+                            "values": { "GH_TOKEN": { "sops": "vault:<path>/github.sops.yaml",
+                                                      "extract": "[\"token\"]" } } }
+}
+```
+
+- **`sops`**: the decrypted value *is* the file.
+- **`template`**: each `@NAME@` is replaced with its decrypted value.
+- **`mode`**: defaults to `600`.
+
+Guarantees, each covered by a test:
+
+- **Fails before switching.** `build` decrypts every value to `/dev/null`, so a missing key or a wrong path fails before anything switches. The error names the file, never the value.
+- **No secret in `~/.linux-store`.** A value is never written to `store/`, a manifest, the logs or argv. The store root is `700`, and generations record only *where* each secret comes from. A `600` `secrets.state` file holds each file's sha256, which `verify` checks along with the mode, without decrypting.
+- **`repair` and `rollback` re-decrypt.** If you remove a declared secret, it is left in place with a warning. linux-store never deletes your keys.
+
 
 ```
 linux-store apply [--backup]     build + switch + realise $HOME + verify
@@ -123,10 +147,10 @@ directories stops and names them. Re-run with `--backup` to move them aside.
 sh test/test-linux-store.sh     # sandboxed $HOME; never touches the real ~/.claude
 ```
 
-58 checks covering profiles, every layer, idempotence (a re-apply adds zero
+68 checks covering profiles, every layer, idempotence (a re-apply adds zero
 objects), diff/rollback/switch, fault injection at each stage, tamper detection
 and repair, ownership refusals, cross-profile refusal, the fetch hash, dev mode,
-removal, gc, the lock, and finding the declaration through cloud-me_configs. It takes about 5 minutes on the phone, almost all of
+removal, gc, the lock, finding the declaration through cloud-me_configs, and secrets (throwaway age key: refusal without the key, modes, no value under the store root, tamper and mode drift, repair). It takes about 5 minutes on the phone, almost all of
 it jq start-up.
 
 ## Known gaps

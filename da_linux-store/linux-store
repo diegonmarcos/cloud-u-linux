@@ -16,7 +16,11 @@
 #                                     needs them gets a wrapper (makeWrapper)
 #   etc/   config mirrored into $HOME — $HOME/<rel> -> current/etc/<rel>
 # plus `activate`: files Claude Code et al. rewrite at runtime, so they are
-# WRITTEN (rendered whole, or patched key by key), never linked.
+# WRITTEN (rendered whole, or patched key by key), never linked,
+# and `secret`: SSH keys, tokens — decrypted with sops at realise time on THIS
+# machine with the user's own age key (SOPS_AGE_KEY_FILE), written 0600 straight
+# into $HOME. A secret value never enters store/, a manifest or a log line; the
+# generation records only WHERE it comes from, and a 0600 state file its sha256.
 #
 # Semantics are nix's:
 #   store/<hash>-<name>   immutable, content-addressed, shared by both profiles
@@ -112,7 +116,7 @@ need_decl() {
                  | "unknown top-level key \"\(.)\"" ),
         ( ["common","termux","desktop"][] as $s | (.[$s] // {}) | keys[]
                  | select(startswith("_") | not)
-                 | select(IN("bin","lib","etc","activate") | not)
+                 | select(IN("bin","lib","etc","activate","secret") | not)
                  | "unknown layer \"\(.)\" in \($s)" )
     ' "$DECL")"
     [ -z "$_bad" ] || die "$DECL: $_bad"
@@ -226,7 +230,7 @@ plan() {
             | select(.key | startswith("_") | not)
             | select(.value != null);
         . as $d
-        | ( ["lib","etc","bin"][] as $l | ents($d; $l) | {l: $l, k: .key, v: .value} ),
+        | ( ["lib","etc","bin","secret"][] as $l | ents($d; $l) | {l: $l, k: .key, v: .value} ),
           ( ( (($d.common // {}).activate // {} | keys)
             + (($d[$p] // {}).activate // {} | keys) )
             | unique[] | select(startswith("_") | not) ) as $k
@@ -264,6 +268,7 @@ build_entry() {
     esac
 
     if [ "$l" = activate ]; then build_activate "$k" "$v"; return; fi
+    if [ "$l" = secret ];   then build_secret "$k" "$v"; return; fi
 
     nk="$(printf '%s' "$v" | jq '[has("host"), has("path"), has("fetch")] | map(select(.)) | length')"
     [ "$nk" = 1 ] || die "$l/$k: declare exactly one of host, path, fetch"
@@ -382,6 +387,135 @@ build_activate() {
     fi
 }
 
+# ── secrets ────────────────────────────────────────────────────────────────
+# Two shapes:
+#   {"sops": "<src>", "extract": "[\"key\"]", "mode": "600"}   the decrypted value IS the file
+#   {"template": "<src>", "values": {"NAME": {"sops": ..., "extract": ...}}}
+#                                                    @NAME@ in the template is replaced
+# The build only PROVES each value decrypts (to /dev/null), so a missing key or
+# a wrong path fails before anything switches. Decryption for real happens in
+# realise, into a 0700 scratch dir, and the value is never on argv or stdout.
+sops_check() {  # file extract label
+    local err="$ROOT/.sopserr.$$" e
+    if [ -n "$2" ]; then sops -d --extract "$2" "$1" >/dev/null 2>"$err"
+    else sops -d "$1" >/dev/null 2>"$err"; fi
+    if [ $? -ne 0 ]; then
+        e="$(head -1 "$err")"; rm -f "$err"
+        die "$3: cannot decrypt $1${2:+ at $2} — $e (is SOPS_AGE_KEY_FILE set to your age key?)"
+    fi
+    rm -f "$err"
+}
+
+sops_to() {  # file extract out
+    if [ -n "$2" ]; then sops -d --extract "$2" "$1" > "$3" 2>/dev/null
+    else sops -d "$1" > "$3" 2>/dev/null; fi
+}
+
+build_secret() {
+    local k="$1" v="$2" mode f x tpl name vals src
+    command -v sops >/dev/null 2>&1 || die "secret/$k: needs sops on PATH"
+    mode="$(printf '%s' "$v" | jq -r '.mode // "600"')"
+    case "$mode" in [0-7][0-7][0-7]) ;; *) die "secret/$k: mode '$mode' is not octal like 600" ;; esac
+    if [ "$(printf '%s' "$v" | jq 'has("sops")')" = true ]; then
+        f="$(resolve_src "$(printf '%s' "$v" | jq -r .sops)")" || exit 1
+        [ -f "$f" ] || die "secret/$k: $f does not exist"
+        x="$(printf '%s' "$v" | jq -r '.extract // empty')"
+        sops_check "$f" "$x" "secret/$k"
+        src="$(jq -nc --arg f "$f" --arg x "$x" --arg m "$mode" '{kind:"sops", file:$f, extract:$x, mode:$m}')"
+        entry secret "$k" sops "" "$src"
+    elif [ "$(printf '%s' "$v" | jq 'has("template")')" = true ]; then
+        tpl="$(resolve_src "$(printf '%s' "$v" | jq -r .template)")" || exit 1
+        [ -f "$tpl" ] || die "secret/$k: template $tpl does not exist"
+        stage_tmp; cp "$tpl" "$TMPP"; add_store "$TMPP" "$(basename "$k").tpl"
+        vals='{}'
+        for name in $(printf '%s' "$v" | jq -r '.values // {} | keys[]'); do
+            printf '%s' "$name" | grep -qE '^[A-Z][A-Z0-9_]*$' || die "secret/$k: value name '$name' must be UPPER_SNAKE"
+            grep -qF "@$name@" "$tpl" || die "secret/$k: template has no @$name@"
+            f="$(resolve_src "$(printf '%s' "$v" | jq -r --arg n "$name" '.values[$n].sops // empty')")" || exit 1
+            [ -f "$f" ] || die "secret/$k: $name: $f does not exist"
+            x="$(printf '%s' "$v" | jq -r --arg n "$name" '.values[$n].extract // empty')"
+            sops_check "$f" "$x" "secret/$k: $name"
+            vals="$(printf '%s' "$vals" | jq -c --arg n "$name" --arg f "$f" --arg x "$x" '. + {($n): {file:$f, extract:$x}}')"
+        done
+        [ "$vals" != '{}' ] || die "secret/$k: template declares no values"
+        src="$(jq -nc --arg t "$OBJ" --argjson v "$vals" --arg m "$mode" '{kind:"template", template:$t, values:$v, mode:$m}')"
+        entry secret "$k" template "$OBJ" "$src"
+    else
+        die "secret/$k: declare sops or template"
+    fi
+}
+
+# render_secret <source json> <out>   (caller holds umask 077)
+render_secret() {
+    local src="$1" out="$2" d i=0 name f x args filter
+    case "$(printf '%s' "$src" | jq -r .kind)" in
+        sops)
+            sops_to "$(printf '%s' "$src" | jq -r .file)" "$(printf '%s' "$src" | jq -r .extract)" "$out" \
+                || return 1
+            # key files must end in a newline or ssh refuses them
+            [ -z "$(tail -c1 "$out")" ] || echo >> "$out"
+            ;;
+        template)
+            d="$ROOT/.render.$$"; rm -rf "$d"; mkdir -m 700 "$d" || return 1
+            args=""; filter='$t'
+            for name in $(printf '%s' "$src" | jq -r '.values | keys[]'); do
+                i=$((i + 1))
+                f="$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].file')"
+                x="$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].extract')"
+                sops_to "$f" "$x" "$d/v$i" || { rm -rf "$d"; return 1; }
+                args="$args --rawfile v$i $d/v$i"
+                filter="$filter | gsub(\"@$name@\"; (\$v$i | sub(\"\\n\$\"; \"\")))"
+            done
+            # shellcheck disable=SC2086
+            jq -nj --rawfile t "$(printf '%s' "$src" | jq -r .template)" $args "$filter" > "$out" \
+                || { rm -rf "$d"; return 1; }
+            rm -rf "$d"
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+secret_lines() { jq -r '.entries[] | select(.layer == "secret") | [.name, .source] | join("\u001f")' "$1/manifest.json"; }
+
+state_set() {  # name sha
+    touch "$ROOT/secrets.state"; chmod 600 "$ROOT/secrets.state"
+    grep -v "^$1 " "$ROOT/secrets.state" > "$ROOT/secrets.state.$$" 2>/dev/null
+    echo "$1 $2" >> "$ROOT/secrets.state.$$"
+    mv -T "$ROOT/secrets.state.$$" "$ROOT/secrets.state"
+}
+state_get() { [ -f "$ROOT/secrets.state" ] && awk -v n="$1" '$1 == n { print $2 }' "$ROOT/secrets.state"; }
+
+realise_secrets() {  # new prev
+    local new="$1" prev="$2" old name src dst out mode sha
+    old="$(umask)"; umask 077
+    secret_lines "$new" > "$ROOT/.secrets.$$"
+    while IFS="$(printf '\037')" read -r name src; do
+        dst="$HOME/$name"
+        mkdir -p "$(dirname "$dst")"
+        case "$name" in .ssh/*) chmod 700 "$HOME/.ssh" ;; esac
+        out="$dst.linux-store.$$"
+        render_secret "$src" "$out" || { rm -f "$out" "$ROOT/.secrets.$$"; umask "$old"; die "secret/$name: decryption failed during realise"; }
+        mode="$(printf '%s' "$src" | jq -r .mode)"
+        chmod "$mode" "$out"
+        sha="$(sha256sum "$out" | cut -d' ' -f1)"
+        if cmp -s "$out" "$dst" 2>/dev/null && [ "$(stat -c %a "$dst")" = "$mode" ]; then
+            rm -f "$out"
+        else
+            mv -T "$out" "$dst" || { rm -f "$out"; die "could not write $dst"; }
+            say "secret $dst written (mode $mode)"
+        fi
+        state_set "$name" "$sha"
+    done < "$ROOT/.secrets.$$"
+    rm -f "$ROOT/.secrets.$$"
+    if [ -n "$prev" ] && [ -f "$prev/manifest.json" ]; then
+        for name in $(jq -r '.entries[] | select(.layer == "secret") | .name' "$prev/manifest.json"); do
+            jq -e --arg n "$name" 'any(.entries[]; .layer == "secret" and .name == $n)' "$new/manifest.json" >/dev/null \
+                || say "warning — secret $HOME/$name is no longer declared; left in place (delete it yourself if intended)"
+        done
+    fi
+    umask "$old"
+}
+
 next_gen() {
     _max=0
     for _g in "$GENS/$1"-*; do
@@ -489,6 +623,10 @@ preflight() {  # gen backup
     while IFS="$(printf '\037')" read -r name kind t; do
         claim "$name" "$2" activate
     done < "$ROOT/.preflight.$$"
+    secret_lines "$1" > "$ROOT/.preflight.$$"
+    while IFS="$(printf '\037')" read -r name t; do
+        claim "$name" "$2" activate
+    done < "$ROOT/.preflight.$$"
     rm -f "$ROOT/.preflight.$$"
 }
 
@@ -551,6 +689,8 @@ realise() {  # new-gen  prev-gen(may be empty)
         esac
     done < "$ROOT/.activate.$$"
     rm -f "$ROOT/.activate.$$"
+    # 4. secrets, decrypted here and nowhere else
+    realise_secrets "$new" "$prev"
 }
 
 write_env() {
@@ -579,6 +719,7 @@ prune() {
 
 lock() {
     mkdir -p "$ROOT"
+    chmod 700 "$ROOT"
     exec 9>>"$ROOT/lock"
     flock -n 9 || die "another linux-store holds $ROOT/lock"
 }
@@ -616,6 +757,17 @@ verify() {
     jq -r '.entries[] | [.layer, .name, .kind, .target, .source, .host] | join("\u001f")' "$gen/manifest.json" > "$ROOT/.verify.$$"
     while IFS="$(printf '\037')" read -r l k kind t s h; do
         [ -z "$h" ] || [ -e "$h" ] || fail "$l/$k: host binary $h is gone (apt/nix upgraded it?) — repair re-resolves it"
+        if [ "$l" = secret ]; then
+            want="$(printf '%s' "$s" | jq -r .mode)"
+            if [ -L "$HOME/$k" ] || [ ! -f "$HOME/$k" ]; then
+                fail "secret $HOME/$k is missing (or a link) — repair re-decrypts it"
+            elif [ "$(stat -c %a "$HOME/$k")" != "$want" ]; then
+                fail "secret $HOME/$k has mode $(stat -c %a "$HOME/$k"), declared $want"
+            elif [ "$(sha256sum "$HOME/$k" | cut -d' ' -f1)" != "$(state_get "$k")" ]; then
+                fail "secret $HOME/$k differs from what was decrypted at apply (edited?) — repair rewrites it"
+            fi
+            continue
+        fi
         if [ "$l" = activate ]; then
             case "$kind" in
                 render) cmp -s "$t" "$HOME/$k" || fail "$HOME/$k differs from the rendered declaration (edited since apply?) — repair rewrites it" ;;
