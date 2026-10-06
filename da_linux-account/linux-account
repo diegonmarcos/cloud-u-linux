@@ -659,6 +659,44 @@ cmd_ai() {
     [ -d "$HOME/.claude/agents" ] && printf '  claude: %s agents, settings %s\n' "$(ls "$HOME/.claude/agents" | wc -l | tr -d ' ')" "$( [ -f "$HOME/.claude/settings.json" ] && echo rendered || echo missing)"
 }
 
+# ── dash: the bundle as a dashboard ────────────────────────────────────────
+# Every section of profile-secrets.json as a path = value tree. A value under
+# a key that smells like a secret is masked (length only); a subtree with more
+# than 40 leaves (ai.configs.claude_folder is a whole directory) is one count
+# line; long strings are cut. Nothing here ever prints a secret.
+SECTIONS_ORDER="about electronics mesh mail git ai autocomplete settings peers apps"
+dash_section() {  # section
+    jq -r --arg sec "$1" '
+        def cut: if length > 72 then .[0:72] + "…" else . end;
+        def secret($k): ($k | test("token|password|passwd|private|secret|api[_-]?key|bearer|cookie|_key$"; "i"));
+        def leaf($path; $v):
+            ($path | map(tostring) | join(".")) as $k
+            | if $v | type == "string" then
+                (if secret($k) then "\($k) = ●●● hidden, \($v | length) chars" else "\($k) = \($v | cut)" end)
+              else "\($k) = \($v | tojson | cut)" end;
+        def tree: [paths(scalars) as $p | leaf($p; getpath($p))];
+        (.bundle // .) | .[$sec] as $s
+        | if $s == null then "  (not in bundle)"
+          elif ($s | type) != "object" then "  \($s | tojson | cut)"
+          else $s | to_entries[]
+            | if (.value | type) == "object" and (.value.pending == true) then "  \(.key)  ·  pending: \(.value.reason // .value.source // "")"
+              elif (.value | type) == "object" and ([.value | paths(scalars)] | length) > 40 then "  \(.key)  {\([.value | paths(scalars)] | length) entries}"
+              elif (.value | type) == "array" and (.value | length) > 40 then "  \(.key)  [\(.value | length) items]"
+              elif (.value | type) == "object" or (.value | type) == "array" then ({(.key): .value} | tree | .[] | "  " + .)
+              else "  " + leaf([.key]; .value) end
+          end' "$B"
+}
+cmd_dash() {
+    local sec
+    need_bundle
+    if [ -n "${1:-}" ]; then dash_section "$1"; return 0; fi
+    printf '%sbundle%s  %s  schema %s  generated %s\n' "$C_B" "$C_N" "$(st_get bundle)" "$(bq .schema_version)" "$(bq '._generated.emitter // "?"' | cut -c1-40)"
+    for sec in $SECTIONS_ORDER $(bq 'keys[] | select(startswith("_") | not) | select(IN("schema_version") | not)' | grep -vxF -e about -e electronics -e mesh -e mail -e git -e ai -e autocomplete -e settings -e peers -e apps); do
+        bq "has(\"$sec\")" | grep -qx true || continue
+        printf '\n%s── %s ──%s\n' "$C_C" "$sec" "$C_N"; dash_section "$sec"
+    done
+}
+
 # ── status / journey ───────────────────────────────────────────────────────
 step_state() {  # prints DONE|ACTIVE|LOCKED per step
     local s1 s2 s3 s4
@@ -687,7 +725,7 @@ cmd_tui() {
     [ -t 0 ] || [ -n "${LINUX_ACCOUNT_TUI_TEST:-}" ] || die "tui needs a terminal"
     while :; do
         hdr "Account"
-        printf '  %s1)%s Fleet      the cockpit\n  %s2)%s Connect    sign in · who · device · get everything\n  %s3)%s Infos      contact card + sync\n  %s4)%s WireGuard  %s5)%s AI   %s6)%s Apps\n  %sq)%s quit\n\n' "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_Y" "$C_N"
+        printf '  %s1)%s Fleet      the cockpit\n  %s2)%s Connect    sign in · who · device · get everything\n  %s3)%s Infos      contact card + sync\n  %s4)%s WireGuard  %s5)%s AI   %s6)%s Apps\n  %sd)%s Dashboard  every section of the bundle\n  %sq)%s quit\n\n' "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_Y" "$C_N"
         ask "Choice:"
         case "$REPLY" in
             1) hdr Fleet; cmd_fleet -v 2>&1 || true; pause ;;
@@ -711,6 +749,15 @@ cmd_tui() {
             4) hdr WireGuard; cmd_wg list; pause ;;
             5) hdr AI; cmd_ai; pause ;;
             6) hdr Apps; cmd_apps compare 2>&1 || true; pause ;;
+            d) while :; do hdr Dashboard
+                   i=0; for sec in $SECTIONS_ORDER; do i=$((i + 1)); printf '  %s%d)%s %-13s' "$C_G" "$i" "$C_N" "$sec"; [ $((i % 4)) = 0 ] && echo; done; echo
+                   printf '  %sa)%s all (in $PAGER)   %sb)%s back\n\n' "$C_G" "$C_N" "$C_Y" "$C_N"
+                   ask "Section:"
+                   case "$REPLY" in
+                       a) cmd_dash 2>&1 | ${PAGER:-less} ;;
+                       b|q) break ;;
+                       [0-9]*) sec="$(echo $SECTIONS_ORDER | tr ' ' '\n' | sed -n "${REPLY}p")"; [ -n "$sec" ] && { hdr "Dashboard · $sec"; cmd_dash "$sec" 2>&1 | ${PAGER:-less}; } ;;
+                   esac; done ;;
             q|Q) return 0 ;;
         esac
     done
@@ -807,6 +854,7 @@ linux-account — cloud-superapp's Account tab for the Linux userlands
     apply [--no-switch]                                                             4 · get everything: declare + write + linux-store switch
   FLEET
     fleet [-v]        the cockpit: Mail · Keyboard & Clipboards · Mesh · Drive · AI · Apps · Raw
+    dash [<section>]  dashboard: every section of the bundle as path = value (secrets masked)
     status            journey + cockpit
   INFOS
     infos [show | set k=v… | push | flush | erase]     contact card; push = ProfileSync POST
@@ -838,6 +886,7 @@ case "$cmd" in
     wg)      cmd_wg "$@" ;;
     ai)      cmd_ai ;;
     tui)     cmd_tui ;;
+    dash)    cmd_dash "$@" ;;
     html)    cmd_html ;;
     signin)  cmd_signin "$@" ;;
     repos)   cmd_repos "$@" ;;

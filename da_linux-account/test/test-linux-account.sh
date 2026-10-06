@@ -125,6 +125,11 @@ check "install id + secret generated once" '[ -n "$(jq -r .install_id "$CFG/stat
 check "queued body has the 8-field allowlist only" 'jq -e ".profile | keys - [\"name\",\"email\",\"phone\",\"birth\",\"location\",\"company\",\"website\",\"titles\"] | length == 0" "$CFG"/queue/*.json >/dev/null'
 la infos erase; check "erase clears card, queue and install id" '[ ! -f "$CFG/profile.json" ] && [ -z "$(ls "$CFG/queue")" ] && [ -z "$(jq -r ".install_id // empty" "$CFG/state.json")" ]'
 
+section "dash"
+la dash; check "dash renders every section, masks secrets by key, keeps names" \
+    '[ $? -eq 0 ] && grep -q "profile.name = Ada Lovelace" "$T/out" && grep -q "github_token = ●●● hidden, 20 chars" "$T/out" && grep -q "tokens.claude = ●●● hidden" "$T/out" && grep -q "fleet.galaxy.wg_peer.wg_ip = 10.0.0.9" "$T/out" && ! grep -q -e ghp_FAKE -e sk-ant-FAKE -e FAKEVAULTKEY "$T/out"'
+la dash git; check "dash <section> renders one section" 'grep -q "repos.0 = " "$T/out" && ! grep -q "profile.name" "$T/out"'
+
 section "apps / wg / ai / tui"
 la apps compare; check "apps compare lists linux-store bin entries" 'grep -q "● *linux-store" "$T/out" && grep -q "declared" "$T/out"'
 la apps export "$T/inv.json"; check "inventory exported in AppInventory shape" '[ "$(jq -r .kind "$T/inv.json")" = linux-account.app-inventory ] && jq -e ".apps[0] | has(\"name\") and has(\"origin\")" "$T/inv.json" >/dev/null'
