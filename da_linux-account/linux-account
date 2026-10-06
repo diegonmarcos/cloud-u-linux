@@ -669,10 +669,12 @@ dash_section() {  # section
     jq -r --arg sec "$1" '
         def cut: if length > 72 then .[0:72] + "…" else . end;
         def secret($k): ($k | test("token|password|passwd|private|secret|api[_-]?key|bearer|cookie|_key$"; "i"));
+        # the leaf key or its parent decides (tokens.X is a token; tokens.X.reason is not)
         def leaf($path; $v):
             ($path | map(tostring) | join(".")) as $k
+            | ($path | map(tostring) | .[-2:] | join("/")) as $tail
             | if $v | type == "string" then
-                (if secret($k) then "\($k) = ●●● hidden, \($v | length) chars" else "\($k) = \($v | cut)" end)
+                (if secret($tail) then "\($k) = ●●● hidden, \($v | length) chars" else "\($k) = \($v | cut)" end)
               else "\($k) = \($v | tojson | cut)" end;
         def tree: [paths(scalars) as $p | leaf($p; getpath($p))];
         (.bundle // .) | .[$sec] as $s

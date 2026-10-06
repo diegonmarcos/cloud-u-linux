@@ -262,7 +262,7 @@ check "html lists present and absent entries by app" 'grep -q "<tr class=\"absen
 check "html holds no secret value" '! grep -q -e ghp_ -e FAKEKEY -e PLAINKEY "$R/ui/index.html"'
 
 section "tui (the APK Store layout)"
-printf 'f\n1\nb\ng\ns\np\nq\n' | LINUX_STORE_TUI_TEST=1 sh "$ENGINE" tui > "$T/out" 2>&1
+printf 'f\n1\nb\ng\ns\np\nq\n' | LINUX_STORE_TUI_TEST=1 sh "$ENGINE" tui 2>&1 | sed "s/\x1b\[[0-9;]*[A-Za-z]//g" > "$T/out"
 check "tui: Cloud Constellation | Phone Apps, group tabs, bar, chips, grouped rows, expand, Phone cards" \
     'grep -q "Cloud Constellation" "$T/out" && grep -q "Check all" "$T/out" && grep -q "Absent" "$T/out" && grep -q "◯ ghost" "$T/out" && grep -q "Install / Update (switch)" "$T/out" && grep -q "Export app list" "$T/out" && grep -q "Secrets" "$T/out" && ! grep -q "Cannot index" "$T/out"'
 
