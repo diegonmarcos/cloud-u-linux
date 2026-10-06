@@ -240,6 +240,7 @@ check "include: null in a fragment removes an entry" '! jq -e ".entries[] | sele
 check "no plaintext secret under the store root" '! grep -rqs -e ghp_PLAIN_TEST_TOKEN -e PLAINKEY "$R"'
 ls_ check; check "check passes with file secrets" '[ $? -eq 0 ]'
 : > "$C/vault/gh/token"; ls_ build; check "empty secret file is refused at build" '[ $? -ne 0 ] && grep -q "is empty" "$T/out"'
+printf '***REMOVED***\n' > "$C/vault/gh/token"; ls_ build; check "a redaction stub is refused at build" '[ $? -ne 0 ] && grep -q "placeholder, not a secret" "$T/out"'
 printf 'ghp_PLAIN_TEST_TOKEN\n' > "$C/vault/gh/token"
 
 section "optional entries + html"

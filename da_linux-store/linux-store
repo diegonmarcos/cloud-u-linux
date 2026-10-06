@@ -486,6 +486,10 @@ build_secret() {
         f="$(resolve_src "$(printf '%s' "$v" | jq -r .file)")" || exit 1
         [ -f "$f" ] && [ -r "$f" ] || die "secret/$k: $f does not exist or is unreadable"
         [ -s "$f" ] || die "secret/$k: $f is empty"
+        # a redaction stub (the vault's token file on the phone read
+        # ***REMOVED***, 2026-10-06) is not a secret: declaring it overwrote a
+        # working gh login with YAML gh refuses to parse
+        ! grep -qE '^\*\*\*|REMOVED|REDACTED|CHANGEME|<[A-Z_]+>$' "$f" || die "secret/$k: $f holds a placeholder, not a secret — refused"
         src="$(jq -nc --arg f "$f" --arg m "$mode" '{kind:"file", file:$f, mode:$m}')"
         entry secret "$k" file "" "$src"
     elif [ "$(printf '%s' "$v" | jq 'has("sops")')" = true ]; then
@@ -510,6 +514,7 @@ build_secret() {
             if [ "$(printf '%s' "$v" | jq --arg n "$name" '.values[$n] | has("file")')" = true ]; then
                 f="$(resolve_src "$(printf '%s' "$v" | jq -r --arg n "$name" '.values[$n].file')")" || exit 1
                 [ -s "$f" ] || die "secret/$k: $name: $f does not exist or is empty"
+                ! grep -qE '^\*\*\*|REMOVED|REDACTED|CHANGEME|<[A-Z_]+>$' "$f" || die "secret/$k: $name: $f holds a placeholder, not a secret — refused"
                 vals="$(printf '%s' "$vals" | jq -c --arg n "$name" --arg f "$f" --arg ph "$ph" '. + {($n): {file:$f, plain:true, placeholder:$ph}}')"
                 continue
             fi

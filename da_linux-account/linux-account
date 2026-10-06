@@ -79,6 +79,10 @@ VAULT_SSH_KEY="A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_rsa"
 # checkout, 2026-10-05); only a file that is a key is declared from the vault,
 # otherwise the bundle's copy is written, as on a box with no checkout.
 vault_key_ok() { [ -f "$1" ] && grep -q '^-----BEGIN ' "$1"; }
+# The vault's token file on a checkout without the secret reads ***REMOVED***;
+# declaring it overwrote a working gh login (2026-10-06). A token is a token
+# only when it looks like one.
+token_ok() { [ -s "$1" ] && ! grep -qE 'REMOVED|REDACTED|^\*\*\*' "$1"; }
 
 LSBIN() { if command -v linux-store >/dev/null 2>&1; then echo linux-store; elif [ -x "$HOME/.linux-store/current/bin/linux-store" ]; then echo "$HOME/.linux-store/current/bin/linux-store"; else echo "sh $HERE/../da_linux-store/linux-store"; fi; }
 umask 077
@@ -246,8 +250,9 @@ plan() {
             [ -f "$f.pub" ] && printf 'git\tstore\t.ssh/id_rsa.pub\tsecret file vault:%s.pub (644)\n' "$VAULT_SSH_KEY"
         else printf 'git\twrite\t.ssh/id_rsa\tfrom the bundle (no vault checkout at %s)\n' "$f"; fi
         f="$gb/cloud-me_vault/$VAULT_GH_TOKEN"
-        if [ -f "$f" ]; then printf 'git\tstore\t.config/gh/hosts.yml\ttemplate, GH_TOKEN = secret file vault:%s\n' "$VAULT_GH_TOKEN"
-        else printf 'git\twrite\t.config/gh/hosts.yml\tfrom the bundle\n'; fi
+        if token_ok "$f"; then printf 'git\tstore\t.config/gh/hosts.yml\ttemplate, GH_TOKEN = secret file vault:%s\n' "$VAULT_GH_TOKEN"
+        elif [ -n "$(bq '.git.github_token // empty' | grep -v REMOVED)" ]; then printf 'git\twrite\t.config/gh/hosts.yml\tfrom the bundle\n'
+        else printf 'git\tskip\t.config/gh/hosts.yml\tno github token here (vault file is a stub) — the gh login on this box is kept\n'; fi
         printf 'git\twrite\t%s/repos.json\tfleet repo list (%s)\n' "$CFG" "$(bq '.git.repos | length') repos"
     else printf 'git\tpending\t-\tnot in bundle\n'; fi
     # mesh → WireGuard profiles for THIS device
@@ -302,7 +307,7 @@ write_fragment() {  # the linux-store include fragment: paths only, never values
     frag="$dir/account.json"
     v='{}'
     vault_key_ok "$gb/cloud-me_vault/$VAULT_SSH_KEY" && v="$(printf '%s' "$v" | jq -c --arg k "$VAULT_SSH_KEY" '.[".ssh/id_rsa"] = {file: ("vault:" + $k), app: "account"} | .[".ssh/id_rsa.pub"] = {file: ("vault:" + $k + ".pub"), mode: "644", app: "account"}')"
-    if [ -f "$gb/cloud-me_vault/$VAULT_GH_TOKEN" ]; then
+    if token_ok "$gb/cloud-me_vault/$VAULT_GH_TOKEN"; then
         mkdir -p "$dir/src/gh"
         [ -f "$dir/src/gh/hosts.yml.tpl" ] || printf 'github.com:\n    user: diegonmarcos\n    oauth_token: @GH_TOKEN@\n    git_protocol: https\n' > "$dir/src/gh/hosts.yml.tpl"
         v="$(printf '%s' "$v" | jq -c --arg k "$VAULT_GH_TOKEN" '.[".config/gh/hosts.yml"] = {template: "me:src/gh/hosts.yml.tpl", app: "account", values: {GH_TOKEN: {file: ("vault:" + $k)}}}')"
@@ -351,7 +356,7 @@ commit_writes() {
             bq '.git.ssh_public_key' > "$HOME/.ssh/id_rsa.pub.tmp" && chmod 644 "$HOME/.ssh/id_rsa.pub.tmp" && mv -f "$HOME/.ssh/id_rsa.pub.tmp" "$HOME/.ssh/id_rsa.pub"
             say "git: ssh key written from the bundle"
         fi
-        if [ ! -f "$gb/cloud-me_vault/$VAULT_GH_TOKEN" ]; then
+        if ! token_ok "$gb/cloud-me_vault/$VAULT_GH_TOKEN" && [ -n "$(bq '.git.github_token // empty' | grep -v REMOVED)" ]; then
             mkdir -p "$HOME/.config/gh"
             bq '.git.github_token | "github.com:\n    user: diegonmarcos\n    oauth_token: \(.)\n    git_protocol: https"' > "$HOME/.config/gh/hosts.yml.tmp" && chmod 600 "$HOME/.config/gh/hosts.yml.tmp" && mv -f "$HOME/.config/gh/hosts.yml.tmp" "$HOME/.config/gh/hosts.yml"
             rec ".config/gh/hosts.yml" "$HOME/.config/gh/hosts.yml"; say "git: gh hosts.yml written from the bundle"
