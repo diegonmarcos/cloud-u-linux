@@ -62,6 +62,27 @@ echo '{"nodes": [{"name": "oci-apps", "wg_ip": "10.0.0.6", "alias": "apps"}, {"n
 mkdir -p "$GIT_BASE/cloud-infra/1_cloud-configs/src/inputs"
 echo '{"users": {"diego": {"identities": [{"email": "ada@example.com", "label": "Ada", "primary": true}, {"email": "ada@work.example", "label": "work"}]}}}' > "$GIT_BASE/cloud-infra/1_cloud-configs/src/inputs/superapp-users.json"
 
+# tokens.json fixture: a real .env, a single-value file, a keyfile, a ***REMOVED*** stub, a one-line link stub, a declared-pending entry
+mkdir -p "$V/A_A0-Providers/B_SERVICES-CLOUD/b13-anthropic" "$V/A_A0-Providers/B_SERVICES-CLOUD/b7-c3-api/api-key_opaque" "$V/A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/credentials" "$V/A_A0-Providers/D_TOOLS-DEVICES/d1-ssh-surface-pro/ssh_asymmetric"
+printf 'GITHUB_CLIENT_ID=fake-client-id\n# a comment\nGITHUB_CLIENT_SECRET=FAKE_GH_SECRET_VALUE\n' > "$V/A_A0-Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque/cloud-api.env"
+printf 'sk-ant-VAULT-FAKE' > "$V/A_A0-Providers/B_SERVICES-CLOUD/b13-anthropic/api-key_opaque"
+printf '***REMOVED***\n' > "$V/A_A0-Providers/B_SERVICES-CLOUD/b7-c3-api/api-key_opaque/api_key.env"
+printf 'CLIENT_ID=cli\nCLIENT_SECRET=FAKE_AUTHELIA_SECRET\n' > "$V/A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/credentials/cli.env"
+printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEED25519KEY\n-----END OPENSSH PRIVATE KEY-----\n' > "$V/A_A0-Providers/D_TOOLS-DEVICES/d1-ssh-surface-pro/ssh_asymmetric/id_ed25519"
+printf '../../../D_TOOLS-DEVICES/d1-ssh-surface-pro/ssh_asymmetric/id_ed25519\n' > "$V/A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_ed25519"
+cat > "$D/tokens.json" <<'EOF'
+{ "schema": 1, "env_file": "~/.config/linux-account/secrets/tokens.env",
+  "providers": {
+    "github": {"_doc": "x", "cloud-api": {"vault": "A_A0-Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque/cloud-api.env", "as": "GITHUB_CLOUD_API", "kind": "env-file"}},
+    "anthropic": {"api-key": {"vault": "A_A0-Providers/B_SERVICES-CLOUD/b13-anthropic/api-key_opaque", "as": "ANTHROPIC_API_KEY", "kind": "value"}},
+    "c3-api": {"api-key": {"vault": "A_A0-Providers/B_SERVICES-CLOUD/b7-c3-api/api-key_opaque/api_key.env", "as": "C3_API", "kind": "env-file"}},
+    "cloudflare": {"wrangler": {"vault": "A_A0-Providers/B_SERVICES-CLOUD/b5-cloudflare-wrangler/api-key_opaque/cloudflare.env", "as": "CLOUDFLARE_WRANGLER", "kind": "env-file", "pending": true, "reason": "link stub to b4"}},
+    "authelia": {"cli": {"vault": "A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/credentials/cli.env", "as": "~/.config/linux-account/secrets/authelia/credentials/cli.env", "kind": "keyfile"}},
+    "wireguard": {"privatekey": {"vault": "A_A0-Providers/C_TOOLS-INFRA/c0-wireguard/{device}/privatekey", "as": "~/.config/wireguard/privatekey", "kind": "keyfile"}},
+    "ssh": {"id_ed25519": {"vault": "A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_ed25519", "as": "~/.ssh/id_ed25519", "kind": "keyfile"}}
+  } }
+EOF
+
 # ── journey ────────────────────────────────────────────────────────────────
 section "connect (sign in)"
 la fleet; check "not connected: fleet refuses with guidance" '[ $? -ne 0 ] && grep -q "not connected" "$T/out"'
@@ -84,6 +105,9 @@ la plan; check "plan lists store entries for vault files" 'grep -q "git  *store 
 check "plan: wg template with PROVIDED_BY_DEVICE gets the private key, inline one is a file" 'grep -q "config-v4-full.conf *template" "$T/out" && grep -q "termux-config.conf *secret file" "$T/out"'
 check "plan: unknown section reported, settings pending" 'grep -q "mystery *skip" "$T/out" && grep -q "settings *pending" "$T/out"'
 check "plan wrote nothing" '[ ! -f "$HOME/.ssh/id_rsa" ] && [ ! -f "$D/account.json" ]'
+check "plan: tokens.json read — real entries store, stub and declared-pending entries pending with their reason" \
+    'grep -q "tokens  *store  *GITHUB_CLOUD_API  *env-file" "$T/out" && grep -q "tokens  *store  *ANTHROPIC_API_KEY  *value" "$T/out" && grep -q "tokens  *store  *~/.ssh/id_ed25519  *secret file" "$T/out" && grep -q "tokens  *store  *~/.config/wireguard/privatekey  *secret file vault:A_A0-Providers/C_TOOLS-INFRA/c0-wireguard/termux/privatekey" "$T/out" && grep -q "tokens  *pending  *c3-api/api-key  *redaction stub" "$T/out" && grep -q "tokens  *pending  *cloudflare/wrangler  *link stub to b4" "$T/out"'
+check "plan: no token value printed" '! grep -q -e FAKE_GH_SECRET_VALUE -e sk-ant-VAULT -e FAKEED25519KEY -e FAKE_AUTHELIA "$T/out"'
 
 section "apply (get everything)"
 la apply; rc=$?
@@ -97,11 +121,20 @@ check "wireguard: private key spliced into the public profile" 'grep -qx "Privat
 check "wireguard: inline profile copied" 'grep -q FAKEINLINE "$HOME/.config/wireguard/termux-config.conf"'
 check "wireguard: publickey lands as ~/.config/wireguard/publickey (644), README is not ours" '[ "$(stat -c %a "$HOME/.config/wireguard/publickey")" = 644 ] && grep -q FAKEPUBKEY "$HOME/.config/wireguard/publickey" && [ ! -e "$HOME/.config/wireguard/termux-README.md.conf" ]'
 check "fleet ssh hosts generated" 'grep -q "^Host oci-apps apps" "$HOME/.ssh/config.d/fleet" && grep -q "HostName 10.0.0.1" "$HOME/.ssh/config.d/fleet"'
+TENV="$CFG/secrets/tokens.env"
+check "tokens: tokens.env rendered by linux-store, 600, export NAME=value with the key names, comments kept" \
+    '[ "$(stat -c %a "$TENV")" = 600 ] && grep -qx "export GITHUB_CLIENT_ID=fake-client-id" "$TENV" && grep -q "^export GITHUB_CLIENT_SECRET=" "$TENV" && grep -qx "# a comment" "$TENV" && grep -qx "export ANTHROPIC_API_KEY='"'"'sk-ant-VAULT-FAKE'"'"'" "$TENV" && grep -q "^# tokens: GITHUB_CLOUD_API github/cloud-api" "$TENV"'
+check "tokens: the stub is never written, the pending entry neither" '! grep -q -e C3_API -e REMOVED -e CLOUDFLARE_WRANGLER "$TENV"'
+check "tokens: keyfiles land at their ~/path (link stub followed), 600" \
+    '[ "$(stat -c %a "$HOME/.ssh/id_ed25519")" = 600 ] && grep -q FAKEED25519KEY "$HOME/.ssh/id_ed25519" && [ "$(stat -c %a "$CFG/secrets/authelia/credentials/cli.env")" = 600 ] && grep -q FAKE_AUTHELIA_SECRET "$CFG/secrets/authelia/credentials/cli.env" && [ -d "$CFG/secrets/authelia/tokens" ]'
+check "tokens: fragment declares them (paths only), template holds names only" \
+    'jq -e ".common.secret[\".config/linux-account/secrets/tokens.env\"].values.GITHUB_CLOUD_API.export == true and .common.secret[\".ssh/id_ed25519\"].file == \"vault:A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_ed25519\" and (.common.secret | has(\".config/linux-account/secrets/authelia/credentials/cli.env\"))" "$D/account.json" >/dev/null && grep -q "@ANTHROPIC_API_KEY@" "$D/src/tokens.env.tpl" && ! grep -q C3_API "$D/src/tokens.env.tpl"'
+check "tokens: tokens.env is sourceable by sh and exports the names" '( . "$TENV" && [ "$ANTHROPIC_API_KEY" = sk-ant-VAULT-FAKE ] && [ -n "$GITHUB_CLIENT_SECRET" ] )'
 check "mail: identity account picked, env 600" '[ "$(jq -r .mail_account "$CFG/state.json")" = ada ] && grep -q "^export MAIL_PASS=.fake-mail-pass." "$CFG/secrets/mail.env" && [ "$(stat -c %a "$CFG/secrets/mail.env")" = 600 ]'
 check "ai: tokens env with ANTHROPIC_API_KEY" 'grep -q "^export CLAUDE_API_KEY=" "$CFG/secrets/ai.env" && grep -q "^export ANTHROPIC_API_KEY=.sk-ant-FAKE." "$CFG/secrets/ai.env"'
 check "autocomplete lists 600" '[ "$(stat -c %a "$CFG/secrets/autocomplete/cloud_keys.json")" = 600 ]'
 check "about: contact card seeded (titles joined)" '[ "$(jq -r .titles "$CFG/profile.json")" = "Engineer | Analyst" ] && [ "$(jq -r .email "$CFG/profile.json")" = ada@example.com ]'
-check "no secret value leaked into the store or the config repo" '! grep -rqs -e ghp_FAKE -e FAKEVAULTKEY -e FAKEWGPRIVATEKEY -e sk-ant-FAKE "$HOME/.linux-store" "$GIT_BASE/cloud-me_configs"'
+check "no secret value leaked into the store or the config repo (tokens included)" '! grep -rqs -e ghp_FAKE -e FAKEVAULTKEY -e FAKEWGPRIVATEKEY -e sk-ant-FAKE -e FAKE_GH_SECRET_VALUE -e sk-ant-VAULT -e FAKEED25519KEY -e FAKE_AUTHELIA_SECRET "$HOME/.linux-store" "$GIT_BASE/cloud-me_configs"'
 la journey; check "journey: all four steps done" '[ "$(grep -c "●" "$T/out")" = 4 ]'
 
 section "fleet (the cockpit)"
@@ -112,6 +145,12 @@ check "Drive light OFF (a DIFFERS row)" 'grep -q "Drive (private repos) *OFF" "$
 check "Mesh ON, Mail ON, AI light reflects the unsourced env" 'grep -q "Mesh *ON" "$T/out" && grep -q "Mail *ON" "$T/out" && grep -q "ABSENT *ANTHROPIC_API_KEY" "$T/out"'
 check "Keyboard & Clipboards UNVERIFIABLE" 'grep -q "Keyboard & Clipboards *UNVERIFIABLE" "$T/out"'
 check "no secret value in the cockpit output" '! grep -q -e ghp_FAKE -e FAKEVAULTKEY -e sk-ant "$T/out"'
+check "Tokens card: real entries MATCH, stub + declared-pending PENDING with reason, light ON" \
+    'grep -q "MATCH *github/cloud-api *GITHUB_CLOUD_API in .config/linux-account/secrets/tokens.env" "$T/out" && grep -q "MATCH *anthropic/api-key" "$T/out" && grep -q "MATCH *ssh/id_ed25519 *.ssh/id_ed25519" "$T/out" && grep -q "MATCH *authelia/cli" "$T/out" && grep -q "MATCH *wireguard/privatekey" "$T/out" && grep -q "PENDING *c3-api/api-key *redaction stub" "$T/out" && grep -q "PENDING *cloudflare/wrangler *link stub to b4" "$T/out" && grep -q "Tokens *ON" "$T/out"'
+check "no token value in the cockpit output" '! grep -q -e FAKE_GH_SECRET_VALUE -e sk-ant-VAULT -e FAKEED25519KEY -e FAKE_AUTHELIA "$T/out"'
+echo tampered >> "$CFG/secrets/tokens.env"; la fleet -v; check "edited tokens.env: every env entry DIFFERS, keyfiles untouched" 'grep -q "DIFFERS *github/cloud-api" "$T/out" && grep -q "DIFFERS *anthropic/api-key" "$T/out" && grep -q "MATCH *ssh/id_ed25519" "$T/out"'
+rm -f "$HOME/.ssh/id_ed25519"; la fleet -v; check "removed keyfile shows ABSENT" 'grep -q "ABSENT *ssh/id_ed25519" "$T/out"'
+sh "$LS" repair >/dev/null 2>&1; la fleet -v; check "linux-store repair restores tokens.env and the keyfile (MATCH)" 'grep -q "MATCH *github/cloud-api" "$T/out" && grep -q "MATCH *ssh/id_ed25519" "$T/out" && ! grep -q tampered "$CFG/secrets/tokens.env"'
 echo tampered >> "$CFG/secrets/ai.env"; la fleet -v; check "edited ai.env shows DIFFERS" 'grep -q "DIFFERS *tokens" "$T/out"'
 rm -f "$HOME/.ssh/id_rsa"; la fleet -v; check "removed ssh key shows ABSENT" 'grep -q "ABSENT *ssh key" "$T/out"'
 sh "$LS" repair >/dev/null 2>&1; la fleet -v; check "linux-store repair brings the key back (MATCH)" 'grep -q "MATCH *ssh key" "$T/out"'
@@ -128,6 +167,7 @@ la infos erase; check "erase clears card, queue and install id" '[ ! -f "$CFG/pr
 section "dash"
 la dash; check "dash renders every section, masks secrets by key, keeps names" \
     '[ $? -eq 0 ] && grep -q "profile.name = Ada Lovelace" "$T/out" && grep -q "github_token = ●●● hidden, 20 chars" "$T/out" && grep -q "tokens.claude = ●●● hidden" "$T/out" && grep -q "fleet.galaxy.wg_peer.wg_ip = 10.0.0.9" "$T/out" && ! grep -q -e ghp_FAKE -e sk-ant-FAKE -e FAKEVAULTKEY "$T/out"'
+la dash tokens; check "dash tokens: names + pending reasons, never a value" '[ $? -eq 0 ] && grep -q "github/cloud-api *env-file *GITHUB_CLOUD_API *vault:" "$T/out" && grep -q "c3-api/api-key *env-file *C3_API *pending: redaction stub" "$T/out" && grep -q "cloudflare/wrangler .*pending: link stub to b4" "$T/out" && ! grep -q -e FAKE_GH_SECRET_VALUE -e sk-ant-VAULT "$T/out"'
 la dash git; check "dash <section> renders one section" 'grep -q "repos.0 = " "$T/out" && ! grep -q "profile.name" "$T/out"'
 
 section "apps / wg / ai / tui"

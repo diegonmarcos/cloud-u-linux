@@ -198,6 +198,18 @@ hash_path() {
 seal()   { chmod -R a-w "$1" 2>/dev/null || true; }
 unseal() { chmod -R u+w "$1" 2>/dev/null || true; }
 
+# The vault on a FUSE checkout cannot hold symlinks, so a "link" is a one-line
+# file whose content is the relative target (c2-system/ssh/id_rsa reads
+# ../../../D_TOOLS-DEVICES/…/id_rsa). Follow it, once, if the target exists —
+# the 66-byte stub was realised as ~/.ssh/id_rsa on 2026-10-06.
+follow_stub() {
+    local f="$1" t
+    [ -f "$f" ] && [ "$(wc -c < "$f")" -lt 200 ] && t="$(head -c 199 "$f" | tr -d '\n')" && case "$t" in
+        ../*|./*) [ -f "$(dirname "$f")/$t" ] && { readlink -f "$(dirname "$f")/$t"; return 0; } ;;
+    esac
+    echo "$f"
+}
+
 # add_store <staged path> <name>  →  sets OBJ, OBJ_HASH
 # The staged copy is hashed AFTER normalisation (exe), so verify re-derives the
 # same hash from the sealed object. An existing object is reused only if it
@@ -484,6 +496,7 @@ build_secret() {
         # repo: b0-github/api-key_opaque/token, c2-system/ssh/id_rsa). Checked
         # here, copied at realise, never into store/.
         f="$(resolve_src "$(printf '%s' "$v" | jq -r .file)")" || exit 1
+        f="$(follow_stub "$f")"
         [ -f "$f" ] && [ -r "$f" ] || die "secret/$k: $f does not exist or is unreadable"
         [ -s "$f" ] || die "secret/$k: $f is empty"
         # a redaction stub (the vault's token file on the phone read
@@ -513,9 +526,12 @@ build_secret() {
             grep -qF "$ph" "$tpl" || die "secret/$k: template has no $ph"
             if [ "$(printf '%s' "$v" | jq --arg n "$name" '.values[$n] | has("file")')" = true ]; then
                 f="$(resolve_src "$(printf '%s' "$v" | jq -r --arg n "$name" '.values[$n].file')")" || exit 1
+                f="$(follow_stub "$f")"
                 [ -s "$f" ] || die "secret/$k: $name: $f does not exist or is empty"
                 ! grep -qE '^\*\*\*|REMOVED|REDACTED|CHANGEME|<[A-Z_]+>$' "$f" || die "secret/$k: $name: $f holds a placeholder, not a secret — refused"
-                vals="$(printf '%s' "$vals" | jq -c --arg n "$name" --arg f "$f" --arg ph "$ph" '. + {($n): {file:$f, plain:true, placeholder:$ph}}')"
+                # "export": true — the value is a KEY=value env file; each such
+                # line is rendered as `export KEY=value` (linux-account's tokens.env)
+                vals="$(printf '%s' "$vals" | jq -c --arg n "$name" --arg f "$f" --arg ph "$ph" --argjson e "$(printf '%s' "$v" | jq --arg n "$name" '.values[$n].export == true')" '. + {($n): {file:$f, plain:true, placeholder:$ph, export:$e}}')"
                 continue
             fi
             f="$(resolve_src "$(printf '%s' "$v" | jq -r --arg n "$name" '.values[$n].sops // empty')")" || exit 1
@@ -552,7 +568,9 @@ render_secret() {
             for name in $(printf '%s' "$src" | jq -r '.values | keys[]'); do
                 i=$((i + 1))
                 f="$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].file')"
-                if [ "$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].plain // false')" = true ]; then
+                if [ "$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].export // false')" = true ]; then
+                    sed 's/^\([A-Za-z_][A-Za-z0-9_]*=\)/export \1/' "$f" > "$d/v$i" || { rm -rf "$d"; return 1; }
+                elif [ "$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].plain // false')" = true ]; then
                     cp "$f" "$d/v$i" || { rm -rf "$d"; return 1; }
                 else
                     x="$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].extract')"

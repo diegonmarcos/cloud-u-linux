@@ -57,6 +57,20 @@ refused, `schema_version` must be known (`1`), nothing is applied by a fetch.
   seed; plus `~/.ssh/config.d/fleet` (Host entries for every mesh node — the
   fleet "DNS" of a Linux box). Each file's sha256 is recorded for the cockpit.
 - Reports `settings` (all pending), `apps` (staged), unknown sections — never dropped silently.
+- **Tokens** (`deb-user-configs/tokens.json`, the ONE declaration of ALL my
+  tokens, by provider — github, oci, cloudflare, nocodb, c3-api, resend,
+  crawlee, authelia (one per bearer), anthropic, google-oauth, wireguard
+  (this device's key, `{device}`), ssh): every real entry is DECLARED through
+  the store's secret layer — keyfiles at their `~/path` (0600 unless `mode`),
+  env-file and value entries spliced by linux-store into ONE
+  `~/.config/linux-account/secrets/tokens.env` (0600, `export NAME=value`)
+  from the names-only template `src/tokens.env.tpl` (values with
+  `"export": true` turn a vault `.env` into export lines). Entries whose
+  vault file is a stub (`***REMOVED***`, empty, a `../` link stub with no
+  target) or declared `pending: true` are reported with their reason and
+  never written. Interactive shells source tokens.env when readable
+  (`src/env.json` `source`); `AUTHELIA_OIDC_*_DIR` point at the realised
+  files. `dash tokens` lists names + pending reasons; nothing ever prints a value.
 
 ## Fleet: the cockpit
 
@@ -72,6 +86,7 @@ sha256 only; no value is ever printed. Drawing never writes.
 | Mesh | each WireGuard profile of this device; fleet ssh hosts |
 | Drive (private repos) | github token in `gh`, ssh key, repos checked out |
 | AI | tokens env; `ANTHROPIC_API_KEY` in this shell |
+| Tokens | every tokens.json entry: keyfile or its name in tokens.env, by sha256 against linux-store's secrets.state; stubs PENDING with the reason |
 | Apps | linux-store `bin` entries resolvable |
 | Raw | settings, peers |
 

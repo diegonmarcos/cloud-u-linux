@@ -242,6 +242,13 @@ ls_ check; check "check passes with file secrets" '[ $? -eq 0 ]'
 : > "$C/vault/gh/token"; ls_ build; check "empty secret file is refused at build" '[ $? -ne 0 ] && grep -q "is empty" "$T/out"'
 printf '***REMOVED***\n' > "$C/vault/gh/token"; ls_ build; check "a redaction stub is refused at build" '[ $? -ne 0 ] && grep -q "placeholder, not a secret" "$T/out"'
 printf 'ghp_PLAIN_TEST_TOKEN\n' > "$C/vault/gh/token"
+printf 'FAKE_A=plain-a-1\n# c\nFAKE_B=plain-b-2\n' > "$C/vault/svc.env"
+printf '# tokens\n@SVC@\nexport ONE=\'@ONE@\'\n' > "$C/tokens.env.tpl"
+jq '.common.secret[".config/tokens.env"] = {template: "c:tokens.env.tpl", values: {SVC: {file: "c:vault/svc.env", export: true}, ONE: {file: "c:vault/gh/token"}}}' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
+ls_ switch; rc=$?
+check "template value with export:true renders KEY=value lines as export KEY=value, comments kept" \
+    '[ $rc -eq 0 ] && grep -qx "export FAKE_A=plain-a-1" "$HOME/.config/tokens.env" && grep -qx "# c" "$HOME/.config/tokens.env" && grep -qx "export ONE='"'"'ghp_PLAIN_TEST_TOKEN'"'"'" "$HOME/.config/tokens.env" && [ "$(stat -c %a "$HOME/.config/tokens.env")" = 600 ]'
+check "no env value under the store root" '! grep -rqs plain-a-1 "$R"'
 
 section "optional entries + html"
 jq '.common.bin.ghost = {"path": "c:nothing-here", "exe": true, "optional": true, "app": "ghost-app"}

@@ -84,6 +84,46 @@ vault_key_ok() { [ -f "$1" ] && grep -q '^-----BEGIN ' "$1"; }
 # only when it looks like one.
 token_ok() { [ -s "$1" ] && ! grep -qE 'REMOVED|REDACTED|^\*\*\*' "$1"; }
 
+# ── tokens: deb-user-configs/tokens.json, ALL my tokens in one declaration ──
+# providers.<p>.<id> = {vault, as, kind: env-file|value|keyfile, mode?, pending?, reason?}
+# Real entries are DECLARED through the store's secret layer (kind file):
+# keyfiles at their ~/path, env-file + value entries spliced by linux-store
+# into ONE tokens.env from a names-only template (src/tokens.env.tpl).
+CFG_DIR_REL="cloud-me_configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"
+TOKENS_ENV=".config/linux-account/secrets/tokens.env"
+cfg_dir() { echo "$(git_base)/$CFG_DIR_REL"; }
+tokens_file() { local f; f="$(cfg_dir)/tokens.json"; [ -f "$f" ] && echo "$f"; }
+# "provider\tid\tvault\tas\tkind\tmode\tpending\treason", {device} filled from the device pick
+tok_entries() {
+    local f; f="$(tokens_file)" || return 0
+    jq -r --arg dev "$(wg_dir_of "$(DEV)")" '.providers | to_entries[] | .key as $p | .value | to_entries[]
+        | select(.key | startswith("_") | not) | select(.value | type == "object")
+        | [$p, .key, (.value.vault | gsub("\\{device\\}"; $dev)), .value.as, (.value.kind // "value"), (.value.mode // "600"),
+           (if .value.pending == true then "1" else "0" end), (.value.reason // "")] | @tsv' "$f"
+}
+# the vault's one-line "../x" link stubs, as linux-store's follow_stub reads them
+tok_follow() { local f="$1" t; [ -f "$f" ] && [ "$(wc -c < "$f")" -lt 200 ] && t="$(head -c 199 "$f" | tr -d '\n')" && case "$t" in ../*|./*) echo "$(dirname "$f")/$t"; return 0 ;; esac; echo "$f"; }
+# tok_state <abs vault file> → "real" | "pending\t<reason>"  (never reads a value into a variable)
+tok_state() {
+    local f="$1" t
+    [ -f "$f" ] || { printf 'pending\tnot in this checkout\n'; return; }
+    t="$(tok_follow "$f")"
+    [ "$t" = "$f" ] || { [ -f "$t" ] || { printf 'pending\tlink stub, target missing\n'; return; }; f="$t"; }
+    [ -s "$f" ] || { printf 'pending\tempty file\n'; return; }
+    grep -qE '^\*\*\*|REMOVED|REDACTED|CHANGEME|<[A-Z_]+>$' "$f" && { printf 'pending\tredaction stub (***REMOVED***)\n'; return; }
+    echo real
+}
+# tok_rows → "provider\tid\tvault\tas\tkind\tmode\tstate\treason"  (state = real|pending)
+tok_rows() {
+    local gb p id vp as kind mode pend reason st
+    gb="$(git_base)"
+    tok_entries | while IFS="$(printf '\t')" read -r p id vp as kind mode pend reason; do
+        if [ "$pend" = 1 ]; then st=pending
+        else st="$(tok_state "$gb/cloud-me_vault/$vp")"; reason="${st#pending	}"; st="${st%%	*}"; fi
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$p" "$id" "$vp" "$as" "$kind" "$mode" "$st" "$reason"
+    done
+}
+
 LSBIN() { if command -v linux-store >/dev/null 2>&1; then echo linux-store; elif [ -x "$HOME/.linux-store/current/bin/linux-store" ]; then echo "$HOME/.linux-store/current/bin/linux-store"; else echo "sh $HERE/../da_linux-store/linux-store"; fi; }
 umask 077
 mkdir -p "$CFG" "$SECRETS" "$QUEUE" 2>/dev/null || die "cannot create $CFG"
@@ -281,6 +321,14 @@ plan() {
     if present '.ai.tokens'; then printf 'ai\twrite\t%s/ai.env\t%s tokens as env (0600)\n' "$SECRETS" "$(bq '.ai.tokens | length')"
     else printf 'ai\tpending\t-\tnot in bundle\n'; fi
     present '.ai.configs' && printf 'ai\tskip\t-\tconfigs (claude folder, mcps, hermes) are linux-store etc entries already\n'
+    # tokens → tokens.json: keyfiles declared at their path, the rest into ONE tokens.env
+    if [ -n "$(tokens_file)" ]; then
+        tok_rows | while IFS="$(printf '\t')" read -r p id vp as kind mode st reason; do
+            if [ "$st" = pending ]; then printf 'tokens\tpending\t%s/%s\t%s\n' "$p" "$id" "$reason"
+            elif [ "$kind" = keyfile ]; then printf 'tokens\tstore\t%s\tsecret file vault:%s (%s) [%s/%s]\n' "$as" "$vp" "$mode" "$p" "$id"
+            else printf 'tokens\tstore\t%s\t%s %s = vault:%s [%s/%s] -> %s\n' "$as" "$kind" "$as" "$vp" "$p" "$id" "$TOKENS_ENV"; fi
+        done
+    else printf 'tokens\tskip\t-\tno %s/tokens.json\n' "$CFG_DIR_REL"; fi
     # autocomplete → lists
     if present '.autocomplete'; then printf 'autocomplete\twrite\t%s/autocomplete/\t%s lists (0600, keyboard runtime data)\n' "$SECRETS" "$(bq '.autocomplete | keys | length')"
     else printf 'autocomplete\tpending\t-\tnot in bundle\n'; fi
@@ -300,12 +348,40 @@ cmd_plan() { plan | awk -F'\t' '{ printf "  %-12s %-8s %-40s %s\n", $1, $2, $3, 
 rec() { st_set "sha:$1" "$(sha256sum "$2" | cut -d' ' -f1)"; }   # remember what apply wrote
 
 write_fragment() {  # the linux-store include fragment: paths only, never values
-    local gb dev wgd dir frag p f n v tgt
+    local gb dev wgd dir frag p f n v tgt tpl vals id vp as kind mode st reason
     gb="$(git_base)"; dev="$(DEV)"; wgd="$(wg_dir_of "$dev")"
     dir="$gb/cloud-me_configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"
     [ -d "$dir" ] || die "no deb-user-configs at $dir"
     frag="$dir/account.json"
     v='{}'
+    # tokens.json first: keyfiles as `file` secrets, env-file/value entries as
+    # the values of ONE template (src/tokens.env.tpl, names only). The git and
+    # mesh sections below override a colliding target (same material anyway).
+    if [ -n "$(tokens_file)" ]; then
+        tpl="$dir/src/tokens.env.tpl"; mkdir -p "$dir/src"
+        { echo "# GENERATED by linux-account apply — ~/$TOKENS_ENV template: NAMES ONLY, linux-store splices the values at switch. Declared in tokens.json; regenerate with \`linux-account apply\`."
+          echo "# Source it (fish or bash): every line is \`export NAME=value\`."
+        } > "$tpl.tmp"
+        vals='{}'; n=0
+        tok_rows | while IFS="$(printf '\t')" read -r p id vp as kind mode st reason; do
+            [ "$st" = real ] || continue
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$p" "$id" "$vp" "$as" "$kind" "$mode"
+        done > "$CFG/.tok.$$"
+        while IFS="$(printf '\t')" read -r p id vp as kind mode; do
+            case "$kind" in
+                keyfile) v="$(printf '%s' "$v" | jq -c --arg t "${as#"~/"}" --arg s "vault:$vp" --arg m "$mode" --arg a "tokens/$p" '.[$t] = {file: $s, mode: $m, app: $a}')" ;;
+                env-file) printf '# tokens: %s %s/%s env-file vault:%s\n@%s@\n' "$as" "$p" "$id" "$vp" "$as" >> "$tpl.tmp"
+                          vals="$(printf '%s' "$vals" | jq -c --arg n "$as" --arg s "vault:$vp" '.[$n] = {file: $s, export: true}')"; n=$((n + 1)) ;;
+                *)        printf '# tokens: %s %s/%s value vault:%s\nexport %s='"'"'@%s@'"'"'\n' "$as" "$p" "$id" "$vp" "$as" "$as" >> "$tpl.tmp"
+                          vals="$(printf '%s' "$vals" | jq -c --arg n "$as" --arg s "vault:$vp" '.[$n] = {file: $s}')"; n=$((n + 1)) ;;
+            esac
+        done < "$CFG/.tok.$$"; rm -f "$CFG/.tok.$$"
+        if [ "$n" -gt 0 ]; then
+            mv -f "$tpl.tmp" "$tpl"
+            v="$(printf '%s' "$v" | jq -c --arg t "$TOKENS_ENV" --argjson vals "$vals" '.[$t] = {template: "me:src/tokens.env.tpl", mode: "600", app: "tokens", values: $vals}')"
+        else rm -f "$tpl.tmp"; fi
+        say "tokens: $(tok_rows | awk -F'\t' '$7 == "real"' | wc -l | tr -d ' ') declared, $(tok_rows | awk -F'\t' '$7 == "pending"' | wc -l | tr -d ' ') pending ($n in tokens.env)"
+    fi
     vault_key_ok "$gb/cloud-me_vault/$VAULT_SSH_KEY" && v="$(printf '%s' "$v" | jq -c --arg k "$VAULT_SSH_KEY" '.[".ssh/id_rsa"] = {file: ("vault:" + $k), app: "account"} | .[".ssh/id_rsa.pub"] = {file: ("vault:" + $k + ".pub"), mode: "644", app: "account"}')"
     if token_ok "$gb/cloud-me_vault/$VAULT_GH_TOKEN"; then
         mkdir -p "$dir/src/gh"
@@ -414,6 +490,8 @@ commit_writes() {
     fi
     # electronics → fleet.json
     if present '.electronics.fleet'; then bqc '.electronics.fleet' > "$CFG/fleet.json"; chmod 600 "$CFG/fleet.json"; say "electronics: fleet.json ($(bq '.electronics.fleet | length') devices)"; fi
+    # tokens → the authelia token cache dir (AUTHELIA_OIDC_TOKENS_DIR); the files themselves are the store's
+    if [ -n "$(tokens_file)" ]; then mkdir -p "$SECRETS/authelia/credentials" "$SECRETS/authelia/tokens"; chmod 700 "$SECRETS/authelia" "$SECRETS/authelia/credentials" "$SECRETS/authelia/tokens"; fi
 }
 
 cmd_apply() {
@@ -471,7 +549,7 @@ card() {  # title observed rows-file  → prints card, returns via global LIGHT
 }
 
 cmd_fleet() {
-    local gb dev wgd R t n f sha email acct declared installed lsok tgt
+    local gb dev wgd R t n f sha email acct declared installed lsok tgt p id vp as kind mode st reason sst
     SUMMARY=""
     need_bundle; gb="$(git_base)"; dev="$(DEV)"; wgd="$(wg_dir_of "$dev")"; R="$CFG/.rows"
     [ "${1:-}" = -v ] && VERBOSE=1
@@ -538,6 +616,23 @@ cmd_fleet() {
         [ -n "${ANTHROPIC_API_KEY:-}" ] && row "ANTHROPIC_API_KEY" MATCH "exported in this shell" || row "ANTHROPIC_API_KEY" ABSENT "not in this shell (source secrets/ai.env)"
     else row "ai" PENDING "not in bundle"; fi >> "$R"
     card "AI" 1 "$R"
+
+    # Tokens — tokens.json: one row per entry, by sha256 against linux-store's secrets.state; never a value
+    : > "$R"
+    if [ -n "$(tokens_file)" ]; then
+        sst="${LINUX_STORE_ROOT:-$HOME/.linux-store}/secrets.state"
+        tok_rows | while IFS="$(printf '\t')" read -r p id vp as kind mode st reason; do
+            if [ "$st" = pending ]; then row "$p/$id" PENDING "$reason"; continue; fi
+            if [ "$kind" = keyfile ]; then t="${as#"~/"}"; else t="$TOKENS_ENV"; fi
+            f="$HOME/$t"
+            if [ ! -f "$f" ]; then row "$p/$id" ABSENT "$t"
+            elif [ "$(sha256sum "$f" | cut -d' ' -f1)" != "$(awk -v n="$t" '$1 == n { print $2 }' "$sst" 2>/dev/null)" ]; then row "$p/$id" DIFFERS "$t changed since switch"
+            elif [ "$kind" = keyfile ]; then row "$p/$id" MATCH "$t"
+            elif grep -q "^# tokens: $as " "$f"; then row "$p/$id" MATCH "$as in $t"
+            else row "$p/$id" ABSENT "$as not in $t"; fi
+        done
+    else row "tokens.json" PENDING "no $CFG_DIR_REL/tokens.json"; fi >> "$R"
+    card "Tokens" 1 "$R"
 
     # Apps — declared = linux-store bin entries; installed = resolvable
     : > "$R"
@@ -698,15 +793,24 @@ dash_section() {  # section
               else "  " + leaf([.key]; .value) end
           end' "$B"
 }
+# tokens.json as a list: provider/id, kind, name or ~/path, vault path or the pending reason. Never a value.
+dash_tokens() {
+    local f; f="$(tokens_file)" || { echo "  (no $CFG_DIR_REL/tokens.json)"; return 0; }
+    printf '  %s  schema %s  env %s\n' "$f" "$(jq -r '.schema // "?"' "$f")" "$(jq -r '.env_file // "?"' "$f")"
+    tok_rows | awk -F'\t' '{ printf "  %-30s %-9s %-48s %s\n", $1 "/" $2, $5, $4, ($7 == "pending" ? "pending: " $8 : "vault:" $3) }'
+}
 cmd_dash() {
     local sec
     need_bundle
+    [ "${1:-}" = tokens ] && { dash_tokens; return 0; }
     if [ -n "${1:-}" ]; then dash_section "$1"; return 0; fi
     printf '%sbundle%s  %s  schema %s  generated %s\n' "$C_B" "$C_N" "$(st_get bundle)" "$(bq .schema_version)" "$(bq '._generated.emitter // "?"' | cut -c1-40)"
     for sec in $SECTIONS_ORDER $(bq 'keys[] | select(startswith("_") | not) | select(IN("schema_version") | not)' | grep -vxF -e about -e electronics -e mesh -e mail -e git -e ai -e autocomplete -e settings -e peers -e apps); do
         bq "has(\"$sec\")" | grep -qx true || continue
         printf '\n%s── %s ──%s\n' "$C_C" "$sec" "$C_N"; dash_section "$sec"
     done
+    [ -n "$(tokens_file)" ] && { printf '\n%s── tokens (tokens.json) ──%s\n' "$C_C" "$C_N"; dash_tokens; }
+    return 0
 }
 
 # ── status / journey ───────────────────────────────────────────────────────
@@ -882,8 +986,8 @@ linux-account — cloud-superapp's Account tab for the Linux userlands
     plan                                                                            what apply would write
     apply [--no-switch]                                                             4 · get everything: declare + write + linux-store switch
   FLEET
-    fleet [-v]        the cockpit: Mail · Keyboard & Clipboards · Mesh · Drive · AI · Apps · Raw
-    dash [<section>]  dashboard: every section of the bundle as path = value (secrets masked)
+    fleet [-v]        the cockpit: Mail · Keyboard & Clipboards · Mesh · Drive · AI · Tokens · Apps · Raw
+    dash [<section>]  dashboard: every section of the bundle as path = value (secrets masked); `dash tokens` = tokens.json names + pending reasons
     status            journey + cockpit
   INFOS
     infos [show | set k=v… | push | flush | erase]     contact card; push = ProfileSync POST
@@ -899,6 +1003,7 @@ linux-account — cloud-superapp's Account tab for the Linux userlands
 
 State: ~/.config/linux-account/ (0700). Bundle: cloud-me_vault/C_A1-configs/profile-secrets.json (schema 1).
 Secrets that are files in the vault are DECLARED (deb-user-configs/account.json → linux-store); the rest is written 0600 under state.
+Tokens: deb-user-configs/tokens.json (ALL of them, by provider, paths only) → keyfiles at their ~/path, the rest in ~/.config/linux-account/secrets/tokens.env — both through linux-store.
 EOF
 }
 

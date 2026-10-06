@@ -94,7 +94,8 @@ written as real files with mode `600`, and `~/.ssh` is set to `700`.
 ```
 
 - **`sops`**: the decrypted value *is* the file.
-- **`template`**: each `@NAME@` is replaced with its decrypted value.
+- **`file`**: a plaintext file in a private checkout *is* the file (the vault's keys and `.env` files). Refused at build when empty or a redaction stub (`***REMOVED***`, `REDACTED`); a one-line `../…` link stub is followed.
+- **`template`**: each `@NAME@` is replaced with its decrypted value (`placeholder` names another marker). A value with `"export": true` is a `KEY=value` env file whose lines are rendered as `export KEY=value` — how linux-account's `tokens.env` is built from the vault's `.env` files.
 - **`mode`**: defaults to `600`.
 
 Guarantees, each covered by a test:
