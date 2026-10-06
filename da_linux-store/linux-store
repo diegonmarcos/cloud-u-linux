@@ -1200,6 +1200,15 @@ tui_phone() {  # every entry on this box as a four-line card
 
 cmd_tui() {
     [ -t 0 ] || [ -n "${LINUX_STORE_TUI_TEST:-}" ] || die "tui needs a terminal"
+    # the real TUI: curses (python3 stdlib), same APK layout with arrow keys,
+    # folding and live chips. The sh screens below are the fallback for a box
+    # without python3 and the scripted test path.
+    # beside the engine in the checkout, or the declared lib in the live store
+    if [ -z "${LINUX_STORE_TUI_TEST:-}" ] && command -v python3 >/dev/null 2>&1; then
+        for _t in "$HERE/linux-store-tui.py" "$CUR/lib/linux-store-tui.py"; do
+            [ -f "$_t" ] && LINUX_STORE_BIN="$SELF" LINUX_STORE_ROOT="$ROOT" exec python3 "$_t"
+        done
+    fi
     TUI_TAB=cloud; TUI_QUIT=0; TUI_G=bin; TUI_CHIP=all
     while [ "$TUI_QUIT" = 0 ]; do
         clear 2>/dev/null || printf '\033[H\033[2J'
