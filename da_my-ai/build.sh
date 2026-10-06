@@ -81,10 +81,23 @@ cmd_check() {
   say "check ok ($ARCH)"
 }
 
+# Static-musl linker flags, scoped to the cli/dash cargo invocations ONLY. They
+# must never be exported workflow-wide: the x86_64 GUI (`cargo tauri build`, nix
+# glibc + gtk) picks RUSTFLAGS up too and `-C linker=musl-gcc` / crt-static
+# cannot link it (run 37546714529). With --target set, RUSTFLAGS reach only the
+# musl target, never the host build scripts / proc-macros. TARGET_CC: cc-rs
+# (ring's C) for the cross target.
+musl_env() {
+  case "${MY_AI_TARGET:-}" in
+    *-musl) env RUSTFLAGS="-C linker=musl-gcc -C target-feature=+crt-static" TARGET_CC=musl-gcc "$@" ;;
+    *)      "$@" ;;
+  esac
+}
+
 cmd_build() {
   say "build core+cli+dash ($ARCH)…"
-  nix_dev cli cargo build --release ${MY_AI_TARGET:+--target "$MY_AI_TARGET"} -p my-ai-cli -p my-ai-dash
-  nix_dev cli cargo test ${MY_AI_TARGET:+--target "$MY_AI_TARGET"} -p my-ai-core -p my-ai-cli -p my-ai-dash
+  nix_dev cli musl_env cargo build --release ${MY_AI_TARGET:+--target "$MY_AI_TARGET"} -p my-ai-cli -p my-ai-dash
+  nix_dev cli musl_env cargo test ${MY_AI_TARGET:+--target "$MY_AI_TARGET"} -p my-ai-core -p my-ai-cli -p my-ai-dash
   if gui_enabled; then
     say "build gui ($ARCH)…"; icon
     nix_dev default cargo tauri build          # my-ai-gui + .deb bundle

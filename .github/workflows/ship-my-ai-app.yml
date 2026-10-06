@@ -77,12 +77,9 @@ jobs:
       - name: Build release binaries (build.sh build, static musl)
         env:
           CARGO_BUILD_JOBS: "4"
+          # musl linker flags live in build.sh (musl_env), scoped to cli/dash:
+          # exported here they also hit the x86_64 nix GUI build and break it.
           MY_AI_TARGET: ${{ matrix.arch }}-unknown-linux-musl
-          # --target is set, so RUSTFLAGS reach only the musl target, never the
-          # host build scripts / proc-macros. TARGET_CC: cc-rs (ring's C) for
-          # the cross target.
-          RUSTFLAGS: -C linker=musl-gcc -C target-feature=+crt-static
-          TARGET_CC: musl-gcc
         run: ./build.sh build
 
       - name: Stage arch-suffixed assets (build.sh stage)
