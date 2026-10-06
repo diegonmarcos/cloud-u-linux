@@ -261,6 +261,11 @@ ls_ html; check "html renders the two tiers" '[ $? -eq 0 ] && grep -q "OS · Ter
 check "html lists present and absent entries by app" 'grep -q "<tr class=\"absent\">.*ghost.*ghost-app" "$R/ui/index.html" && grep -q "<tr class=\"present\">.*<td>hello</td>" "$R/ui/index.html"'
 check "html holds no secret value" '! grep -q -e ghp_ -e FAKEKEY -e PLAINKEY "$R/ui/index.html"'
 
+section "tui (the APK Store layout)"
+printf 'f\n1\nb\ng\ns\np\nq\n' | LINUX_STORE_TUI_TEST=1 sh "$ENGINE" tui > "$T/out" 2>&1
+check "tui: Cloud Constellation | Phone Apps, group tabs, bar, chips, grouped rows, expand, Phone cards" \
+    'grep -q "Cloud Constellation" "$T/out" && grep -q "Check all" "$T/out" && grep -q "Absent" "$T/out" && grep -q "◯ ghost" "$T/out" && grep -q "Install / Update (switch)" "$T/out" && grep -q "Export app list" "$T/out" && grep -q "Secrets" "$T/out" && ! grep -q "Cannot index" "$T/out"'
+
 section "declaration from cloud-me_configs"
 CM="$GIT_BASE/cloud-me_configs"; UD="$CM/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"
 mkdir -p "$UD"
