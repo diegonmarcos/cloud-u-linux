@@ -823,6 +823,18 @@ cmd_repos() {
     esac
 }
 
+# ── sync: THE job — pull the SoT repos, render, switch, draw the cockpit ────
+cmd_sync() {
+    local gb d
+    gb="$(git_base)" || die "no git base"
+    cmd_repos pull || true
+    d="$gb/cloud-me_configs/$(jq -r --arg u "${LINUX_ACCOUNT_USER:-diego-admin}" '.configs_users[] | select(.id == $u) | .path' "$gb/cloud-me_configs/configs.json")/deb-user-configs"
+    [ -f "$d/build.sh" ] && sh "$d/build.sh" build
+    $(LSBIN) switch "$@" || die "switch failed"
+    bundle_path >/dev/null 2>&1 && cmd_fleet
+    say "synced"
+}
+
 # ── html: the Account page beside the Store page ───────────────────────────
 UI="${LINUX_STORE_UI:-$HOME/.linux-store/ui}"
 cmd_html() {
@@ -870,6 +882,8 @@ linux-account — cloud-superapp's Account tab for the Linux userlands
     status            journey + cockpit
   INFOS
     infos [show | set k=v… | push | flush | erase]     contact card; push = ProfileSync POST
+  SYNC
+    sync [--backup]   pull every fleet repo (the SoT), render deb-user-configs, linux-store switch, cockpit
   BOOTSTRAP (a box with nothing)
     signin [--device | --token <t>]    GitHub login (device flow) → connect --github → apply → repos clone
     repos [list | clone | pull]        every private repo of the fleet into the git base
@@ -898,6 +912,7 @@ case "$cmd" in
     wg)      cmd_wg "$@" ;;
     ai)      cmd_ai ;;
     tui)     cmd_tui ;;
+    sync)    cmd_sync "$@" ;;
     dash)    cmd_dash "$@" ;;
     html)    cmd_html ;;
     signin)  cmd_signin "$@" ;;
