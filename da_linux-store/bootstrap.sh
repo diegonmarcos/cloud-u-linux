@@ -55,6 +55,10 @@ if [ -n "$need" ]; then
     pkgs="$(printf '%s' "$need" | sed 's/sha256sum/coreutils/; s/flock/util-linux/')"
     if [ "$PROFILE" = termux ] && command -v apt-get >/dev/null 2>&1; then
         say "installing:$pkgs"
+        # a fresh proot ships no package lists: "Unable to locate package" is
+        # the symptom, update is the cure
+        [ -n "$(ls -A /var/lib/apt/lists 2>/dev/null | grep -v -e lock -e partial -e auxfiles)" ] \
+            || DEBIAN_FRONTEND=noninteractive apt-get update -q
         # shellcheck disable=SC2086
         DEBIAN_FRONTEND=noninteractive apt-get install -y -q $pkgs
     else
