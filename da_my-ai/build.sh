@@ -28,9 +28,16 @@ gui_enabled() { local a; for a in "${GUI_ARCHES[@]}"; do [ "$a" = "$ARCH" ] && r
 # machines ship a system cargo, which would bypass nix). The pkg-config setup hook
 # owns PKG_CONFIG_PATH (follows propagatedBuildInputs: gtk3 → pango/cairo/atk/…);
 # do NOT override it. -L streams full build logs.
+# MY_AI_TARGET (CI): a rustup target triple (e.g. aarch64-unknown-linux-musl).
+# The release assets must run on hosts with NO /nix and an old glibc (Debian 12
+# proot, glibc 2.36) — a nix-built binary carries a /nix/store interpreter and
+# GLIBC_2.39 symbols, so the `cli` shell is bypassed and the rustup toolchain on
+# PATH builds a static musl binary instead. The `default` (webkit/tauri) shell
+# is unaffected: the GUI stays a nix build.
 nix_dev() {
   local sh="$1"; shift
-  if [ -n "${IN_NIX_SHELL:-}" ]; then "$@"; else nix develop -L ".#$sh" -c "$@"; fi
+  if [ -n "${IN_NIX_SHELL:-}" ] || { [ "$sh" = cli ] && [ -n "${MY_AI_TARGET:-}" ]; }; then "$@"
+  else nix develop -L ".#$sh" -c "$@"; fi
 }
 
 # Ensure src-tauri/icons/*.png exist (tauri build.rs validates these globs even
@@ -76,8 +83,8 @@ cmd_check() {
 
 cmd_build() {
   say "build core+cli+dash ($ARCH)…"
-  nix_dev cli cargo build --release -p my-ai-cli -p my-ai-dash
-  nix_dev cli cargo test -p my-ai-core -p my-ai-cli -p my-ai-dash
+  nix_dev cli cargo build --release ${MY_AI_TARGET:+--target "$MY_AI_TARGET"} -p my-ai-cli -p my-ai-dash
+  nix_dev cli cargo test ${MY_AI_TARGET:+--target "$MY_AI_TARGET"} -p my-ai-core -p my-ai-cli -p my-ai-dash
   if gui_enabled; then
     say "build gui ($ARCH)…"; icon
     nix_dev default cargo tauri build          # my-ai-gui + .deb bundle
@@ -88,8 +95,9 @@ cmd_build() {
 # Stage arch-suffixed release assets into dist-assets/ (CI uploads this dir).
 cmd_stage() {
   local d="dist-assets"; rm -rf "$d"; mkdir -p "$d"
-  command cp -f "target/release/$BIN"  "$d/$BIN-$ARCH"
-  command cp -f "target/release/$DASH" "$d/$DASH-$ARCH"
+  local rel="target/${MY_AI_TARGET:+$MY_AI_TARGET/}release"   # cargo --target puts output under target/<triple>/
+  command cp -f "$rel/$BIN"  "$d/$BIN-$ARCH"
+  command cp -f "$rel/$DASH" "$d/$DASH-$ARCH"
   if gui_enabled; then
     command cp -f "target/release/$GUI" "$d/$GUI-$ARCH"
     local deb; deb="$(command ls target/release/bundle/deb/*.deb 2>/dev/null | head -1 || true)"

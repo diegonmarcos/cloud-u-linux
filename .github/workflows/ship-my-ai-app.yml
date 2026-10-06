@@ -3,7 +3,14 @@ name: ship-my-ai-app
 # built for x86_64 AND aarch64. my-ai-gui (Tauri v2 systray/webview) needs
 # webkit → x86_64 only (build.gui_arches). Toolchain comes from
 # da_my-ai/flake.nix; CI just needs nix. Publishes arch-suffixed binaries
-# (+ x86 .deb) to a rolling GitHub Release (my-ai-latest). A post-publish
+# (+ x86 .deb) to a rolling GitHub Release (my-ai-latest).
+#
+# 2026-10-06: my-ai / my-ai-dash are STATIC MUSL (rustup target
+# *-unknown-linux-musl + Ubuntu's musl-tools, the ship-my-konsole-app.yml /
+# ship-c3-watchdog.yml recipe). The nix-built binaries carried a /nix/store
+# ld-linux interpreter and GLIBC_2.39 symbols, so da_linux-store's bin/my-ai
+# could not execute on the Debian 12 proot (glibc 2.36, no /nix). A guard step
+# fails the run if that ever comes back. check + the Tauri GUI stay on nix. A post-publish
 # update-hashes job recomputes SRI sha256s and commits nix/hashes.json so the
 # da_my-ai flake's packages.my-ai output stays in sync automatically.
 #
@@ -59,13 +66,45 @@ jobs:
           CARGO_BUILD_JOBS: "4"
         run: ./build.sh check
 
-      - name: Build release binaries (build.sh build)
+      - name: Rust toolchain + musl target (static cli/dash)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.arch }}-unknown-linux-musl
+
+      - name: Install musl-tools (native musl-gcc)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq musl-tools
+
+      - name: Build release binaries (build.sh build, static musl)
         env:
           CARGO_BUILD_JOBS: "4"
+          MY_AI_TARGET: ${{ matrix.arch }}-unknown-linux-musl
+          # --target is set, so RUSTFLAGS reach only the musl target, never the
+          # host build scripts / proc-macros. TARGET_CC: cc-rs (ring's C) for
+          # the cross target.
+          RUSTFLAGS: -C linker=musl-gcc -C target-feature=+crt-static
+          TARGET_CC: musl-gcc
         run: ./build.sh build
 
       - name: Stage arch-suffixed assets (build.sh stage)
+        env:
+          MY_AI_TARGET: ${{ matrix.arch }}-unknown-linux-musl
         run: ./build.sh stage
+
+      - name: Guard portability (no /nix/store interpreter, no GLIBC_ > 2.36)
+        # The assets are realised as bin/my-ai on a Debian 12 proot (glibc 2.36,
+        # no /nix). A binary that only runs on the nix host fails THERE, so
+        # fail here instead.
+        run: |
+          for f in dist-assets/my-ai-${{ matrix.arch }} dist-assets/my-ai-dash-${{ matrix.arch }}; do
+            file "$f"
+            if readelf -l "$f" | grep -q '/nix/store'; then
+              echo "::error::$f: ELF interpreter lives in /nix/store — not portable"; exit 1
+            fi
+            newest=$( { objdump -T "$f" 2>/dev/null || true; } | grep -oE 'GLIBC_[0-9.]+' | sed 's/GLIBC_//' | sort -uV | tail -1)
+            if [ -n "$newest" ] && [ "$(printf '%s\n' "$newest" 2.36 | sort -V | tail -1)" != 2.36 ]; then
+              echo "::error::$f: requires GLIBC_$newest (> 2.36, Debian 12) — not portable"; exit 1
+            fi
+          done
 
       - uses: actions/upload-artifact@v4
         with:

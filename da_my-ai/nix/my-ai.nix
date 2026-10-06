@@ -1,7 +1,10 @@
-# Fetch my-ai and my-ai-dash prebuilt binaries from the GH release,
-# apply autoPatchelfHook so they run, and install them.
+# Fetch my-ai and my-ai-dash prebuilt binaries from the GH release and install
+# them. The assets are STATIC MUSL (ship-my-ai-app.yml builds them with
+# --target *-unknown-linux-musl so they also run on a /nix-less Debian 12
+# proot), so no autoPatchelfHook: a static binary has no interpreter to patch
+# (same as da_c3-watchdog/nix/prebuilt.nix).
 # Hashes live in ./hashes.json (bumped by ship-my-ai-app.yml GHA).
-{ lib, stdenv, fetchurl, autoPatchelfHook, makeWrapper, gcc-unwrapped, libgcc }:
+{ lib, stdenv, fetchurl, makeWrapper }:
 let
   hashes  = builtins.fromJSON (builtins.readFile ./hashes.json);
   archMap = { "x86_64-linux" = "x86_64"; "aarch64-linux" = "aarch64"; };
@@ -24,11 +27,7 @@ stdenv.mkDerivation {
     hash = sys.my-ai-dash;
   };
 
-  nativeBuildInputs = lib.optionals stdenv.hostPlatform.isLinux [
-    autoPatchelfHook
-    makeWrapper
-  ];
-  buildInputs = [ gcc-unwrapped.lib libgcc ];
+  nativeBuildInputs = [ makeWrapper ];
 
   dontUnpack = true;
 
