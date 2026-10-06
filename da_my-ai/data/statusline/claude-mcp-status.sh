@@ -57,8 +57,10 @@ fi
 # the probe mid-flight and leaving a 0-byte cache. This mode blocks on the
 # probe, writes the cache atomically, then frees the lock.
 if [ "${1:-}" = "--refresh" ]; then
+  # Overall cap: 60 s on a desktop; the phone's refresher sets 20 (its whole
+  # batch budget) — per-server curl stays at 5 s either way.
   run="claude mcp list"
-  command -v timeout >/dev/null 2>&1 && run="timeout 60 $run"
+  command -v timeout >/dev/null 2>&1 && run="timeout ${CLAUDE_MCP_PROBE_TIMEOUT:-60} $run"
   tmp="$CACHE.$$"
   $run 2>/dev/null | while IFS= read -r line; do
     case "$line" in *:*) ;; *) continue ;; esac

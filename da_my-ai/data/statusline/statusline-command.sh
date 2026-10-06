@@ -311,12 +311,37 @@ if [ -s "$usage_json" ]; then
         jq -r '(.blocks // {}) | (.mcp//""), (.flags//""), (.skl//""), (.sys//""), (.rul//"")' \
             "$usage_json" 2>/dev/null)
 fi
+# No daemon (the phone: my-ai is a release that does not exist for this arch,
+# so this branch is PERMANENT there, not a first-paint fallback). The five
+# helpers used to run inline here — five forks per paint, on a 5 s refresh,
+# per session, and claude-mcp-status alone probes eleven servers; Android's
+# OOM killer answered with signal 9 to the whole claude process, repeatedly
+# (2026-10-06). A STATUS LINE MAY ONLY READ FILES AT PAINT. So: read the
+# cache claude-status-refresh.sh keeps, and only if it is older than TTL and
+# nobody holds the lock, detach that ONE refresher — nice 19, timeout 20, one
+# lock for every session, never waited on. Until the first batch lands the
+# five segments are simply absent; nothing is spawned to fill them.
 if [ -z "$mcp_seg" ]; then
-    mcp_seg=$(bash "$HOME/.claude/claude-mcp-status.sh" "$cwd" 2>/dev/null)
-    flags_seg=$(bash "$HOME/.claude/claude-flags-status.sh" --format ansi 2>/dev/null)
-    skl_seg=$(bash "$HOME/.claude/claude-plugins-status.sh" --part skl --format ansi 2>/dev/null)
-    sys_seg=$(bash "$HOME/.claude/claude-plugins-status.sh" --part sys --format ansi 2>/dev/null)
-    rul_seg=$(bash "$HOME/.claude/claude-hooks-status.sh" --format ansi 2>/dev/null)
+    blocks_cache="${XDG_RUNTIME_DIR:-/tmp}/claude-status.cache"
+    blocks_lock="${blocks_cache}.lock"
+    blocks_ttl="${CLAUDE_STATUS_TTL:-300}"
+    if [ -s "$blocks_cache" ]; then
+        { IFS= read -r mcp_seg; IFS= read -r flags_seg; IFS= read -r skl_seg
+          IFS= read -r sys_seg; IFS= read -r rul_seg; } < "$blocks_cache"
+    fi
+    printf -v _now '%(%s)T' -1
+    _age=$(( _now - $(stat -c %Y "$blocks_cache" 2>/dev/null || echo 0) ))
+    if [ "$_age" -ge "$blocks_ttl" ]; then
+        # A refresher killed mid-flight (timeout, OOM, session exit) must not
+        # wedge the cache: a live one cannot outlive timeout 20, so 60 s is dead.
+        [ -d "$blocks_lock" ] && [ $(( _now - $(stat -c %Y "$blocks_lock" 2>/dev/null || echo 0) )) -ge 60 ] &&
+            rmdir "$blocks_lock" 2>/dev/null
+        # mkdir is the atomic test-and-set: one refresher across ALL sessions.
+        if mkdir "$blocks_lock" 2>/dev/null; then
+            setsid nice -n 19 bash "$HOME/.claude/claude-status-refresh.sh" "$cwd" </dev/null >/dev/null 2>&1 &
+            disown 2>/dev/null || true
+        fi
+    fi
 fi
 plugins_seg="PL[ ${skl_seg}${skl_seg:+ }${rul_seg}${rul_seg:+ }${sys_seg} ]"
 

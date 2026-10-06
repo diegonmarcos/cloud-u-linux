@@ -27,6 +27,7 @@ const ASSETS: &[(&str, &str, bool)] = &[
     ("claude-plugins-status.sh", include_str!("../../data/statusline/claude-plugins-status.sh"), true),
     ("claude-hooks-status.sh", include_str!("../../data/statusline/claude-hooks-status.sh"), true),
     ("claude-flags-status.sh", include_str!("../../data/statusline/claude-flags-status.sh"), true),
+    ("claude-status-refresh.sh", include_str!("../../data/statusline/claude-status-refresh.sh"), true),
     ("claude-pricing.json", include_str!("../../data/pricing.json"), false),
 ];
 
