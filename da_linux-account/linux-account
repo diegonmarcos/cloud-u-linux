@@ -456,6 +456,10 @@ card() {  # title observed rows-file  → prints card, returns via global LIGHT
     m="$(grep -c "$(printf '\t')MATCH" "$3" 2>/dev/null)"; d="$(grep -cE "$(printf '\t')(DIFFERS|ABSENT)" "$3" 2>/dev/null)"; p="$(grep -c "$(printf '\t')PENDING" "$3" 2>/dev/null)"
     case "$LIGHT" in ON) l='●' ;; OFF) l='○' ;; UNVERIFIABLE) l='◌' ;; *) l='◍' ;; esac
     SUMMARY="${SUMMARY:+$SUMMARY · }$l ${1%% (*}"
+    if [ -n "${FLEET_JSON:-}" ]; then
+        jq -c --arg t "$1" --arg l "$LIGHT" --rawfile r "$3" '{card: $t, light: $l, rows: ($r | split("\n") | map(select(. != "") | split("\t") | {label: .[0], state: .[1], note: (.[2] // "")}))}' -n
+        return 0
+    fi
     printf '  %s %-24s %s  %s\n' "$l" "$1" "$LIGHT" "$m match / $d differ / $p pending"
     [ "${VERBOSE:-0}" = 1 ] && awk -F'\t' '{ printf "      %-9s %-28s %s\n", $2, $1, $3 }' "$3"
     return 0
@@ -466,7 +470,8 @@ cmd_fleet() {
     SUMMARY=""
     need_bundle; gb="$(git_base)"; dev="$(DEV)"; wgd="$(wg_dir_of "$dev")"; R="$CFG/.rows"
     [ "${1:-}" = -v ] && VERBOSE=1
-    printf '  device %s   wg %s %s   bundle: %s (%s)\n\n' "$dev" "$(jq -r --arg d "$dev" '(.bundle // .) | .electronics.fleet[$d].wg_peer.name // "?"' "$B")" "$(jq -r --arg d "$dev" '(.bundle // .) | .electronics.fleet[$d].wg_peer.wg_ip // ""' "$B")" "$(st_get bundle_source)" "$(st_get connected_at | cut -c1-10)"
+    [ "${1:-}" = --json ] && FLEET_JSON=1
+    [ -n "${FLEET_JSON:-}" ] || printf '  device %s   wg %s %s   bundle: %s (%s)\n\n' "$dev" "$(jq -r --arg d "$dev" '(.bundle // .) | .electronics.fleet[$d].wg_peer.name // "?"' "$B")" "$(jq -r --arg d "$dev" '(.bundle // .) | .electronics.fleet[$d].wg_peer.wg_ip // ""' "$B")" "$(st_get bundle_source)" "$(st_get connected_at | cut -c1-10)"
 
     # Mail
     : > "$R"
@@ -725,6 +730,11 @@ ask() { printf '%s%s%s ' "$C_B" "$1" "$C_N"; read -r REPLY || REPLY=q; }
 hdr() { clear 2>/dev/null || printf '\033[H\033[2J'; printf '%s┌─ linux-account ─ %s ─────────────────────────────────┐%s\n' "$C_C" "$1" "$C_N"; cmd_journey; printf '%s└──────────────────────────────────────────────────────────┘%s\n\n' "$C_C" "$C_N"; }
 cmd_tui() {
     [ -t 0 ] || [ -n "${LINUX_ACCOUNT_TUI_TEST:-}" ] || die "tui needs a terminal"
+    # the real TUI: curses (python3 stdlib). The sh menus below stay as the
+    # fallback for a box without python3 and as the scripted test path.
+    if [ -z "${LINUX_ACCOUNT_TUI_TEST:-}" ] && [ -f "$HERE/linux-account-tui.py" ] && command -v python3 >/dev/null 2>&1; then
+        LINUX_ACCOUNT_BIN="$SELF" exec python3 "$HERE/linux-account-tui.py"
+    fi
     while :; do
         hdr "Account"
         printf '  %s1)%s Fleet      the cockpit\n  %s2)%s Connect    sign in · who · device · get everything\n  %s3)%s Infos      contact card + sync\n  %s4)%s WireGuard  %s5)%s AI   %s6)%s Apps\n  %sd)%s Dashboard  every section of the bundle\n  %sq)%s quit\n\n' "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_G" "$C_N" "$C_Y" "$C_N"
