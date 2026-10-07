@@ -243,7 +243,7 @@ ls_ check; check "check passes with file secrets" '[ $? -eq 0 ]'
 printf '***REMOVED***\n' > "$C/vault/gh/token"; ls_ build; check "a redaction stub is refused at build" '[ $? -ne 0 ] && grep -q "placeholder, not a secret" "$T/out"'
 printf 'ghp_PLAIN_TEST_TOKEN\n' > "$C/vault/gh/token"
 printf 'FAKE_A=plain-a-1\n# c\nFAKE_B=plain-b-2\n' > "$C/vault/svc.env"
-printf '# tokens\n@SVC@\nexport ONE=\'@ONE@\'\n' > "$C/tokens.env.tpl"
+printf "# tokens\n@SVC@\nexport ONE='@ONE@'\n" > "$C/tokens.env.tpl"
 jq '.common.secret[".config/tokens.env"] = {template: "c:tokens.env.tpl", values: {SVC: {file: "c:vault/svc.env", export: true}, ONE: {file: "c:vault/gh/token"}}}' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
 ls_ switch; rc=$?
 check "template value with export:true renders KEY=value lines as export KEY=value, comments kept" \
