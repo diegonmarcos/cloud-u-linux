@@ -176,6 +176,50 @@ la apps export "$T/inv.json"; check "inventory exported in AppInventory shape" '
 la wg; check "wg lists declared profiles" 'grep -q "termux-config-v4-full" "$T/out"'
 la ai; check "ai reports tokens" 'grep -q "tokens: " "$T/out"'
 printf '1\n\n3\nb\n6\n\nq\n' | LINUX_ACCOUNT_TUI_TEST=1 sh "$ENGINE" tui > "$T/out" 2>&1; check "tui drives Fleet, Infos, Apps and quits" 'grep -q "Drive (private repos)" "$T/out" && grep -q "linux-store" "$T/out"'
+section "phone (the Account apps over the loopback fleet API)"
+# a tiny stub of libs:devtools AppDebugServer: records the import POST, answers like the route
+cat > "$T/stub.py" <<'EOF'
+import http.server, json, os, sys
+D = sys.argv[1]
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def answer(self, code, body, ctype="application/json"):
+        b = body.encode(); self.send_response(code); self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+    def do_GET(self):
+        p = self.path
+        if p == "/api/system/ping": return self.answer(200, "pong stub\n", "text/plain")
+        if self.headers.get("Authorization") != "Bearer FAKE-FLEET-TOKEN": return self.answer(401, "unauthorized\n", "text/plain")
+        if p.startswith("/api/account/apply?app="): return self.answer(200, json.dumps({"result": "✓ " + p.split("=")[1] + " applied (stub)"}))
+        if p == "/api/account/profiles": return self.answer(200, json.dumps({"showing": "S", "topics": [{"id": "mesh", "filled": 2, "fields": 2}, {"id": "mail", "filled": 4, "fields": 5}]}))
+        self.answer(404, "not found — see /api/docs\n", "text/plain")
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        open(os.path.join(D, "post.body"), "wb").write(body)
+        open(os.path.join(D, "post.meta"), "w").write(self.path + "\n" + (self.headers.get("Authorization") or "") + "\n" + (self.headers.get("Content-Type") or "") + "\n")
+        if self.headers.get("Authorization") != "Bearer FAKE-FLEET-TOKEN": return self.answer(401, "unauthorized\n", "text/plain")
+        if self.path != "/api/account/import": return self.answer(404, "not found — see /api/docs\n", "text/plain")
+        self.answer(200, json.dumps({"verdict": "bundle", "result": "server file fetched through api:import", "topics": [{"id": "mesh", "filled": 2, "fields": 2}, {"id": "git", "filled": 3, "fields": 4}]}))
+s = http.server.HTTPServer(("127.0.0.1", 0), H)
+open(os.path.join(D, "port"), "w").write(str(s.server_address[1]))
+s.serve_forever()
+EOF
+mkdir -p "$T/stub"; python3 "$T/stub.py" "$T/stub" >/dev/null 2>&1 & STUB=$!
+i=0; while [ ! -s "$T/stub/port" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done; PORT="$(cat "$T/stub/port")"
+export LINUX_ACCOUNT_RISH_ENV="$T/rish.env"
+la phone import --host "$PORT"; check "without rish.env: refused with a clear message, nothing posted" '[ $? -ne 0 ] && grep -q "no fleet token" "$T/out" && [ ! -f "$T/stub/post.body" ]'
+printf 'export CLOUD_FLEET_TOKEN=FAKE-FLEET-TOKEN\nOTHER=1\n' > "$T/rish.env"
+# the real bundle is ~1.8 MB, past AppDebugServer's default 256 KiB body ceiling: send one that size
+head -c 1800000 /dev/zero | tr '\0' x > "$T/pad.txt"; jq --rawfile pad "$T/pad.txt" '.pad = $pad' "$V/C_A1-configs/profile-secrets.json" > "$T/fat.json"
+LINUX_ACCOUNT_BUNDLE="$T/fat.json" sh "$ENGINE" phone import --host "$PORT" --host 9 > "$T/out" 2>&1; rc=$?
+check "phone import: one live host lands, the dead one is skipped, exit 0" '[ $rc -eq 0 ] && grep -q "127.0.0.1:$PORT *200 *verdict=bundle *mesh 2/2 *git 3/4" "$T/out" && grep -q "127.0.0.1:9 *skipped — /api/system/ping does not answer" "$T/out"'
+check "...the bundle bytes arrive unchanged (1.8 MB body)" 'cmp -s "$T/fat.json" "$T/stub/post.body" && [ "$(wc -c < "$T/stub/post.body")" -gt 1800000 ]'
+check "...as POST /api/account/import with the bearer from rish.env, as JSON" '[ "$(sed -n 1p "$T/stub/post.meta")" = /api/account/import ] && [ "$(sed -n 2p "$T/stub/post.meta")" = "Bearer FAKE-FLEET-TOKEN" ] && grep -q "^application/json" "$T/stub/post.meta"'
+check "...the token is never printed" '! grep -q FAKE-FLEET-TOKEN "$T/out"'
+la phone import --host 9; check "every host dead: reported, exit non-zero" '[ $? -ne 0 ] && grep -q "skipped" "$T/out" && grep -q "0 ok, 0 failed" "$T/out"'
+LINUX_ACCOUNT_BUNDLE="$T/encrypted.json" la phone import --host "$PORT"; check "a sops file is refused before any POST" '[ $? -ne 0 ] && grep -q "refused: .* is encrypted" "$T/out"'
+la phone apply --host "$PORT"; check "phone apply: mesh, mail, then the profiles summary" '[ $? -eq 0 ] && grep -q "200 *apply mesh *✓ mesh applied" "$T/out" && grep -q "200 *apply mail *✓ mail applied" "$T/out" && grep -q "200 *profiles showing=S *mesh 2/2 *mail 4/5" "$T/out"'
+kill $STUB 2>/dev/null; wait $STUB 2>/dev/null; unset LINUX_ACCOUNT_RISH_ENV
+
 la connect --forget; la fleet; check "forget disconnects; picks survive" '[ $? -ne 0 ] && [ "$(jq -r .device_id "$CFG/state.json")" = galaxy ]'
 
 printf '\n%d passed, %d failed\n' "$pass" "$failn"

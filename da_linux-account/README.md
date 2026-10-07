@@ -99,6 +99,23 @@ to `c3-infra-api/fleet/profile`; 429/5xx/offline are queued, `infos flush`
 retries; `infos erase` DELETEs with the credential first, then rotates the
 install id. No credential ever enters the document.
 
+## Phone: the Account apps, fed by this engine
+
+On the phone, linux-account is the engine that pushes the declared bundle into the Account
+apps (Cloud Account on loopback :38227, SuperApp on :38140 — `cloud-u-android/1_cicd/src/data/debug-ports.json`
+when that checkout sits in the git base, else those defaults) over the token-gated loopback
+fleet API, through the SAME gates as the apps' own UI import (`VaultFile.classify`: a sops/ENC
+file is refused, `schema_version` must be known; then `AccountModel.landBundle` writes the server
+slot S exactly as the file picker does).
+
+    linux-account phone import [--host <port>]…   # POST the connected bundle to every Account host that answers /api/system/ping
+    linux-account phone apply  [--host <port>]…   # /api/account/apply?app=mesh, app=mail, then /api/account/profiles
+
+One line per host: host, HTTP code, the verdict and the per-topic filled/fields counts the route
+returns (a host whose ping does not answer is skipped and said so; a non-200 makes the exit non-zero).
+The fleet token is `CLOUD_FLEET_TOKEN` from `/usr/local/etc/rish.env` (written by the terminal's rish
+bridge; `LINUX_ACCOUNT_RISH_ENV` overrides the path): it rides in a 0600 curl config and is never printed.
+
 ## Bootstrap: the engine that clones, authenticates and fetches
 
 A box with nothing on it:

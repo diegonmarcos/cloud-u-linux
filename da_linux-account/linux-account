@@ -720,6 +720,69 @@ cmd_infos() {
     esac
 }
 
+# ── PHONE: push the declared bundle into the phone's Account apps ──────────
+# linux-account is the engine; the Account apps (Cloud Account, SuperApp) take the
+# bundle over the loopback fleet API (libs:devtools AppDebugServer, token-gated),
+# through the SAME gates as their UI import: VaultFile.classify → AccountModel.landBundle.
+# The fleet token is what the terminal's rish bridge wrote to rish.env; it travels in a
+# 0600 curl config (never argv, never printed).
+RISH_ENV="${LINUX_ACCOUNT_RISH_ENV:-/usr/local/etc/rish.env}"
+PHONE_PKGS="com.diegonmarcos.cloudaccount com.diegonmarcos.superapp"
+PHONE_PORTS_DEFAULT="38227 38140"   # the two above, from cloud-u-android/1_cicd/src/data/debug-ports.json
+phone_ports() {  # the fleet data when the android checkout sits beside the configs, else the defaults
+    local f gb; gb="$(git_base 2>/dev/null)" || true; f="$gb/cloud-u-android/1_cicd/src/data/debug-ports.json"
+    if [ -n "$gb" ] && [ -f "$f" ]; then
+        jq -r --arg pk "$PHONE_PKGS" '.ports as $p | ($pk | split(" "))[] | $p[.] | select(. != null)' "$f" | tr '\n' ' '
+    else echo "$PHONE_PORTS_DEFAULT"; fi
+}
+phone_curlcfg() {  # writes $PHONE_TMP/curl.cfg, 0600, carrying the bearer; dies without a token
+    [ -r "$RISH_ENV" ] || die "no fleet token: $RISH_ENV is missing or unreadable — the terminal's rish bridge writes CLOUD_FLEET_TOKEN there (open the terminal with rish once, or set LINUX_ACCOUNT_RISH_ENV)"
+    local t; t="$(sed -n 's/^\(export \)\{0,1\}CLOUD_FLEET_TOKEN=//p' "$RISH_ENV" | head -1 | tr -d '"'"'"'')"
+    [ -n "$t" ] || die "no fleet token: $RISH_ENV holds no CLOUD_FLEET_TOKEN"
+    umask 077; printf 'header = "Authorization: Bearer %s"\nsilent\nshow-error\nmax-time = 90\n' "$t" > "$PHONE_TMP/curl.cfg"; umask 022
+}
+phone_hosts() {  # args → "host:port" lines (--host <port|host:port>, repeatable), else every Account port on loopback
+    local h; HOSTS=""
+    while [ $# -gt 0 ]; do case "$1" in --host) shift; case "$1" in *:*) h="$1" ;; *) h="127.0.0.1:$1" ;; esac; HOSTS="$HOSTS $h" ;; *) die "phone $PHONE_VERB [--host <port>]…" ;; esac; shift; done
+    [ -n "$HOSTS" ] || for h in $(phone_ports); do HOSTS="$HOSTS 127.0.0.1:$h"; done
+}
+phone_alive() { [ "$(curl -s -m 3 -o /dev/null -w '%{http_code}' "http://$1/api/system/ping" 2>/dev/null)" = 200 ]; }
+phone_counts() {  # response file → "verdict=… id filled/fields …" or the body's first line
+    jq -r '"verdict=" + (.verdict // "?") + "  " + ([.topics[]? | "\(.id) \(.filled)/\(.fields)"] | join("  ")) + (if .result then "  " + .result else "" end)' "$1" 2>/dev/null || head -c 200 "$1" | head -1
+}
+cmd_phone() {
+    local cfg h rc app fails=0 landed=0 kind
+    PHONE_VERB="${1:-}"; [ $# -gt 0 ] && shift
+    case "$PHONE_VERB" in import|apply) ;; *) die "phone [import | apply] [--host <port>]…" ;; esac
+    phone_hosts "$@"
+    PHONE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/linux-account-phone.XXXXXX")"; chmod 700 "$PHONE_TMP"; trap 'rm -rf "$PHONE_TMP"' EXIT
+    phone_curlcfg; cfg="$PHONE_TMP/curl.cfg"
+    if [ "$PHONE_VERB" = import ]; then
+        need_bundle; kind="$(classify "$B")" || die "refused: $B is $kind — nothing sent"
+        say "import: $(wc -c < "$B" | tr -d ' ') bytes ($kind) → $HOSTS"
+    fi
+    for h in $HOSTS; do
+        if ! phone_alive "$h"; then printf '  %-18s skipped — /api/system/ping does not answer\n' "$h"; continue; fi
+        case "$PHONE_VERB" in
+            import)
+                rc="$(curl -K "$cfg" -o "$PHONE_TMP/resp" -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data-binary @"$B" "http://$h/api/account/import" 2>/dev/null)" || rc=000
+                printf '  %-18s %s  %s\n' "$h" "$rc" "$(phone_counts "$PHONE_TMP/resp")"
+                [ "$rc" = 200 ] && landed=$((landed + 1)) || fails=$((fails + 1))
+                ;;
+            apply)
+                for app in mesh mail; do
+                    rc="$(curl -K "$cfg" -o "$PHONE_TMP/resp" -w '%{http_code}' "http://$h/api/account/apply?app=$app" 2>/dev/null)" || rc=000
+                    printf '  %-18s %s  apply %-4s %s\n' "$h" "$rc" "$app" "$(jq -r '.result // empty' "$PHONE_TMP/resp" 2>/dev/null || head -c 200 "$PHONE_TMP/resp" | head -1)"
+                    [ "$rc" = 200 ] && landed=$((landed + 1)) || fails=$((fails + 1))
+                done
+                rc="$(curl -K "$cfg" -o "$PHONE_TMP/resp" -w '%{http_code}' "http://$h/api/account/profiles" 2>/dev/null)" || rc=000
+                printf '  %-18s %s  profiles %s\n' "$h" "$rc" "$(jq -r '"showing=" + ((.showing // "none") | tostring) + "  " + ([.topics[]? | "\(.id) \(.filled)/\(.fields)"] | join("  "))' "$PHONE_TMP/resp" 2>/dev/null || head -c 200 "$PHONE_TMP/resp" | head -1)"
+                ;;
+        esac
+    done
+    [ "$fails" -eq 0 ] && [ "$landed" -gt 0 ] || { say "$PHONE_VERB: $landed ok, $fails failed, $(echo $HOSTS | wc -w | tr -d ' ') host(s)"; return 1; }
+}
+
 # ── APPS: compare + export (AppInventory) ──────────────────────────────────
 cmd_apps() {
     local m="$HOME/.linux-store/current/manifest.json" n d i
@@ -991,6 +1054,9 @@ linux-account — cloud-superapp's Account tab for the Linux userlands
     status            journey + cockpit
   INFOS
     infos [show | set k=v… | push | flush | erase]     contact card; push = ProfileSync POST
+  PHONE (the Account apps on this phone, over the loopback fleet API)
+    phone import [--host <port>]…   POST the connected bundle to every Account host (same gates as the UI import)
+    phone apply  [--host <port>]…   apply?app=mesh, app=mail, then the profiles summary
   SYNC
     sync [--backup]   pull every fleet repo (the SoT), render deb-user-configs, linux-store switch, cockpit
   BOOTSTRAP (a box with nothing)
@@ -1018,6 +1084,7 @@ case "$cmd" in
     status)  cmd_status ;;
     journey) cmd_journey ;;
     infos)   cmd_infos "$@" ;;
+    phone)   cmd_phone "$@" ;;
     apps)    cmd_apps "$@" ;;
     wg)      cmd_wg "$@" ;;
     ai)      cmd_ai ;;
