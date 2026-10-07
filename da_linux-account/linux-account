@@ -598,8 +598,12 @@ cmd_fleet() {
                 && row "github token" MATCH "gh hosts.yml" || row "github token" DIFFERS "gh hosts.yml holds another token"
         else row "github token" ABSENT ".config/gh/hosts.yml"; fi
         if [ -f "$HOME/.ssh/id_rsa" ]; then
-            sha="$(bq '.git.ssh_private_key' | sed -e '$a\' | sha256sum | cut -d' ' -f1)"
-            [ "$(sed -e '$a\' "$HOME/.ssh/id_rsa" | sha256sum | cut -d' ' -f1)" = "$sha" ] && row "ssh key" MATCH ".ssh/id_rsa" || row "ssh key" DIFFERS ".ssh/id_rsa is another key"
+            # Declared via linux-store (tokens.json ssh/id_rsa, a vault stub followed to its key): compare
+            # with what the store realised, as the Tokens card does; the bundle's copy is the fallback.
+            ssha="$(awk -v n=".ssh/id_rsa" '$1 == n { print $2 }' "${LINUX_STORE_ROOT:-$HOME/.linux-store}/secrets.state" 2>/dev/null)"
+            [ -n "$ssha" ] || ssha="$(bq '.git.ssh_private_key' | sed -e '$a\' | sha256sum | cut -d' ' -f1)"
+            if [ "$(sha256sum "$HOME/.ssh/id_rsa" | cut -d' ' -f1)" = "$ssha" ] || [ "$(sed -e '$a\' "$HOME/.ssh/id_rsa" | sha256sum | cut -d' ' -f1)" = "$ssha" ]; then row "ssh key" MATCH ".ssh/id_rsa (declared via linux-store)"
+            else row "ssh key" DIFFERS ".ssh/id_rsa is another key"; fi
         else row "ssh key" ABSENT ".ssh/id_rsa"; fi
         declared="$(bq '.git.repos | length')"; installed="$(bq '.git.repos[] | (if type == "object" then (.name // .repo // .url // "") else . end) | tostring | split("/") | last | sub("\\.git$"; "")' | while read -r n; do [ -n "$n" ] && [ -d "$gb/$n" ] && echo 1; done | wc -l | tr -d ' ')"
         [ "$installed" = "$declared" ] && row "repos" MATCH "$installed/$declared checked out" || row "repos" DIFFERS "$installed/$declared checked out under $gb"
@@ -613,7 +617,15 @@ cmd_fleet() {
         if [ ! -f "$f" ]; then row "tokens" ABSENT "secrets/ai.env"
         elif [ "$(sha256sum "$f" | cut -d' ' -f1)" = "$(st_get 'sha:secrets/ai.env')" ]; then row "tokens ($(bq '.ai.tokens | length'))" MATCH "secrets/ai.env"
         else row "tokens" DIFFERS "secrets/ai.env changed"; fi
-        [ -n "${ANTHROPIC_API_KEY:-}" ] && row "ANTHROPIC_API_KEY" MATCH "exported in this shell" || row "ANTHROPIC_API_KEY" ABSENT "not in this shell (source secrets/ai.env)"
+        # The Anthropic key is a KEYFILE declared in tokens.json (anthropic/api-key, kind keyfile), never a
+        # shell export: an exported ANTHROPIC_API_KEY hijacks Claude Code away from the claude.ai login.
+        akf="$(tok_rows 2>/dev/null | awk -F'\t' '$1 == "anthropic" && $2 == "api-key" && $5 == "keyfile" { print $4 }' | head -1)"
+        if [ -n "$akf" ]; then
+            akf="${akf#"~/"}"
+            if [ -s "$HOME/$akf" ]; then row "anthropic api-key" MATCH "keyfile $akf (never exported)"
+            else row "anthropic api-key" ABSENT "keyfile $akf (linux-account apply)"; fi
+        elif [ -n "${ANTHROPIC_API_KEY:-}" ]; then row "ANTHROPIC_API_KEY" MATCH "exported in this shell"
+        else row "ANTHROPIC_API_KEY" ABSENT "not in this shell (source secrets/ai.env)"; fi
     else row "ai" PENDING "not in bundle"; fi >> "$R"
     card "AI" 1 "$R"
 
