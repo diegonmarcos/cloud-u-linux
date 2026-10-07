@@ -457,7 +457,7 @@ commit_writes() {
         # The include is part of the apply, not advice: without it `ssh gcp-proxy` says "Could not
         # resolve hostname" while config.d/fleet sits there. Prepended (Include applies to what follows).
         if ! grep -qs 'config.d/fleet\|config.d/\*' "$HOME/.ssh/config" 2>/dev/null; then
-            { printf 'Include config.d/*\n'; cat "$HOME/.ssh/config" 2>/dev/null; } > "$HOME/.ssh/config.tmp" \
+            { printf 'Include config.d/*\n'; cat "$HOME/.ssh/config" 2>/dev/null || :; } > "$HOME/.ssh/config.tmp" \
                 && chmod 600 "$HOME/.ssh/config.tmp" && mv -f "$HOME/.ssh/config.tmp" "$HOME/.ssh/config" \
                 && say "mesh: ~/.ssh/config now includes config.d/*"
         fi
