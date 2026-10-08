@@ -4,7 +4,7 @@
   "_exposure": {
     "_doc": "Only mcpServers below are registered and preload tool schemas. Every server in _mcp_catalogue is reachable but NOT preloaded: run tools/list against its url at the moment you need it.",
     "budget_tokens": 20000,
-    "projected_tokens": 38235
+    "projected_tokens": 20705
   },
   "mcpServers": {
     "cloud-cgc-pub-mcp": {
@@ -14,58 +14,9 @@
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
       }
     },
-    "cloud-drive-mcp": {
-      "type": "http",
-      "url": "https://mcp.diegonmarcos.com/cloud-drive-mcp/mcp",
-      "headers": {
-        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      }
-    },
     "cloud-infra-mcp": {
       "type": "http",
       "url": "https://mcp.diegonmarcos.com/c3-infra-mcp/mcp",
-      "headers": {
-        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      }
-    },
-    "cloud-mail-mcp": {
-      "type": "http",
-      "url": "https://mcp.diegonmarcos.com/mail-mcp/mcp",
-      "headers": {
-        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      }
-    },
-    "cloud-mattermost-mcp": {
-      "type": "http",
-      "url": "https://mcp.diegonmarcos.com/mattermost-mcp/mcp",
-      "headers": {
-        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      }
-    },
-    "cloud-services-mcp": {
-      "type": "http",
-      "url": "https://mcp.diegonmarcos.com/c3-services-mcp/mcp",
-      "headers": {
-        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      }
-    },
-    "cloud-superapp-mcp": {
-      "type": "http",
-      "url": "https://mcp.diegonmarcos.com/cloud-superapp-mcp/mcp",
-      "headers": {
-        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      }
-    },
-    "google-personal-mcp": {
-      "type": "http",
-      "url": "https://mcp.diegonmarcos.com/g-personal/mcp",
-      "headers": {
-        "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
-      }
-    },
-    "google-workspace-mcp": {
-      "type": "http",
-      "url": "https://mcp.diegonmarcos.com/g-workspace/mcp",
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
       }

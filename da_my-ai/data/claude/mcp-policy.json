@@ -56,6 +56,8 @@
   "stdio_extras": {},
   "platforms": {
     "termux": {
+      "filter": ["cloud-cgc-pub-mcp", "cloud-infra-mcp"],
+      "_doc_filter": "Only the servers the PUBLIC gateway actually serves (2026-10-08 probe: every other https://mcp.diegonmarcos.com path answers -32004 'No public MCP route at this path (mesh-only or unknown)'). The phone's list carries public urls only, so the other six could never connect from it, and each still cost a TLS handshake at every startup on a CPU-starved proot. Not a budget cut: add a server back here the day its public route exists.",
       "direct_http": false,
       "_doc_direct_http": "No mesh-only servers (cloud-cgc-pvt-mcp, cloud-vault-mcp at 10.0.0.6) on the phone: it is off the mesh most of the time, and Claude Code waited 12-27 s on each dead one at every startup (2026-10-07). Their data is reachable through cloud-cgc-pub-mcp and the vault checkout.",
       "http": true,
