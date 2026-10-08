@@ -7,7 +7,7 @@
 # session, REGARDLESS of whether it's actually reachable. That text is an
 # auth-approval gate, not a liveness signal, so trusting it made every server
 # render identically (all "pending" — the "all half-circles" bug). Real fix:
-# use `claude mcp list` only to discover each server's declared transport
+# use ~/.mcp.json only to discover each server's declared transport
 # (URL for HTTP, command/path for stdio), then probe THAT directly — curl the
 # URL for HTTP servers, check the target file/command exists for stdio ones.
 # Still cached (15-min TTL, lazy background refresh) since the probe fan-out
@@ -51,19 +51,25 @@ if [ "${1:-}" = "--verdict" ]; then
 fi
 
 # --- Hidden mode: the detached refresher (`$0 --refresh`) -------------------
-# `claude mcp list` health-checks every server and takes ~15s. It MUST run
+# The probe curls every server (5 s cap each). It MUST run
 # detached (setsid, below) — an attached background child is reaped together
 # with the statusline's process group the instant the render returns, killing
 # the probe mid-flight and leaving a 0-byte cache. This mode blocks on the
 # probe, writes the cache atomically, then frees the lock.
 if [ "${1:-}" = "--refresh" ]; then
+  # The server list comes straight from ~/.mcp.json, NOT `claude mcp list`:
+  # that booted a whole second Claude Code (settings, plugins, every MCP
+  # connect, ~20 s) on each refresh, which on the phone landed right on top of
+  # a starting session and froze its keyboard (2026-10-07). Same "name: target"
+  # line shape, so the probe loop below is unchanged; per-server curl stays 5 s.
+  # ponytail: ~/.mcp.json only; add ~/.claude.json mcpServers if servers move there.
   # Overall cap: 60 s on a desktop; the phone's refresher sets 20 (its whole
-  # batch budget) — per-server curl stays at 5 s either way.
-  run="claude mcp list"
-  command -v timeout >/dev/null 2>&1 && run="timeout ${CLAUDE_MCP_PROBE_TIMEOUT:-60} $run"
+  # batch budget). A deadline, checked per server, since the loop is shell.
+  _end=$(( $(date +%s) + ${CLAUDE_MCP_PROBE_TIMEOUT:-60} ))
   tmp="$CACHE.$$"
-  $run 2>/dev/null | while IFS= read -r line; do
+  jq -r '.mcpServers // {} | to_entries[] | "\(.key): \(.value.url // ([.value.command] + (.value.args // []) | join(" ")))"' "$HOME/.mcp.json" 2>/dev/null | while IFS= read -r line; do
     case "$line" in *:*) ;; *) continue ;; esac
+    [ "$(date +%s)" -lt "$_end" ] || break
     name=${line%%:*}; name=$(printf '%s' "$name" | tr -d '[:space:]')
     [ -z "$name" ] && continue
     # Line shape: "name: <target> - <status text>" — target is either an
@@ -110,7 +116,7 @@ done
 servers=$(printf '%s\n' "$servers" | sed '/^$/d' | sort -u)
 [ -z "$servers" ] && exit 0
 
-# --- Lazy refresh: fire at most one background `claude mcp list` when stale ---
+# --- Lazy refresh: fire at most one background probe when stale ---
 need=false
 if [ ! -f "$CACHE" ]; then
   need=true

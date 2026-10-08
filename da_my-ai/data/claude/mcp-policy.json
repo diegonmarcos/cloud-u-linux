@@ -56,6 +56,8 @@
   "stdio_extras": {},
   "platforms": {
     "termux": {
+      "direct_http": false,
+      "_doc_direct_http": "No mesh-only servers (cloud-cgc-pvt-mcp, cloud-vault-mcp at 10.0.0.6) on the phone: it is off the mesh most of the time, and Claude Code waited 12-27 s on each dead one at every startup (2026-10-07). Their data is reachable through cloud-cgc-pub-mcp and the vault checkout.",
       "http": true,
       "stdio": false,
       "_doc": "HTTP-ONLY by decree (2026-08-08): each stdio/tsx spawn transpiles TypeScript through proot-taxed IO and cost 30s+ of claude startup."

@@ -299,8 +299,10 @@ fi
 # the axis that goes stale — which servers exist, where they point, and how they
 # are reached. Auth delivery is the deployer's business; wiring is the SoT's.
 AXIS='.mcpServers | with_entries(.value |= {type: (.type // "http"), url: .url, command: .command})'
-case "$(uname -o 2>/dev/null)/${PREFIX:-}" in
-  *[Aa]ndroid*|*com.termux*) PLAT=termux ;;
+# The proot Debian on the phone reports plain GNU/Linux, so also trust the
+# linux-store profile its generation is named after (termux-N).
+case "$(uname -o 2>/dev/null)/${PREFIX:-}/$(readlink "$HOME/.linux-store/current" 2>/dev/null)" in
+  *[Aa]ndroid*|*com.termux*|*/termux-[0-9]*) PLAT=termux ;;
   *)                         PLAT=desktop ;;
 esac
 if [ -f "$HOME/.mcp.json" ]; then

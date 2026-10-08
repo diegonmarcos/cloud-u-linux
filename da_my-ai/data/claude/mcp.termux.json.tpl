@@ -4,7 +4,7 @@
   "_exposure": {
     "_doc": "Only mcpServers below are registered and preload tool schemas. Every server in _mcp_catalogue is reachable but NOT preloaded: run tools/list against its url at the moment you need it.",
     "budget_tokens": 20000,
-    "projected_tokens": 41686
+    "projected_tokens": 38235
   },
   "mcpServers": {
     "cloud-cgc-pub-mcp": {
@@ -13,10 +13,6 @@
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
       }
-    },
-    "cloud-cgc-pvt-mcp": {
-      "type": "http",
-      "url": "http://10.0.0.6:3107/mcp"
     },
     "cloud-drive-mcp": {
       "type": "http",
@@ -59,10 +55,6 @@
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
       }
-    },
-    "cloud-vault-mcp": {
-      "type": "http",
-      "url": "http://10.0.0.6:3111/mcp"
     },
     "google-personal-mcp": {
       "type": "http",

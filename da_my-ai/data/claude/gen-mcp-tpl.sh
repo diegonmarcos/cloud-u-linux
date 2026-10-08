@@ -90,18 +90,22 @@ END_GEN = "END GENERATED MCP SERVERS"
 auth_host = pol["auth_host"]
 
 
-def http_set(auth, filter_names=None):
+def http_set(auth, filter_names=None, direct=True):
     servers = collections.OrderedDict()
     for name in sorted(dist):
         if filter_names is not None and name not in filter_names:
             continue
+        if not direct and name in pol.get("direct_http", {}):
+            continue  # mesh-only (10.0.0.6) server, opted out below
         src = dist[name]
         entry = collections.OrderedDict([("type", src.get("type", "http")), ("url", src["url"])])
         if auth_host in src["url"]:
             entry["headers"] = auth
         servers[name] = entry
     # Endpoints the proxy-based deriver cannot express (reached by direct mesh IP).
-    for name, entry in pol.get("direct_http", {}).items():
+    # direct=False (platform `direct_http: false`): a client that is usually OFF the
+    # mesh skips these — each dead one cost 12-27 s of every startup on the phone.
+    for name, entry in (pol.get("direct_http", {}) if direct else {}).items():
         if filter_names is not None and name not in filter_names:
             continue
         servers[name] = entry
@@ -265,7 +269,7 @@ for plat, rules in pol["platforms"].items():
         if unknown:
             raise SystemExit(f"{plat}: filter names not in the derived set: {unknown}")
 
-    servers = http_set(rules.get("auth_header", pol["auth_header"]), filter_names)
+    servers = http_set(rules.get("auth_header", pol["auth_header"]), filter_names, rules.get("direct_http", True))
     if rules.get("stdio"):
         servers.update(stdio)
     if rules.get("url_mode") == "mesh":
