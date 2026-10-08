@@ -776,11 +776,14 @@ cmd_phone() {
         need_bundle; kind="$(classify "$B")" || die "refused: $B is $kind — nothing sent"
         say "import: $(wc -c < "$B" | tr -d ' ') bytes ($kind) → $HOSTS"
     fi
+    # The device pick travels with the bundle (#904): the Account on the phone otherwise
+    # infers it from the live tunnel's address and inherits whoever's profile is up.
+    dev="$(DEV)"
     for h in $HOSTS; do
         if ! phone_alive "$h"; then printf '  %-18s skipped — /api/system/ping does not answer\n' "$h"; continue; fi
         case "$PHONE_VERB" in
             import)
-                rc="$(curl -K "$cfg" -o "$PHONE_TMP/resp" -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data-binary @"$B" "http://$h/api/account/import" 2>/dev/null)" || rc=000
+                rc="$(curl -K "$cfg" -o "$PHONE_TMP/resp" -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data-binary @"$B" "http://$h/api/account/import?device=$dev" 2>/dev/null)" || rc=000
                 printf '  %-18s %s  %s\n' "$h" "$rc" "$(phone_counts "$PHONE_TMP/resp")"
                 [ "$rc" = 200 ] && landed=$((landed + 1)) || fails=$((fails + 1))
                 ;;

@@ -197,7 +197,7 @@ class H(http.server.BaseHTTPRequestHandler):
         open(os.path.join(D, "post.body"), "wb").write(body)
         open(os.path.join(D, "post.meta"), "w").write(self.path + "\n" + (self.headers.get("Authorization") or "") + "\n" + (self.headers.get("Content-Type") or "") + "\n")
         if self.headers.get("Authorization") != "Bearer FAKE-FLEET-TOKEN": return self.answer(401, "unauthorized\n", "text/plain")
-        if self.path != "/api/account/import": return self.answer(404, "not found — see /api/docs\n", "text/plain")
+        if self.path.split("?")[0] != "/api/account/import": return self.answer(404, "not found — see /api/docs\n", "text/plain")
         self.answer(200, json.dumps({"verdict": "bundle", "result": "server file fetched through api:import", "topics": [{"id": "mesh", "filled": 2, "fields": 2}, {"id": "git", "filled": 3, "fields": 4}]}))
 s = http.server.HTTPServer(("127.0.0.1", 0), H)
 open(os.path.join(D, "port"), "w").write(str(s.server_address[1]))
@@ -213,7 +213,8 @@ head -c 1800000 /dev/zero | tr '\0' x > "$T/pad.txt"; jq --rawfile pad "$T/pad.t
 LINUX_ACCOUNT_BUNDLE="$T/fat.json" sh "$ENGINE" phone import --host "$PORT" --host 9 > "$T/out" 2>&1; rc=$?
 check "phone import: one live host lands, the dead one is skipped, exit 0" '[ $rc -eq 0 ] && grep -q "127.0.0.1:$PORT *200 *verdict=bundle *mesh 2/2 *git 3/4" "$T/out" && grep -q "127.0.0.1:9 *skipped — /api/system/ping does not answer" "$T/out"'
 check "...the bundle bytes arrive unchanged (1.8 MB body)" 'cmp -s "$T/fat.json" "$T/stub/post.body" && [ "$(wc -c < "$T/stub/post.body")" -gt 1800000 ]'
-check "...as POST /api/account/import with the bearer from rish.env, as JSON" '[ "$(sed -n 1p "$T/stub/post.meta")" = /api/account/import ] && [ "$(sed -n 2p "$T/stub/post.meta")" = "Bearer FAKE-FLEET-TOKEN" ] && grep -q "^application/json" "$T/stub/post.meta"'
+check "...as POST /api/account/import with the bearer from rish.env, as JSON" '[ "$(sed -n 1p "$T/stub/post.meta" | cut -d? -f1)" = /api/account/import ] && [ "$(sed -n 2p "$T/stub/post.meta")" = "Bearer FAKE-FLEET-TOKEN" ] && grep -q "^application/json" "$T/stub/post.meta"'
+check "...with the device the journey picked in the query (?device=<id>), so the phone's Account selects the same device" 'case "$(sed -n 1p "$T/stub/post.meta")" in /api/account/import?device=?*) true;; *) false;; esac'
 check "...the token is never printed" '! grep -q FAKE-FLEET-TOKEN "$T/out"'
 la phone import --host 9; check "every host dead: reported, exit non-zero" '[ $? -ne 0 ] && grep -q "skipped" "$T/out" && grep -q "0 ok, 0 failed" "$T/out"'
 LINUX_ACCOUNT_BUNDLE="$T/encrypted.json" la phone import --host "$PORT"; check "a sops file is refused before any POST" '[ $? -ne 0 ] && grep -q "refused: .* is encrypted" "$T/out"'
