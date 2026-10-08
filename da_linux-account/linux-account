@@ -137,14 +137,11 @@ st_set() {  # key value
 }
 st_del() { [ -f "$STATE" ] && jq --arg k "$1" 'del(.[$k])' "$STATE" > "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"; }
 
+# ONE place for every repo: ~/cloud-drive-shared-store/git (GIT_BASE overrides
+# it for tests). No ~/git candidate — a second candidate is a second copy.
 git_base() {
-    if [ -n "${GIT_BASE:-}" ] && [ -d "$GIT_BASE" ]; then echo "$GIT_BASE"; return 0; fi
-    for _c in "$HOME/git" "$HOME/cloud-drive-shared-store/git"; do
-        [ -d "$_c/cloud-me_vault" ] || [ -d "$_c/cloud-me_configs" ] || continue
-        echo "$_c"; return 0
-    done
-    for _c in "$HOME/git" "$HOME/cloud-drive-shared-store/git"; do [ -d "$_c" ] && { echo "$_c"; return 0; }; done
-    return 1
+    _gb="${GIT_BASE:-$HOME/cloud-drive-shared-store/git}"
+    [ -d "$_gb" ] && echo "$_gb"
 }
 
 # ── the bundle ─────────────────────────────────────────────────────────────

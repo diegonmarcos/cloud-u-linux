@@ -2,7 +2,6 @@
   "enableAllProjectMcpServers": true,
   "env": {
     "MCP_TIMEOUT": "5000",
-    "GIT_BASE": "@HOME@/cloud-drive-shared-store/git",
     "DISABLE_AUTOUPDATER": "1",
     "MCP_CONNECT_TIMEOUT_MS": "3000"
   },
@@ -38,7 +37,6 @@
   "_doc_device_prefs": "theme/model are THIS device's Claude Code UI prefs (what /config writes). They live in the overlay, not base, so a linux-store switch — which renders settings.json whole — keeps them.",
   "theme": "dark",
   "model": "fable",
-  "_env_git_base_comment": "GIT_BASE: on the phone the checkouts live on the CloudDrive mount, not ~/git (settings.base.json). linux-store reads this too — a wrong value here sent its switch to /root/git on 2026-10-05.",
   "_env_autoupdater_comment": "DISABLE_AUTOUPDATER: on the phone Claude Code's own updater re-runs npm postinstall, whose hard-link under proot leaves /usr/local/bin/claude dangling (2026-10-05, twice, 2.1.281→2.1.289). Updates on this box go through the declared store, not the updater.",
   "_env_mcp_timeout_comment": "MCP_CONNECT_TIMEOUT_MS 3000 / MCP_TIMEOUT 5000 on the phone (base says 30000/10000): the list carries two mesh-only servers (cloud-cgc-pvt-mcp, cloud-vault-mcp at 10.0.0.6) that cannot connect while the mesh is down, and Claude Code waits the full connect timeout on each at startup — 2026-10-06 that was 5 minutes before the prompt appeared. A dead server on the phone must cost a second, not thirty; the mesh-up case reconnects fine within 3 s on wg.",
   "_statusLine_comment": "Re-enabled 2026-10-06 on the read-only paint redesign (base statusLine applies; refreshInterval 5 below). It was null for a day: the old fallback forked five helpers per paint and the OOM killer took every session.",

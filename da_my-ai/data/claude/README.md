@@ -64,7 +64,7 @@ platforms, one set of servers:
 The container's list writes **out of this repository** because the image is
 built from a cloud-u-containers build context that cannot read this checkout —
 its copy has to be committed there. That is the `output` field on the platform,
-resolved against `${GIT_BASE:-$HOME/git}`, and it is skipped rather than failed
+resolved against `${GIT_BASE:-$HOME/cloud-drive-shared-store/git}`, and it is skipped rather than failed
 when that checkout is absent (cloud-infra's lint-pipeline clones only
 cloud-u-linux). cloud-u-containers' own `src/test-mcp-contract.sh` asserts the
 same equality from the other side, so one of the two always runs.
@@ -109,7 +109,7 @@ connection time instead and prints `{}` when it finds none, which is a 403 rathe
 a broken config.
 
 Sources, first hit wins: `AUTHELIA_BEARER_TOKEN` → **client_credentials mint** →
-`$AUTHELIA_OIDC_TOKENS_DIR` → `<repo>/IV_vault` → `~/git/cloud-vault`.
+`$AUTHELIA_OIDC_TOKENS_DIR` → `<repo>/IV_vault` → `~/cloud-drive-shared-store/git/cloud-me_vault`.
 
 The mint is what makes a container work. Every source but the first two needs a vault
 checkout, and a container has none and cannot get one in time — MCP servers bind at

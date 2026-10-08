@@ -42,12 +42,12 @@
 set -euo pipefail
 
 SOT="$(cd "$(dirname "$0")" && pwd)"
-DIST="${CLOUD_INFRA_DIR:-$HOME/git/cloud-infra}/1_cloud-configs/dist/mcp.json"
+DIST="${CLOUD_INFRA_DIR:-${GIT_BASE:-$HOME/cloud-drive-shared-store/git}/cloud-infra}/1_cloud-configs/dist/mcp.json"
 POLICY="$SOT/mcp-policy.json"
 # Where a platform's `output` path is anchored. Same variable settings.base.json
 # exports, so a machine with a non-default checkout layout relocates every
 # out-of-repo target at once.
-GIT_BASE="${GIT_BASE:-$HOME/git}"
+GIT_BASE="${GIT_BASE:-$HOME/cloud-drive-shared-store/git}"
 
 [ -f "$DIST" ]   || { echo "missing derived HTTP set: $DIST" >&2; exit 1; }
 [ -f "$POLICY" ] || { echo "missing policy: $POLICY" >&2; exit 1; }

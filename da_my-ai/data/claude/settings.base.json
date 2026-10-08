@@ -59,10 +59,10 @@
     "MCP_CONNECT_TIMEOUT_MS": "30000",
     "AUTHELIA_OIDC_CLIENT_ID": "claude-admin",
     "AUTHELIA_TOKEN_URL": "https://auth.diegonmarcos.com/api/oidc/token",
-    "GIT_BASE": "@HOME@/git",
+    "GIT_BASE": "@HOME@/cloud-drive-shared-store/git",
     "NODE_PATH": "@HOME@/.node_modules/node_modules",
-    "AUTHELIA_OIDC_CREDENTIALS_DIR": "@HOME@/git/cloud-vault/A0_keys/providers/authelia/signed-bearer_jwt/credentials",
-    "AUTHELIA_OIDC_TOKENS_DIR": "@HOME@/git/cloud-vault/A0_keys/providers/authelia/signed-bearer_jwt/tokens"
+    "AUTHELIA_OIDC_CREDENTIALS_DIR": "@HOME@/cloud-drive-shared-store/git/cloud-me_vault/A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/credentials",
+    "AUTHELIA_OIDC_TOKENS_DIR": "@HOME@/cloud-drive-shared-store/git/cloud-me_vault/A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/tokens"
   },
   "alwaysThinkingEnabled": true,
   "_remoteControlAtStartup_comment": "Arm Remote Control on every session instead of having to remember `claude rc` per chat. Requires feature-flag evaluation, which is why CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC was dropped from settings.termux.json. It also requires api.anthropic.com, so sessions started with CLAUDE_SUPERSET_MODE=remote (ANTHROPIC_BASE_URL at the claude-api-superset proxy) still cannot use it — this only makes it the default wherever it is possible at all.",

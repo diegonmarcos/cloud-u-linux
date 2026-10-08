@@ -70,7 +70,7 @@ fi
 _p="$DIR"
 while [ "$_p" != "/" ]; do
   _p="$(dirname "$_p")"
-  # Stop at a repo boundary rather than wandering into $HOME/git. -e, not
+  # Stop at a repo boundary rather than wandering into the git base. -e, not
   # -d: a submodule checkout (a_solutions is one) has .git as a FILE.
   [ -e "$_p/.git" ] && break
   if [ -f "$_p/tsconfig.json" ]; then
@@ -85,7 +85,7 @@ done
 # Blocks briefly so the DB is consistent before the server opens it.
 case "$ENTRY" in
   */user-ai_cloud-cgc-*mcp/*)
-    _pull="$HOME/git/cloud-infra/1_cicd/src/scripts/cloud-cgc-db-pull.sh"
+    _pull="${GIT_BASE:-$HOME/cloud-drive-shared-store/git}/cloud-infra/1_cicd/src/scripts/cloud-cgc-db-pull.sh"
     _stamp="$HOME/.cache/cgc-db-pull.stamp"
     if [ -f "$_pull" ] && command -v docker >/dev/null 2>&1; then
       if [ ! -f "$_stamp" ] || [ -n "$(find "$_stamp" -mtime +1 2>/dev/null)" ]; then

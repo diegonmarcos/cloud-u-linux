@@ -69,11 +69,9 @@ else
 fi
 
 # ── 2. checkouts ────────────────────────────────────────────────────────────
-if [ -n "${GIT_BASE:-}" ]; then GB="$GIT_BASE"
-elif [ -d "$HOME/git" ]; then GB="$HOME/git"
-elif [ -d "$HOME/cloud-drive-shared-store/git" ]; then GB="$HOME/cloud-drive-shared-store/git"
-else GB="$HOME/git"; mkdir -p "$GB"; say "created $GB"
-fi
+# ONE place for every repo, on every machine — no ~/git fallback.
+GB="${GIT_BASE:-$HOME/cloud-drive-shared-store/git}"
+[ -d "$GB" ] || { mkdir -p "$GB"; say "created $GB"; }
 say "git base: $GB"
 
 for r in cloud-me_configs cloud-u-linux; do

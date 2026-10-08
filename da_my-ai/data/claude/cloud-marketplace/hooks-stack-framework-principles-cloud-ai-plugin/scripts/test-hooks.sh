@@ -163,7 +163,7 @@ if [ -f "$POLICY" ] && [ -f "$SOT_DIR/mcp.desktop.json.tpl" ]; then
         filter="$(jq -r --arg p "$plat" '.platforms[$p].filter // empty' "$POLICY")"
         out="$(jq -r --arg p "$plat" '.platforms[$p].output // ""' "$POLICY")"
         if [ -n "$out" ]; then
-            list="${GIT_BASE:-$HOME/git}/$out"
+            list="${GIT_BASE:-$HOME/cloud-drive-shared-store/git}/$out"
         else
             list="$SOT_DIR/mcp.$plat.json.tpl"
         fi

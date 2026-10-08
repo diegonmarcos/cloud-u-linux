@@ -69,18 +69,15 @@ GENS="$ROOT/generations"
 CUR="$ROOT/current"
 DEVLIST="$ROOT/dev.list"
 
-# The git base: where the checkouts live. The phone keeps them on the
-# CloudDrive mount, the desktop under ~/git. Needed BEFORE the declaration,
-# because the declaration itself lives in a checkout (cloud-me_configs).
+# The git base: where the checkouts live. ONE place on every machine:
+# ~/cloud-drive-shared-store/git. There is no ~/git fallback — a second
+# candidate is how two copies of a repo happen. GIT_BASE overrides it (the
+# tests point it at a fixture tree). Needed BEFORE the declaration, because
+# the declaration itself lives in a checkout (cloud-me_configs).
 git_base() {
-    if [ -n "${GIT_BASE:-}" ]; then
-        [ -d "$GIT_BASE" ] || die "GIT_BASE=$GIT_BASE is not a directory (set by the environment — on the phone ~/.claude/settings.json env must point it at the CloudDrive mount)"
-        echo "$GIT_BASE"; return 0
-    fi
-    for _c in "$HOME/git" "$HOME/cloud-drive-shared-store/git"; do
-        if [ -d "$_c" ]; then echo "$_c"; return 0; fi
-    done
-    die "no git base: set GIT_BASE (looked in ~/git and ~/cloud-drive-shared-store/git)"
+    _gb="${GIT_BASE:-$HOME/cloud-drive-shared-store/git}"
+    [ -d "$_gb" ] || die "git base $_gb is not a directory (every repo lives in ~/cloud-drive-shared-store/git; GIT_BASE overrides)"
+    echo "$_gb"
 }
 
 # The declaration is CONFIG, so it lives with the rest of the user's config in
