@@ -528,7 +528,11 @@ build_secret() {
                 ! grep -qE '^\*\*\*|REMOVED|REDACTED|CHANGEME|<[A-Z_]+>$' "$f" || die "secret/$k: $name: $f holds a placeholder, not a secret — refused"
                 # "export": true — the value is a KEY=value env file; each such
                 # line is rendered as `export KEY=value` (linux-account's tokens.env)
-                vals="$(printf '%s' "$vals" | jq -c --arg n "$name" --arg f "$f" --arg ph "$ph" --argjson e "$(printf '%s' "$v" | jq --arg n "$name" '.values[$n].export == true')" '. + {($n): {file:$f, plain:true, placeholder:$ph, export:$e}}')"
+                # "json": ".field" — the file is JSON and the value is that one
+                # string (the vault's Authelia token files: .access_token).
+                jp="$(printf '%s' "$v" | jq -r --arg n "$name" '.values[$n].json // empty')"
+                [ -z "$jp" ] || [ -n "$(jq -r "$jp // empty" "$f" 2>/dev/null)" ] || die "secret/$k: $name: $f has no $jp"
+                vals="$(printf '%s' "$vals" | jq -c --arg n "$name" --arg f "$f" --arg ph "$ph" --arg jp "$jp" --argjson e "$(printf '%s' "$v" | jq --arg n "$name" '.values[$n].export == true')" '. + {($n): {file:$f, plain:true, placeholder:$ph, export:$e, json:$jp}}')"
                 continue
             fi
             f="$(resolve_src "$(printf '%s' "$v" | jq -r --arg n "$name" '.values[$n].sops // empty')")" || exit 1
@@ -567,6 +571,8 @@ render_secret() {
                 f="$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].file')"
                 if [ "$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].export // false')" = true ]; then
                     sed 's/^\([A-Za-z_][A-Za-z0-9_]*=\)/export \1/' "$f" > "$d/v$i" || { rm -rf "$d"; return 1; }
+                elif [ -n "$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].json // empty')" ]; then
+                    jq -rj "$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].json')" "$f" > "$d/v$i" || { rm -rf "$d"; return 1; }
                 elif [ "$(printf '%s' "$src" | jq -r --arg n "$name" '.values[$n].plain // false')" = true ]; then
                     cp "$f" "$d/v$i" || { rm -rf "$d"; return 1; }
                 else

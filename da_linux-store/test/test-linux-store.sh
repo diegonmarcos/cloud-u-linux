@@ -248,6 +248,12 @@ jq '.common.secret[".config/tokens.env"] = {template: "c:tokens.env.tpl", values
 ls_ switch; rc=$?
 check "template value with export:true renders KEY=value lines as export KEY=value, comments kept" \
     '[ $rc -eq 0 ] && grep -qx "export FAKE_A=plain-a-1" "$HOME/.config/tokens.env" && grep -qx "# c" "$HOME/.config/tokens.env" && grep -qx "export ONE='"'"'ghp_PLAIN_TEST_TOKEN'"'"'" "$HOME/.config/tokens.env" && [ "$(stat -c %a "$HOME/.config/tokens.env")" = 600 ]'
+printf '{"access_token": "at-JSON-1", "refresh_token": "rt-x"}\n' > "$C/vault/tok.json"
+printf '{"h": "Bearer ${TOK-X}", "g": "Bearer ${TOK-X}"}\n' > "$C/mcp.tpl"
+jq '.common.secret[".mcp.json"] = {template: "c:mcp.tpl", values: {TOK: {file: "c:vault/tok.json", json: ".access_token", placeholder: "${TOK-X}"}}}' "$T/store.json" > "$T/s" && mv "$T/s" "$T/store.json"
+ls_ switch; rc=$?
+check "json value: one field of a JSON file fills every placeholder, nothing else of it" \
+    '[ $rc -eq 0 ] && [ "$(jq -r .h,.g "$HOME/.mcp.json" | sort -u)" = "Bearer at-JSON-1" ] && ! grep -q rt-x "$HOME/.mcp.json"'
 check "no env value under the store root" '! grep -rqs plain-a-1 "$R"'
 
 section "optional entries + html"
