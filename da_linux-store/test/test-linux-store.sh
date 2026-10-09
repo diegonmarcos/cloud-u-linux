@@ -157,6 +157,16 @@ ls_ switch-generation desktop-1; check "switching to the other profile is refuse
 section "fetch"
 jq --arg s "$(printf 0%.0s $(seq 64))" '.common.lib.payload.sha256 = $s' "$T/store.json" > "$T/bad.json"
 LINUX_STORE_DECLARATION="$T/bad.json" ls_ switch; check "fetch with the wrong sha256 is refused" '[ $? -ne 0 ] && grep -q "does not match the declared sha256" "$T/out"'
+# sha256_from: the hash read from a hashes file (SRI form, like da_my-ai/nix/hashes.json)
+printf '{"aarch64-linux": {"payload": "sha256-%s"}}\n' "$(python3 -c 'import sys,hashlib,base64;print(base64.b64encode(hashlib.sha256(open(sys.argv[1],"rb").read()).digest()).decode())' "$T/payload")" > "$C/hashes.json"
+jq --arg t "$T" '.common.lib.payload = {"fetch": ("file://" + $t + "/payload"), "sha256_from": "c:hashes.json#aarch64-linux.payload"}' "$T/store.json" > "$T/sf.json"
+LINUX_STORE_DECLARATION="$T/sf.json" ls_ build; check "fetch with sha256_from (SRI in a hashes file) builds" '[ $? -eq 0 ]'
+printf '{"aarch64-linux": {"payload": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}\n' > "$C/hashes.json"
+LINUX_STORE_DECLARATION="$T/sf.json" ls_ build; check "...and a wrong hash there is refused" '[ $? -ne 0 ] && grep -q "does not match" "$T/out"'
+rm -f "$C/hashes.json" "$T/sf.json"
+jq '.common.lib.payload.fetch = "file:///nonexistent/payload"' "$T/store.json" > "$T/gone.json"
+LINUX_STORE_DECLARATION="$T/gone.json" ls_ build; check "a fetch the store already holds (same sha256) needs no download" '[ $? -eq 0 ]'
+rm -f "$T/gone.json"
 
 section "dev mode"
 ls_ dev .claude/rgignore; check "dev links to the repo source" '[ "$(readlink "$HOME/.claude/rgignore")" = "$C/rgignore" ]'

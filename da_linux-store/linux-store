@@ -342,10 +342,27 @@ build_entry() {
         add_store "$tmp" "$k"; t="$OBJ"; kind=path
     else
         sha="$(printf '%s' "$v" | jq -r '.sha256 // empty')"
+        # "sha256_from": "<src>#<a.b>" — the hash lives in a file CI rewrites on
+        # every release (da_my-ai/nix/hashes.json), so a rolling `latest` tag never
+        # outruns a literal pinned here. Hex or SRI (sha256-<base64>).
+        hf="$(printf '%s' "$v" | jq -r '.sha256_from // empty')"
+        if [ -n "$hf" ]; then
+            f="$(resolve_src "${hf%%#*}")" || exit 1
+            [ -f "$f" ] || die "$l/$k: sha256_from: $f does not exist"
+            sha="$(jq -r --arg p "${hf#*#}" 'getpath($p | split(".")) // empty' "$f")"
+            [ -n "$sha" ] || die "$l/$k: sha256_from: $f has no ${hf#*#}"
+            case "$sha" in sha256-*) sha="$(printf '%s' "${sha#sha256-}" | base64 -d | od -An -tx1 -v | tr -d ' \n')" ;; esac
+        fi
         [ -n "$sha" ] || die "$l/$k: fetch without sha256 is not reproducible — refused"
         command -v curl >/dev/null 2>&1 || die "$l/$k: fetch needs curl"
         stage_tmp; tmp="$TMPP"
-        if ! curl -fsSL -o "$tmp" "$url"; then
+        # The store already holding these exact bytes is a cache hit: no download.
+        # Every switch used to re-fetch every binary (my-webserver: 122 MB, 219 s
+        # on the phone), so one dropped connection failed the whole switch.
+        for c in "$STORE"/*-"$(basename "$k" | sed 's/^\.//')"; do
+            [ -f "$c" ] && [ "$(sha256sum "$c" | cut -d' ' -f1)" = "$sha" ] && cp "$c" "$tmp" && unseal "$tmp" && break
+        done
+        if [ ! -s "$tmp" ] && ! curl -fsSL --retry 3 --retry-delay 2 -o "$tmp" "$url"; then
             [ "$opt" = true ] || die "$l/$k: download of $url failed"
             rm -f "$tmp"; say "$l/$k: $url unreachable — declared, skipped (optional)"; entry "$l" "$k" absent "" "$url" "" "$app"; return 0
         fi
@@ -355,7 +372,7 @@ build_entry() {
             # switch goes on; the page shows it declared · absent.
             rm -f "$tmp"
             [ "$opt" = true ] || die "$l/$k: $url does not match the declared sha256 — refused"
-            printf '%s: %s/%s: %s does not match the declared sha256 — REFUSED, not installed (optional: bump the hash from nix/hashes.json)\n' "$ME" "$l" "$k" "$url" >&2
+            printf '%s: %s/%s: %s does not match the declared sha256 — REFUSED, not installed (optional: its hash source is behind the release)\n' "$ME" "$l" "$k" "$url" >&2
             entry "$l" "$k" absent "" "$url" "" "$app"; return 0
         fi
         [ "$(printf '%s' "$v" | jq -r '.exe // false')" = true ] && chmod +x "$tmp"
