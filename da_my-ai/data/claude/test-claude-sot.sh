@@ -188,6 +188,33 @@ check "every repo-scoped mirror agrees with the SoT ($(printf '%s' "$mirrors" | 
   "$(printf '%s' "$drifted" | wc -w | tr -d ' ')" 0
 [ -n "$drifted" ] && for d in $drifted; do echo "     drift: $d"; done
 
+# ...and every generated copy is the SoT file VERBATIM, nested ones included.
+# The key sample above cannot see a copy that lacks a whole block: da_dtk,
+# ac_cloud-vault and cloud-vault's others/ all passed it while missing autoMode
+# and every 2026-10-09 rule, because they agreed on the three sampled keys. It
+# also never looked at 0_apps/src/ or dist/ (its find stops at depth 4). Since
+# settings.project.json became the file deployed unchanged, equality is the
+# right test. The nested paths are the ones repos.json:fleet_files refreshes
+# (clone.sh --sync); an absent path is skipped, a differing one is drift.
+COPIES=".claude/settings.json 0_apps/src/claude/settings.json 0_apps/dist/dotfiles/claude/settings.json
+4___ASSETS___/4.2.Config/claude/settings.json
+ac_cloud-vault/.claude/settings.json
+da_dtk/.claude/settings.json da_dtk/0_apps/src/claude/settings.json da_dtk/0_apps/dist/dotfiles/claude/settings.json
+others/0_apps/src/claude/settings.json others/0_apps/dist/dotfiles/claude/settings.json"
+vchecked=0; vdrift=""
+for repo in "$GITBASE"/*/; do
+  repo=${repo%/}
+  [ "$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" = "$repo" ] || continue
+  for rel in $COPIES; do
+    [ -f "$repo/$rel" ] || continue
+    vchecked=$((vchecked + 1))
+    cmp -s "$SOT/settings.project.json" "$repo/$rel" || vdrift="$vdrift ${repo#"$GITBASE"/}/$rel"
+  done
+done
+check "every repo-scoped settings.json copy is settings.project.json verbatim ($vchecked checked)" \
+  "$(printf '%s' "$vdrift" | wc -w | tr -d ' ')" 0
+[ -n "$vdrift" ] && for d in $vdrift; do echo "     differs: $d"; done
+
 # ── retired MCPs stay retired ────────────────────────────────────────────────
 # da_dtk ships two MCP products (products/mcp-dtk, products/mcp-unix-api) and
 # neither is used any more. They are not declared in either template, not in
