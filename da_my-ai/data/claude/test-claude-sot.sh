@@ -234,6 +234,10 @@ if [ -d "$FORK" ]; then
     grep -rhoE '^# Source: [^ ]+' "$FORK" 2>/dev/null | awk '{print $3}' | sort -u |
       while read -r path; do
         expanded=$(printf '%s' "$path" | sed "s|^~|$HOME|")
+        # ~/git/<repo> is where the fleet lives on the owner's machines; a
+        # checkout elsewhere (a container, /dev/shm worktrees) keeps the repos as
+        # siblings of this one, which is $GITBASE. Resolve there when ~/git has none.
+        [ -e "$expanded" ] || expanded=$(printf '%s' "$path" | sed "s|^~/git/|$GITBASE/|")
         case "$expanded" in
           *"{"*) expanded_a=$(printf '%s' "$expanded" | sed 's|{\([^,}]*\),[^}]*}|\1|')
                  [ -e "$expanded_a" ] || echo "$path" ;;
