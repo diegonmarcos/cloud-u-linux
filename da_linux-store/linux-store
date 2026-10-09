@@ -1392,6 +1392,20 @@ Environment: LINUX_STORE_ROOT  LINUX_STORE_DECLARATION  LINUX_STORE_USER
 EOF
 }
 
+# The checkout is the engine's source of truth. A generation stores whichever
+# engine RAN it ($SELF, above), so a switch run by the installed copy kept
+# reinstalling that old copy and an engine edit never reached the store
+# (2026-10-08: the json template value broke ~/.mcp.json until switched by
+# hand from the checkout). So a generation-making command run by a copy that
+# differs from the checkout hands over to the checkout, once.
+case "${1:-}" in build|switch|update)
+    _co="${GIT_BASE:-$HOME/cloud-drive-shared-store/git}/cloud-u-linux/da_linux-store/linux-store"
+    if [ -z "${LINUX_STORE_NO_REEXEC:-}" ] && [ -f "$_co" ] && ! cmp -s "$_co" "$SELF"; then
+        echo "linux-store: the checkout's engine differs from this one — running $_co" >&2
+        LINUX_STORE_NO_REEXEC=1 exec sh "$_co" "$@"
+    fi ;;
+esac
+
 cmd="${1:-help}"; [ $# -gt 0 ] && shift
 case "$cmd" in
     switch)      cmd_switch "$@" ;;

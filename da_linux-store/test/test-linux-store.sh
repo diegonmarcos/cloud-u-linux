@@ -291,5 +291,12 @@ cp "$T/store.json" "$UD/linux-store.json"
     'grep -q "declares no configs-user .nobody." "$T/out"'
 ( unset LINUX_STORE_DECLARATION; ls_ switch; mv "$CM" "$CM.away"; ls_ check; rc=$?; mv "$CM.away" "$CM"; exit $rc ); check "verify falls back to the recorded declaration when the checkout is gone" '[ $? -eq 0 ]'
 
+# a generation-making command run by a copy that differs from the checkout hands over to it
+CO="$GIT_BASE/cloud-u-linux/da_linux-store"; mkdir -p "$CO"
+printf 'echo CHECKOUT-ENGINE-RAN "$@"\n' > "$CO/linux-store"
+ls_ build; check "build hands over to a differing checkout engine" 'grep -q "CHECKOUT-ENGINE-RAN build" "$T/out"'
+ls_ status; check "...but a read-only command does not" '! grep -q CHECKOUT-ENGINE-RAN "$T/out"'
+rm -rf "$GIT_BASE/cloud-u-linux"
+
 printf '\n%d passed, %d failed\n' "$pass" "$failn"
 [ "$failn" -eq 0 ]
