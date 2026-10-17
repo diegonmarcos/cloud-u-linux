@@ -11,3 +11,8 @@
 # A public key is not a secret. The private half lives sops-encrypted in
 # cloud-vault: A0_keys/providers/android/ssh.secrets.yaml.
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICP/TWd0q7KEm29dOrPMX5sEn/8THgsrdHJ1NfPiKElK cloud-constellation@android
+
+# cloud-superapp-mcp on oci-apps (cloud-u-containers infra-api_cloud-superapp-mcp,
+# build.json ssh.keys = vault_id_rsa): reaches the phone over the wg0 mesh as
+# `ssh phone` (nix, :8024) / `ssh phone-termux` (termux, :8023). Public half only.
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC+R13feNM+RTKKxi4eUIHOxAdbQiG23G1OyGWEZtk6K43+/D9nq6ddkC0MapckgekPFChqu1rw/voiD/+A+U85iqTZlb3FYv6uDGkADY2t/qsRXmpJ3hBXcEoXLhqvzpsZ44nuTHCpfjsNdPLATnZx5SnVqx5I67WMSszCwJaqaYW/zpuZxx1yM3iIgtyIHVWk4DHGSkXa/kXmOgN3dVQxSMEIMVUJiQJ5vl1SmQHsAq/8M6O6X0YSVE/nZjxMUhGxf1mv9I5iw/u4PYP1/T23i/VthIVSlciRp0lX80abNblRoIkvvXLeMm7gA8h3T00L5ehTMpGdEVlfHa1gQrhlgjXjQS6pOR6U9BAidBD94sRYLUJ44R3bfX0m6QVvuqPLu6N/TmsDdXNLuMlJ90sUkopR/FWd0aC01/nAKu8CdKd0Vgusibl/NTjMFOx1My3Pw+ma5SZPC6is+n53F+vkGlwFM1+gEdNJjxPBcbkUgM27IlGc+lUiWtKCVJ9VJYM= cloud-superapp-mcp@oci-apps (vault_id_rsa)

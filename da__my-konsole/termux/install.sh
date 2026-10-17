@@ -64,13 +64,21 @@ if command -v sshd >/dev/null 2>&1; then
     # Append-and-dedupe rather than overwrite: this file is the user's, and an
     # installer that erases their other keys to add one is a bad trade.
     touch "$HOME/.ssh/authorized_keys"
-    grep -qxF "$(grep -v '^#' "$key_src" | grep -v '^$')" "$HOME/.ssh/authorized_keys" 2>/dev/null \
-      || grep -v '^#' "$key_src" | grep -v '^$' >> "$HOME/.ssh/authorized_keys"
+    # Per line: the file declares more than one key (the constellation key and
+    # cloud-superapp-mcp's), and a whole-file grep -F treats each line as its
+    # own pattern, so one key already present would skip adding the others.
+    grep -v '^#' "$key_src" | grep -v '^$' | while IFS= read -r k; do
+      grep -qxF "$k" "$HOME/.ssh/authorized_keys" 2>/dev/null \
+        || printf '%s\n' "$k" >> "$HOME/.ssh/authorized_keys"
+    done
     chmod 600 "$HOME/.ssh/authorized_keys"
     log "Authorized the constellation key"
   fi
-  # 8022 is what the apps' baked terminal-targets declare for Termux; sshd only
-  # answers on loopback, so nothing here is reachable off the device.
+  # Port: Cloud Terminal (termux) is declared on 8023 and Cloud Terminal (nix)
+  # on 8024 (cloud-u-android ac_cloud-myterminal/data/terminal-targets.json).
+  # Termux's sshd has no ListenAddress, so it also answers on the phone's wg0
+  # mesh address (10.0.0.9) - that is how cloud-superapp-mcp reaches it. There
+  # is no public route: off the mesh nothing here is reachable.
   pgrep -x sshd >/dev/null 2>&1 || sshd
   log "sshd listening (loopback)"
   # And on boot, beside the engine — otherwise the first app to open after a
