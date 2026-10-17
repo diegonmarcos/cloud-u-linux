@@ -2,6 +2,7 @@
   "enableAllProjectMcpServers": true,
   "env": {
     "MCP_TIMEOUT": "5000",
+    "STATUSLINE_MIN_INTERVAL": "60",
     "DISABLE_AUTOUPDATER": "1",
     "MCP_CONNECT_TIMEOUT_MS": "3000"
   },
@@ -39,8 +40,8 @@
   "model": "fable",
   "_env_autoupdater_comment": "DISABLE_AUTOUPDATER: on the phone Claude Code's own updater re-runs npm postinstall, whose hard-link under proot leaves /usr/local/bin/claude dangling (2026-10-05, twice, 2.1.281→2.1.289). Updates on this box go through the declared store, not the updater.",
   "_env_mcp_timeout_comment": "MCP_CONNECT_TIMEOUT_MS 3000 / MCP_TIMEOUT 5000 on the phone (base says 30000/10000): the list carries two mesh-only servers (cloud-cgc-pvt-mcp, cloud-vault-mcp at 10.0.0.6) that cannot connect while the mesh is down, and Claude Code waits the full connect timeout on each at startup — 2026-10-06 that was 5 minutes before the prompt appeared. A dead server on the phone must cost a second, not thirty; the mesh-up case reconnects fine within 3 s on wg.",
-  "_statusLine_comment": "Re-enabled 2026-10-06 on the read-only paint redesign (base statusLine applies; refreshInterval 5 below). It was null for a day: the old fallback forked five helpers per paint and the OOM killer took every session.",
+  "_statusLine_comment": "Phone: NO timed repaint (refreshInterval null: Claude Code repaints on each message) and a full render at most once a minute (STATUSLINE_MIN_INTERVAL 60). Measured 2026-10-17: every 5 s paint forked bash under proot, every 15 s a 1.4 s render forked ~40 tools (awk, jq, stat, md5sum, date...), on a phone with 233 MB free and 3 GB swapped; new sessions hung for minutes. The prompt/action age timers no longer tick between messages.",
   "statusLine": {
-    "refreshInterval": 5
+    "refreshInterval": null
   }
 }
