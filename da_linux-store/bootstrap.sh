@@ -70,7 +70,8 @@ fi
 
 # ── 2. checkouts ────────────────────────────────────────────────────────────
 # ONE place for every repo, on every machine — no ~/git fallback.
-GB="${GIT_BASE:-$HOME/cloud-drive-shared-store/git}"
+GB="${GIT_BASE:-$HOME/cloud-shared-store/git}"
+[ -n "${GIT_BASE:-}" ] || [ -d "$GB" ] || [ ! -d "$HOME/cloud-drive-shared-store/git" ] || GB="$HOME/cloud-drive-shared-store/git"  # compat_link: the old name, one release
 [ -d "$GB" ] || { mkdir -p "$GB"; say "created $GB"; }
 say "git base: $GB"
 
@@ -87,8 +88,8 @@ done
 
 # A FUSE mount (the phone's CloudDrive) cannot hard-link, which git's object
 # writer does by default: proot turns the failure into a dangling temp object.
-case "$GB" in
-    /storage/*|*/cloud-drive-shared-store/*)
+case "$(realpath "$GB" 2>/dev/null || echo "$GB")" in
+    /storage/*|/sdcard/*|/data/media/*|/mnt/*)
         for d in "$GB"/*/.git; do
             [ -d "$d" ] || continue
             [ "$(git -C "${d%/.git}" config core.createObject 2>/dev/null)" = rename ] && continue

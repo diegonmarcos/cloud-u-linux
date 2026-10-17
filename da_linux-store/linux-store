@@ -70,13 +70,15 @@ CUR="$ROOT/current"
 DEVLIST="$ROOT/dev.list"
 
 # The git base: where the checkouts live. ONE place on every machine:
-# ~/cloud-drive-shared-store/git. There is no ~/git fallback — a second
+# ~/cloud-shared-store/git (cloud-shared-store; on the phone it is cld.termux's private-home store,
+# reached directly by both terminals). There is no ~/git fallback — a second
 # candidate is how two copies of a repo happen. GIT_BASE overrides it (the
 # tests point it at a fixture tree). Needed BEFORE the declaration, because
 # the declaration itself lives in a checkout (cloud-me_configs).
 git_base() {
-    _gb="${GIT_BASE:-$HOME/cloud-drive-shared-store/git}"
-    [ -d "$_gb" ] || die "git base $_gb is not a directory (every repo lives in ~/cloud-drive-shared-store/git; GIT_BASE overrides)"
+    _gb="${GIT_BASE:-$HOME/cloud-shared-store/git}"
+    [ -n "${GIT_BASE:-}" ] || [ -d "$_gb" ] || [ ! -d "$HOME/cloud-drive-shared-store/git" ] || _gb="$HOME/cloud-drive-shared-store/git"  # compat_link: the old name, one release
+    [ -d "$_gb" ] || die "git base $_gb is not a directory (every repo lives in ~/cloud-shared-store/git; GIT_BASE overrides)"
     echo "$_gb"
 }
 
@@ -1416,7 +1418,8 @@ EOF
 # hand from the checkout). So a generation-making command run by a copy that
 # differs from the checkout hands over to the checkout, once.
 case "${1:-}" in build|switch|update)
-    _co="${GIT_BASE:-$HOME/cloud-drive-shared-store/git}/cloud-u-linux/da_linux-store/linux-store"
+    _co="${GIT_BASE:-$HOME/cloud-shared-store/git}/cloud-u-linux/da_linux-store/linux-store"
+    [ -n "${GIT_BASE:-}" ] || [ -e "$_co" ] || [ ! -d "$HOME/cloud-drive-shared-store/git" ] || _co="$HOME/cloud-drive-shared-store/git/cloud-u-linux/da_linux-store/linux-store"  # compat_link
     if [ -z "${LINUX_STORE_NO_REEXEC:-}" ] && [ -f "$_co" ] && ! cmp -s "$_co" "$SELF"; then
         echo "linux-store: the checkout's engine differs from this one — running $_co" >&2
         LINUX_STORE_NO_REEXEC=1 exec sh "$_co" "$@"

@@ -137,10 +137,11 @@ st_set() {  # key value
 }
 st_del() { [ -f "$STATE" ] && jq --arg k "$1" 'del(.[$k])' "$STATE" > "$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"; }
 
-# ONE place for every repo: ~/cloud-drive-shared-store/git (GIT_BASE overrides
+# ONE place for every repo: ~/cloud-shared-store/git (GIT_BASE overrides
 # it for tests). No ~/git candidate — a second candidate is a second copy.
 git_base() {
-    _gb="${GIT_BASE:-$HOME/cloud-drive-shared-store/git}"
+    _gb="${GIT_BASE:-$HOME/cloud-shared-store/git}"
+    [ -n "${GIT_BASE:-}" ] || [ -d "$_gb" ] || [ ! -d "$HOME/cloud-drive-shared-store/git" ] || _gb="$HOME/cloud-drive-shared-store/git"  # compat_link: the old name, one release
     [ -d "$_gb" ] && echo "$_gb"
 }
 
@@ -1005,7 +1006,7 @@ cmd_repos() {
                 fi
                 [ "$1" = clone ] || continue
                 if git clone -q "$url" "$gb/$n" 2>/dev/null; then
-                    case "$gb" in /storage/*|*/cloud-drive-shared-store/*) git -C "$gb/$n" config core.createObject rename ;; esac
+                    case "$(realpath "$gb" 2>/dev/null || echo "$gb")" in /storage/*|/sdcard/*|/data/media/*|/mnt/*) git -C "$gb/$n" config core.createObject rename ;; esac
                     say "cloned $n ($proto)"
                 else say "warning — $n: clone failed over $proto (private? sign in first: $ME signin)"; fi
             done ;;
