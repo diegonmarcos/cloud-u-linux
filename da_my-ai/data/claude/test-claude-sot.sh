@@ -351,7 +351,9 @@ fi
 
 # ── every repo's committed .mcp.json carries the derived HTTP set ────────────
 # A different deploy path from ~/.mcp.json: deploy-dotfiles.sh copies
-# cloud-infra's derive output (1_cloud-configs/dist/mcp.json) to <repo>/.mcp.json
+# cloud-infra's derive output to <repo>/.mcp.json. Repos ship the PROJECT shape
+# (1_cloud-configs/dist/mcp.project.json: mesh-first stdio bridge, owner decision
+# 31), not dist/mcp.json (which carries the -mesh entries).
 # so a clone with no home-manager still gets servers. Same rot, one tier down —
 # front-data and git-repos-master were still shipping the seven PRE-RENAME
 # server names, which is the failure the header of this file describes.
@@ -360,7 +362,7 @@ fi
 # legitimately carry MORE (cloud-infra-desktop ships the desktop tpl, stdio
 # extras and the mesh-direct endpoint included). What must never happen is a
 # derived server going missing or pointing somewhere else.
-DERIVE="$REPO/../cloud-infra/1_cloud-configs/dist/mcp.json"
+DERIVE="$REPO/../cloud-infra/1_cloud-configs/dist/mcp.project.json"
 if [ -f "$DERIVE" ]; then
   behind=""; nrepo=0
   for f in "$GITBASE"/*/.mcp.json; do
@@ -371,6 +373,8 @@ if [ -f "$DERIVE" ]; then
       | [ $want[0].mcpServers | to_entries[]
           | select(($g[.key] | not)
                    or $g[.key].url != .value.url
+                   or $g[.key].command != .value.command
+                   or $g[.key].args != .value.args
                    or ($g[.key].type // "http") != (.value.type // "http"))
           | .key ] | join(",")' 2>/dev/null) || miss="UNREADABLE"
     [ -n "$miss" ] && behind="$behind ${f#"$GITBASE"/}[$miss]"
