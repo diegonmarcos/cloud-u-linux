@@ -97,5 +97,10 @@
       "_doc_filter_removed": "filter REMOVED 2026-09-21. It restricted this agent to cgc+infra while claude got eleven. Diego: 'declare ALL mcp'. A filter here is the same defect as the exposure split that just disconnected nine servers — an agent cannot call what it is not connected to, and a short list makes it reason blind (#166/#184)."
     }
   },
-  "_doc_auth_header": "The DEFAULT placeholder written into every proxy-hosted entry. A platform may override it, because the placeholder is not read by Claude Code alone — whoever renders the template has to recognise the exact string. Nix substitutes it on desktop and termux; the container has its own renderer with its own convention."
+  "_doc_auth_header": "The DEFAULT placeholder written into every proxy-hosted entry. A platform may override it, because the placeholder is not read by Claude Code alone — whoever renders the template has to recognise the exact string. Nix substitutes it on desktop and termux; the container has its own renderer with its own convention.",
+
+  "not_mcp_servers": {
+    "_doc": "Build files that match build-*mcp*.json but are NOT MCP servers a client dials; test-claude-sot.sh skips them in the 'every cloud-infra MCP is declared in the desktop template' check. mcp-oauth is the OAuth gateway in front of the MCP servers (infra-sec_mcp-oauth): no .mcp block, not in dist/mcp.json.",
+    "names": ["mcp-oauth"]
+  }
 }

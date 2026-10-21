@@ -88,6 +88,7 @@ if [ -d "$INFRA" ]; then
     for b in "$INFRA"/build-*mcp*.json; do
       n=$(jq -r '.name // (input_filename | sub(".*/build-"; "") | sub("\\.json$"; ""))' "$b" 2>/dev/null) || continue
       case "$n" in null|"") continue;; esac
+      jq -e --arg n "$n" '(.not_mcp_servers.names // []) | index($n)' "$SOT/mcp-policy.json" >/dev/null 2>&1 && continue
       jq -e --arg n "$n" '.mcpServers | has($n)' "$SOT/mcp.desktop.json.tpl" >/dev/null 2>&1 || echo "$n"
     done
   )
