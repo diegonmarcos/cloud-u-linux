@@ -93,6 +93,12 @@ auth_host = pol["auth_host"]
 def http_set(auth, filter_names=None, direct=True):
     servers = collections.OrderedDict()
     for name in sorted(dist):
+        if name.endswith("-mesh"):
+            # The <name>-mesh twins in dist/mcp.json belong to the project .mcp.json
+            # bridge (mcp-connect.mjs: mesh first, else public). A client list derives
+            # its mesh url itself (url_mode: mesh), so a twin here would only double
+            # every server in the budget (11 x 40 tokens) without being a new server.
+            continue
         if filter_names is not None and name not in filter_names:
             continue
         if not direct and name in pol.get("direct_http", {}):
