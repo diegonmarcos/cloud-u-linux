@@ -68,10 +68,39 @@ else
     say "tools: all present"
 fi
 
+# legacy_store_migration begin (build.json::shared_store.legacy_name): one-time, idempotent, never deletes user data.
+# The old store name is only ever an INPUT here: whatever is under it is merged into the store and the old
+# link/dir goes. Same text as cloud-u-android ac_cloud-termux/rootfs/enter.sh (the reference, executed in its tests).
+legacy_store_merge() {  # $1 = dir emptied into $2; $3 = where a differing file of the same name is kept
+    for e in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+        [ -e "$e" ] || [ -L "$e" ] || continue
+        n="${e##*/}"
+        if [ ! -e "$2/$n" ] && [ ! -L "$2/$n" ]; then mv "$e" "$2/$n"
+        elif [ -d "$e" ] && [ ! -L "$e" ] && [ -d "$2/$n" ] && [ ! -L "$2/$n" ]; then
+            ( legacy_store_merge "$e" "$2/$n" "$3/$n" ); rmdir "$e" 2>/dev/null || true
+        elif [ -f "$e" ] && [ ! -L "$e" ] && [ -f "$2/$n" ] && cmp -s "$e" "$2/$n"; then rm -f "$e"
+        else
+            mkdir -p "$3"; t="$3/$n"; [ ! -e "$t" ] && [ ! -L "$t" ] || t="$t.$$"
+            mv "$e" "$t"
+        fi
+    done
+}
+legacy_store_migrate() {  # $1 = the old name in $HOME, $2 = the store
+    if [ -L "$1" ]; then
+        if [ ! -e "$2" ] && [ ! -L "$2" ]; then mv "$1" "$2"; else rm -f "$1"; fi
+        return 0
+    fi
+    [ -d "$1" ] || return 0
+    mkdir -p "$2" 2>/dev/null || true
+    legacy_store_merge "$1" "$2" "$2/.legacy-backup-$(date +%Y%m%d)"
+    rmdir "$1" 2>/dev/null || echo "⚠ $1 still has content or is a mount point; it is left in place and migrated again at the next login" >&2
+}
+# legacy_store_migration end
+
 # ── 2. checkouts ────────────────────────────────────────────────────────────
 # ONE place for every repo, on every machine — no ~/git fallback.
+[ -n "${GIT_BASE:-}" ] || legacy_store_migrate "$HOME/cloud-drive-shared-store" "$HOME/cloud-shared-store"  # legacy_store_migration
 GB="${GIT_BASE:-$HOME/cloud-shared-store/git}"
-[ -n "${GIT_BASE:-}" ] || [ -d "$GB" ] || [ ! -d "$HOME/cloud-drive-shared-store/git" ] || GB="$HOME/cloud-drive-shared-store/git"  # compat_link: the old name, one release
 [ -d "$GB" ] || { mkdir -p "$GB"; say "created $GB"; }
 say "git base: $GB"
 

@@ -48,7 +48,7 @@ The engine resolves it in this order:
 2. `configs.json` → `LINUX_STORE_USER` (default `diego-admin`) → `<path>/deb-user-configs/linux-store.json`.
 3. The path the last `apply` recorded, so `verify` and `rollback` still work while the checkout is unmounted.
 
-The git base is `~/cloud-shared-store/git` on every machine (cloud-shared-store; one release falls back to an existing `~/cloud-drive-shared-store/git` — the compat link name): every repo lives in that ONE place, and there is no `~/git` fallback. `GIT_BASE` overrides it (the tests use a fixture tree).
+The git base is `~/cloud-shared-store/git` on every machine (cloud-shared-store; anything under the store's old name is migrated into it once, idempotently, the first time a command resolves the base): every repo lives in that ONE place, and there is no `~/git` fallback. `GIT_BASE` overrides it (the tests use a fixture tree).
 
 
 `common` applies to both profiles, and `termux` / `desktop` overlay it per key:

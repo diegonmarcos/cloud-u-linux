@@ -69,6 +69,35 @@ GENS="$ROOT/generations"
 CUR="$ROOT/current"
 DEVLIST="$ROOT/dev.list"
 
+# legacy_store_migration begin (build.json::shared_store.legacy_name): one-time, idempotent, never deletes user data.
+# The old store name is only ever an INPUT here: whatever is under it is merged into the store and the old
+# link/dir goes. Same text as cloud-u-android ac_cloud-termux/rootfs/enter.sh (the reference, executed in its tests).
+legacy_store_merge() {  # $1 = dir emptied into $2; $3 = where a differing file of the same name is kept
+    for e in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+        [ -e "$e" ] || [ -L "$e" ] || continue
+        n="${e##*/}"
+        if [ ! -e "$2/$n" ] && [ ! -L "$2/$n" ]; then mv "$e" "$2/$n"
+        elif [ -d "$e" ] && [ ! -L "$e" ] && [ -d "$2/$n" ] && [ ! -L "$2/$n" ]; then
+            ( legacy_store_merge "$e" "$2/$n" "$3/$n" ); rmdir "$e" 2>/dev/null || true
+        elif [ -f "$e" ] && [ ! -L "$e" ] && [ -f "$2/$n" ] && cmp -s "$e" "$2/$n"; then rm -f "$e"
+        else
+            mkdir -p "$3"; t="$3/$n"; [ ! -e "$t" ] && [ ! -L "$t" ] || t="$t.$$"
+            mv "$e" "$t"
+        fi
+    done
+}
+legacy_store_migrate() {  # $1 = the old name in $HOME, $2 = the store
+    if [ -L "$1" ]; then
+        if [ ! -e "$2" ] && [ ! -L "$2" ]; then mv "$1" "$2"; else rm -f "$1"; fi
+        return 0
+    fi
+    [ -d "$1" ] || return 0
+    mkdir -p "$2" 2>/dev/null || true
+    legacy_store_merge "$1" "$2" "$2/.legacy-backup-$(date +%Y%m%d)"
+    rmdir "$1" 2>/dev/null || echo "⚠ $1 still has content or is a mount point; it is left in place and migrated again at the next login" >&2
+}
+# legacy_store_migration end
+
 # The git base: where the checkouts live. ONE place on every machine:
 # ~/cloud-shared-store/git (cloud-shared-store; on the phone it is cld.termux's private-home store,
 # reached directly by both terminals). There is no ~/git fallback — a second
@@ -76,8 +105,8 @@ DEVLIST="$ROOT/dev.list"
 # tests point it at a fixture tree). Needed BEFORE the declaration, because
 # the declaration itself lives in a checkout (cloud-me_configs).
 git_base() {
+    [ -n "${GIT_BASE:-}" ] || legacy_store_migrate "$HOME/cloud-drive-shared-store" "$HOME/cloud-shared-store"  # legacy_store_migration
     _gb="${GIT_BASE:-$HOME/cloud-shared-store/git}"
-    [ -n "${GIT_BASE:-}" ] || [ -d "$_gb" ] || [ ! -d "$HOME/cloud-drive-shared-store/git" ] || _gb="$HOME/cloud-drive-shared-store/git"  # compat_link: the old name, one release
     [ -d "$_gb" ] || die "git base $_gb is not a directory (every repo lives in ~/cloud-shared-store/git; GIT_BASE overrides)"
     echo "$_gb"
 }
@@ -1419,7 +1448,6 @@ EOF
 # differs from the checkout hands over to the checkout, once.
 case "${1:-}" in build|switch|update)
     _co="${GIT_BASE:-$HOME/cloud-shared-store/git}/cloud-u-linux/da_linux-store/linux-store"
-    [ -n "${GIT_BASE:-}" ] || [ -e "$_co" ] || [ ! -d "$HOME/cloud-drive-shared-store/git" ] || _co="$HOME/cloud-drive-shared-store/git/cloud-u-linux/da_linux-store/linux-store"  # compat_link
     if [ -z "${LINUX_STORE_NO_REEXEC:-}" ] && [ -f "$_co" ] && ! cmp -s "$_co" "$SELF"; then
         echo "linux-store: the checkout's engine differs from this one — running $_co" >&2
         LINUX_STORE_NO_REEXEC=1 exec sh "$_co" "$@"
