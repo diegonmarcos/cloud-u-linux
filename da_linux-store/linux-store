@@ -105,7 +105,7 @@ legacy_store_migrate() {  # $1 = the old name in $HOME, $2 = the store
 # tests point it at a fixture tree). Needed BEFORE the declaration, because
 # the declaration itself lives in a checkout (cloud-me_configs).
 git_base() {
-    [ -n "${GIT_BASE:-}" ] || legacy_store_migrate "$HOME/cloud-drive-shared-store" "$HOME/cloud-shared-store"  # legacy_store_migration
+    [ -n "${GIT_BASE:-}" ] || legacy_store_migrate "$HOME/cloud-shared-store" "$HOME/cloud-shared-store"  # legacy_store_migration
     _gb="${GIT_BASE:-$HOME/cloud-shared-store/git}"
     [ -d "$_gb" ] || die "git base $_gb is not a directory (every repo lives in ~/cloud-shared-store/git; GIT_BASE overrides)"
     echo "$_gb"
@@ -1432,6 +1432,7 @@ Same verbs as nix / home-manager / the flakes' build.sh:
   html                       render ~/.linux-store/ui/index.html: OS · Terraforms vs Home-Manager · Desktop
   serve [port]               html, then serve $HOME with my-webserver → /.linux-store/ui/index.html
   profile                    print the detected profile
+  migrate-store              merge the store's old-named dir into ~/cloud-shared-store, once (idempotent)
 
 Declaration: <git base>/cloud-me_configs/<configs-user>/deb-user-configs/linux-store.json
 
@@ -1473,6 +1474,7 @@ case "$cmd" in
     gc)          cmd_gc ;;
     dev)         cmd_dev "$@" ;;
     profile)     detect_profile ;;
+    migrate-store) git_base >/dev/null 2>&1 || true ;;   # the one-time old-name migration (legacy_store_migration), run by the shell init
     help|-h|--help) usage ;;
     *)           usage >&2; exit 2 ;;
 esac
