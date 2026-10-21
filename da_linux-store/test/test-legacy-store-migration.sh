@@ -28,6 +28,9 @@ snap="$(cd "$H" && find . | sort)"; out="$(mig)"
 if [ "$snap" = "$(cd "$H" && find . | sort)" ] && [ -z "$out" ]; then ok "second run is a no-op"; else no "not idempotent"; fi
 rm -rf "$H"; mkdir -p "$H/real"; echo k > "$H/real/k"; ln -s real "$H/$OLD"; mig >/dev/null
 if [ ! -L "$H/$OLD" ] && [ "$(cat "$H/$N/k" 2>/dev/null)" = k ]; then ok "an old symlink with no store is renamed into place"; else no "old symlink handling wrong"; fi
+for f in "$D/linux-store" "$D/bootstrap.sh" "$ROOT/da_linux-account/linux-account"; do
+    grep -qF "legacy_store_migrate \"\$HOME/$OLD\" \"\$HOME/$N\"" "$f" && ok "$(basename "$f") migrates the old name" || no "$(basename "$f") does not call the migration with the old name"
+done
 hits="$(cd "$ROOT" && git ls-files -z | xargs -0 grep -nI -- "$OLD" 2>/dev/null | grep -v legacy_store_migration | grep -v 'test-legacy-store-migration.sh' || true)"
 if [ -z "$hits" ]; then ok "the old name appears only in migration code"; else no "the old name is still used:"; echo "$hits" | head -20; fi
 [ "$fails" -eq 0 ] || { echo "$fails failure(s)"; exit 1; }; echo "all passed"
