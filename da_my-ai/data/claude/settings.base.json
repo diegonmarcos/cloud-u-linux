@@ -86,6 +86,10 @@
     "key (effortLevel), so a hand-dismissal written there is wiped by the next switch",
     "and the prompt returns forever."
   ],
+  "disableClaudeAiConnectors": true,
+  "_disableClaudeAiConnectors_doc": "2026-10-23 owner decision: claude.ai account connectors (Gmail, Calendar, Drive) stay in claude.ai chat only; Claude Code uses the fleet MCPs. Mirrors settings.project.json.",
+  "deniedMcpServers": [{"serverName": "github"}],
+  "_deniedMcpServers_doc": "2026-10-23 owner decision: the GitHub MCP costs ~28k tokens per session/agent; use gh CLI and cloud-infra-mcp. Mirrors settings.project.json.",
   "skillOverrides": {
     "auto-mode-setup": "off"
   },
@@ -95,7 +99,8 @@
     "memory-system-cloud-ai-plugin@cloud-marketplace": true,
     "sub-agents-cloud-ai-plugin@cloud-marketplace": true,
     "skill-claude-api-plugin@cloud-marketplace": true,
-    "ponytail@cloud-marketplace": true
+    "ponytail@cloud-marketplace": true,
+    "c3-infra@cloud-marketplace": true
   },
   "effortLevel": "max"
 }

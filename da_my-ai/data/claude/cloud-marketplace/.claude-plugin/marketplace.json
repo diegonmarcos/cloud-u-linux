@@ -34,6 +34,11 @@
       "name": "ponytail",
       "source": "./ponytail",
       "description": "Lazy-senior-dev mode: forces the simplest solution that works (YAGNI, stdlib-first)."
+    },
+    {
+      "name": "c3-infra",
+      "source": "./c3-infra",
+      "description": "Owner rules (skill + rules/*.md) and PreToolUse guard hooks for the c3 fleet; lean agents live in ../agents."
     }
   ]
 }

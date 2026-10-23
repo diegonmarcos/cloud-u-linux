@@ -1,0 +1,6 @@
+{
+  "name": "c3-infra",
+  "version": "1.0.0",
+  "description": "Owner rules (skill + rules/*.md), lean agents and PreToolUse guard hooks for the c3 fleet",
+  "author": { "name": "diegonmarcos" }
+}

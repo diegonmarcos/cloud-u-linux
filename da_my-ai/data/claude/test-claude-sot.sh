@@ -118,9 +118,27 @@ if [ -d "$INFRA_CLAUDE" ]; then
     "$(cmp -s "$SOT/settings.project.json" "$INFRA_CLAUDE/settings.json" && echo yes || echo no)" yes
   check "cloud-infra's generated mcp-auth-headers.sh matches the SoT" \
     "$(cmp -s "$SOT/mcp-auth-headers.sh" "$INFRA_CLAUDE/mcp-auth-headers.sh" && echo yes || echo no)" yes
+  check "cloud-infra's generated skills/c3-infra matches the plugin skill" \
+    "$(diff -rq "$SOT/cloud-marketplace/c3-infra/skills/c3-infra" "$INFRA_CLAUDE/skills/c3-infra" >/dev/null 2>&1 && echo yes || echo no)" yes
+  check "cloud-infra's generated hooks/c3 is the plugin hooks minus hooks.json" \
+    "$(diff -rq -x hooks.json "$SOT/cloud-marketplace/c3-infra/hooks" "$INFRA_CLAUDE/hooks/c3" >/dev/null 2>&1 && echo yes || echo no)" yes
 else
   echo "skip — cloud-infra 0_apps/src/claude not found at $INFRA_CLAUDE"
 fi
+
+# ── c3-infra: registered, github MCP denied, hooks wired once, agents lean ───
+check "c3-infra is registered in cloud-marketplace" \
+  "$(jq -r '[.plugins[].name] | index("c3-infra") != null' "$SOT/cloud-marketplace/.claude-plugin/marketplace.json")" true
+check "settings.project.json denies the github MCP and does not allow it" \
+  "$(jq -r '(.deniedMcpServers | map(.serverName) | index("github") != null) and ((.permissions.allow | index("mcp__github")) == null)' "$SOT/settings.project.json")" true
+check "settings.project.json disables claude.ai connectors" \
+  "$(jq -r '.disableClaudeAiConnectors' "$SOT/settings.project.json")" true
+check "settings.project.json wires each c3 guard hook exactly once" \
+  "$(jq -r '[.hooks.PreToolUse[].hooks[].command] | (length == (unique | length)) and length == 6' "$SOT/settings.project.json")" true
+check "the SoT agents are the six lean/fleet agents" \
+  "$(ls "$SOT/agents" | grep -v README | tr '\n' ' ')" "build.md explore.md general-purpose.md infra.md ops.md review.md "
+check "the c3-infra guard (rules, agents pinned, lean agents, hook tests) is green" \
+  "$(bash "$SOT/cloud-marketplace/c3-infra/scripts/guard.sh" >/dev/null 2>&1 && echo yes || echo no)" yes
 
 # ── the repo-scoped mirror agrees with the SoT ───────────────────────────────
 # 0_apps/src/claude/settings.json is committed into every repo under cloud so a
