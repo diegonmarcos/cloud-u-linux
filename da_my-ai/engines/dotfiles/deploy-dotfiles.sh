@@ -200,6 +200,27 @@ for rf in $ROOT_FILES; do
         log "root: $rf refreshed from 1_cloud-configs/dist/ (derive is the source of truth)"
     fi
 
+    # Opt-in MCP tier (mcp-policy.json .tiers): the shipped .mcp.json holds only
+    # default-tier servers; a repo adds opt-in ones by listing names in
+    # .claude/mcp-optin.json ({"servers":["cloud-mail-mcp"]}), resolved from the
+    # derived catalog (dist/mcp.optin.json, or src/root/mcp.optin.json elsewhere).
+    if [ "$rf" = "mcp.json" ] && [ -f "$REPO_ROOT/.claude/mcp-optin.json" ] && [ -f "$src" ]; then
+        _cat="$REPO_ROOT/1_cloud-configs/dist/mcp.optin.json"
+        [ -f "$_cat" ] || _cat="$DF_SRC/root/mcp.optin.json"
+        if [ -f "$_cat" ]; then
+            node -e '
+const fs = require("fs"), r = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
+const [src, cat, want] = process.argv.slice(1), j = r(src), c = r(cat).mcpServers || {};
+for (const n of r(want).servers || []) { if (c[n]) j.mcpServers[n] = c[n]; else console.error("mcp-optin: unknown server " + n); }
+j.mcpServers = Object.fromEntries(Object.entries(j.mcpServers).sort(([a], [b]) => (a < b ? -1 : 1)));
+fs.writeFileSync(src, JSON.stringify(j, null, 2) + "\n");
+' "$src" "$_cat" "$REPO_ROOT/.claude/mcp-optin.json"
+            log "root: mcp.json + opt-in servers from .claude/mcp-optin.json"
+        else
+            log "root: .claude/mcp-optin.json present but no opt-in catalog found — ignored"
+        fi
+    fi
+
     [ -f "$src" ] || { log "root: no src for '$rf' — skipping"; continue; }
     mkdir -p "$DF_DIST/root"
     stamp_or_copy "$src" "$DF_DIST/root/$rf" "$rf"
