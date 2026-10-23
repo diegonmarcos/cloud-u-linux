@@ -59,8 +59,8 @@ EOF
 mkdir -p "$GIT_BASE/cloud-u-android/aa_cloud-superapp/data"
 echo '{"nodes": [{"name": "oci-apps", "wg_ip": "10.0.0.6", "alias": "apps"}, {"name": "gcp-proxy", "wg_ip": "10.0.0.1"}]}' > "$GIT_BASE/cloud-u-android/aa_cloud-superapp/data/mesh.json"
 # a fake cloud-infra registry
-mkdir -p "$GIT_BASE/cloud-infra/1_cloud-configs/src/inputs"
-echo '{"users": {"diego": {"identities": [{"email": "ada@example.com", "label": "Ada", "primary": true}, {"email": "ada@work.example", "label": "work"}]}}}' > "$GIT_BASE/cloud-infra/1_cloud-configs/src/inputs/superapp-users.json"
+mkdir -p "$GIT_BASE/cloud-t-infra/1_cloud-configs/src/inputs"
+echo '{"users": {"diego": {"identities": [{"email": "ada@example.com", "label": "Ada", "primary": true}, {"email": "ada@work.example", "label": "work"}]}}}' > "$GIT_BASE/cloud-t-infra/1_cloud-configs/src/inputs/superapp-users.json"
 
 # tokens.json fixture: a real .env, a single-value file, a keyfile, a ***REMOVED*** stub, a one-line link stub, a declared-pending entry
 mkdir -p "$V/A_A0-Providers/B_SERVICES-CLOUD/b13-anthropic" "$V/A_A0-Providers/B_SERVICES-CLOUD/b7-c3-api/api-key_opaque" "$V/A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/credentials" "$V/A_A0-Providers/D_TOOLS-DEVICES/d1-ssh-surface-pro/ssh_asymmetric"

@@ -173,7 +173,7 @@ cc_probe_env() {
 }
 
 # Fetch cloud-topology.json + cloud-configs.json from GitHub (cached)
-CLOUD_RAW_BASE="https://raw.githubusercontent.com/diegonmarcos/cloud-infra/main"
+CLOUD_RAW_BASE="https://raw.githubusercontent.com/diegonmarcos/cloud-t-infra/main"
 CLOUD_TOPOLOGY=""
 CLOUD_CONFIGS=""
 
@@ -4883,7 +4883,7 @@ render_security() {
     w=0; while [ "$w" -lt 99 ]; do printf "─"; w=$((w+1)); done
     printf "${RST}\n"
 
-    local cloud_dir="$HOME/git/cloud-infra"
+    local cloud_dir="$HOME/git/cloud-t-infra"
     local sol_dir="$cloud_dir/a_solutions"
     if [ -d "$sol_dir" ]; then
         local sec_found=false

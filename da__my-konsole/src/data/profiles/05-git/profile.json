@@ -103,7 +103,7 @@
         },
         {
           "label": "runs (cloud)",
-          "cmd": "gh run list -R diegonmarcos/cloud-infra -L 15"
+          "cmd": "gh run list -R diegonmarcos/cloud-t-infra -L 15"
         },
         {
           "label": "runs (unix)",

@@ -21,7 +21,7 @@
       "items": [
         { "label": "$HOME (default)", "cmd": "my-webserver restart 8000 $HOME" },
         { "label": "~/git/cloud-infra-desktop", "cmd": "my-webserver restart 8000 $HOME/git/cloud-infra-desktop" },
-        { "label": "~/git/cloud-infra", "cmd": "my-webserver restart 8000 $HOME/git/cloud-infra" },
+        { "label": "~/git/cloud-t-infra", "cmd": "my-webserver restart 8000 $HOME/git/cloud-t-infra" },
         { "label": "~/git/front-diegonmarcos", "cmd": "my-webserver restart 8000 $HOME/git/front-diegonmarcos" },
         { "label": "custom port + dir", "cmd": "my-webserver restart " }
       ]

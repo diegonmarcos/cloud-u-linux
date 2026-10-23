@@ -22,7 +22,7 @@
         },
         {
           "label": "cloud repo",
-          "cmd": "cd ~/git/cloud-infra"
+          "cmd": "cd ~/git/cloud-t-infra"
         },
         {
           "label": "unix repo",

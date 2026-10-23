@@ -82,7 +82,7 @@ fi
 # cloud-infra is the server-side SoT. Every MCP it declares public=true with a
 # dns entry should be reachable from the desktop template; this is the check
 # that was missing when cloud-cgc-pvt-mcp went undeclared for four days.
-INFRA="$REPO/../cloud-infra/1_cloud-configs/dist"
+INFRA="$REPO/../cloud-t-infra/1_cloud-configs/dist"
 if [ -d "$INFRA" ]; then
   missing=$(
     for b in "$INFRA"/build-*mcp*.json; do
@@ -110,7 +110,7 @@ fi
 # Byte-identical, not key-sampled like the seventeen-mirror check below: this
 # is the ONE copy that is machine-generated, so anything less than equality
 # means a hand edit landed in the generated tree and will be silently reverted.
-INFRA_CLAUDE="$REPO/../cloud-infra/0_apps/src/claude"
+INFRA_CLAUDE="$REPO/../cloud-t-infra/0_apps/src/claude"
 if [ -d "$INFRA_CLAUDE" ]; then
   check "cloud-infra's generated agents/ matches the SoT" \
     "$(diff -rq "$SOT/agents" "$INFRA_CLAUDE/agents" >/dev/null 2>&1 && echo yes || echo no)" yes
@@ -381,7 +381,7 @@ fi
 # legitimately carry MORE (cloud-infra-desktop ships the desktop tpl, stdio
 # extras and the mesh-direct endpoint included). What must never happen is a
 # derived server going missing or pointing somewhere else.
-DERIVE="$REPO/../cloud-infra/1_cloud-configs/dist/mcp.project.json"
+DERIVE="$REPO/../cloud-t-infra/1_cloud-configs/dist/mcp.project.json"
 if [ -f "$DERIVE" ]; then
   behind=""; nrepo=0
   for f in "$GITBASE"/*/.mcp.json; do
@@ -485,7 +485,7 @@ if [ -d "$ENG" ]; then
     "$(grep -c 'include_str!("../../engines/[a-z-]*/manifest.json")' "$REG")" \
     "$(find "$ENG" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
   check "cloud-infra deploy-dotfiles.sh is a thin wrapper onto the dotfiles engine" \
-    "$(grep -c 'engines/dotfiles' "${CLOUD_INFRA_DIR:-$REPO/../cloud-infra}/9_others/src/deploy-dotfiles.sh" 2>/dev/null || echo 1)" 1
+    "$(grep -c 'engines/dotfiles' "${CLOUD_INFRA_DIR:-$REPO/../cloud-t-infra}/9_others/src/deploy-dotfiles.sh" 2>/dev/null || echo 1)" 1
 fi
 
 exit "$fail"

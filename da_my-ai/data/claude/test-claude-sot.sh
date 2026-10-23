@@ -82,7 +82,7 @@ fi
 # cloud-infra is the server-side SoT. Every MCP it declares public=true with a
 # dns entry should be reachable from the desktop template; this is the check
 # that was missing when cloud-cgc-pvt-mcp went undeclared for four days.
-INFRA="$REPO/../cloud-infra/1_cloud-configs/dist"
+INFRA="$REPO/../cloud-t-infra/1_cloud-configs/dist"
 if [ -d "$INFRA" ]; then
   missing=$(
     for b in "$INFRA"/build-*mcp*.json; do
@@ -110,7 +110,7 @@ fi
 # Byte-identical, not key-sampled like the seventeen-mirror check below: this
 # is the ONE copy that is machine-generated, so anything less than equality
 # means a hand edit landed in the generated tree and will be silently reverted.
-INFRA_CLAUDE="$REPO/../cloud-infra/0_apps/src/claude"
+INFRA_CLAUDE="$REPO/../cloud-t-infra/0_apps/src/claude"
 if [ -d "$INFRA_CLAUDE" ]; then
   check "cloud-infra's generated agents/ matches the SoT" \
     "$(diff -rq "$SOT/agents" "$INFRA_CLAUDE/agents" >/dev/null 2>&1 && echo yes || echo no)" yes
@@ -381,7 +381,7 @@ fi
 # legitimately carry MORE (cloud-infra-desktop ships the desktop tpl, stdio
 # extras and the mesh-direct endpoint included). What must never happen is a
 # derived server going missing or pointing somewhere else.
-DERIVE="$REPO/../cloud-infra/1_cloud-configs/dist/mcp.project.json"
+DERIVE="$REPO/../cloud-t-infra/1_cloud-configs/dist/mcp.project.json"
 if [ -f "$DERIVE" ]; then
   behind=""; nrepo=0
   for f in "$GITBASE"/*/.mcp.json; do
@@ -485,7 +485,7 @@ if [ -d "$ENG" ]; then
     "$(grep -c 'include_str!("../../engines/[a-z-]*/manifest.json")' "$REG")" \
     "$(find "$ENG" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
   check "cloud-infra deploy-dotfiles.sh is a thin wrapper onto the dotfiles engine" \
-    "$(grep -c 'engines/dotfiles' "${CLOUD_INFRA_DIR:-$REPO/../cloud-infra}/9_others/src/deploy-dotfiles.sh" 2>/dev/null || echo 1)" 1
+    "$(grep -c 'engines/dotfiles' "${CLOUD_INFRA_DIR:-$REPO/../cloud-t-infra}/9_others/src/deploy-dotfiles.sh" 2>/dev/null || echo 1)" 1
 fi
 
 # ── MCP token budget: a default session loads <= 20k MCP tokens ──────────────
@@ -506,12 +506,12 @@ if [ -f "$SIZES" ] && jq -e '.tiers' "$POL" >/dev/null 2>&1; then
   check "default and opt-in tiers do not overlap" \
     "$(jq -r '[.tiers.default[] as $n | select(.tiers["opt-in"] | index($n))] | length' "$POL")" 0
   TIERED=$(jq -r '.tiers.default + .tiers["opt-in"] | .[]' "$POL")
-  DIST_ALL="$REPO/../cloud-infra/1_cloud-configs/dist/mcp.json"
+  DIST_ALL="$REPO/../cloud-t-infra/1_cloud-configs/dist/mcp.json"
   if [ -f "$DIST_ALL" ]; then
     check "every derived MCP server is assigned a tier" \
       "$(jq -r --argjson t "$(printf '%s\n' $TIERED | jq -R . | jq -s .)" '[.mcpServers | keys[] | select(endswith("-mesh") | not) | select(. as $n | $t | index($n) | not)] | join(",")' "$DIST_ALL")" ""
   fi
-  PROJ="$REPO/../cloud-infra/1_cloud-configs/dist/mcp.project.json"
+  PROJ="$REPO/../cloud-t-infra/1_cloud-configs/dist/mcp.project.json"
   if [ -f "$PROJ" ]; then
     check "generated project .mcp.json holds only default-tier servers" \
       "$(jq -r --slurpfile p "$POL" '[.mcpServers | keys[] | select(. as $n | $p[0].tiers.default | index($n) | not)] | join(",")' "$PROJ")" ""

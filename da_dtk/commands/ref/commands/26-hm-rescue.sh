@@ -10,7 +10,7 @@ _log "════════════════════════�
 
 # Find cloud repo
 CLOUD_REPO=""
-for p in "$HOME/git/cloud-infra" "/home/diego/git/cloud-infra" "/home/diego/Mounts/Git/cloud"; do
+for p in "$HOME/git/cloud-t-infra" "/home/diego/git/cloud-t-infra" "/home/diego/Mounts/Git/cloud"; do
   [ -d "$p/.git" ] && CLOUD_REPO="$p" && break
 done
 
