@@ -1,0 +1,112 @@
+{
+    "_comment": "Per-mode cluster composition, read at runtime by main.qml (Qt.resolvedUrl + XMLHttpRequest). Each mode maps to { title, items[] }. 'kind' picks the QML component (pie | multipie | bargrid | rate | text) via main.qml's kindComponent() map; 'metric' picks which snapshot field(s) that component instance reads via main.qml's metric* helper functions. Adding a mode/item here is the intended way to grow this widget -- it must not require another hardcoded Loader block in main.qml. 2026-08-11: every cluster now follows ONE shape -- a headline pie carrying the single number worth reading at a glance, then the bars that break it down. Before this, storage led with bars and no total, mem led with a ring and no absolute figures, and psi/guard were bare grids.",
+    "storage": {
+        "title": "Storage",
+        "items": [
+            {
+                "kind": "pie",
+                "metric": "storage_pool"
+            },
+            {
+                "kind": "bargrid",
+                "metric": "disks",
+                "columns": 1
+            },
+            {
+                "kind": "rate",
+                "metric": "disk_io"
+            }
+        ]
+    },
+    "mem": {
+        "title": "Memory",
+        "items": [
+            {
+                "kind": "multipie",
+                "metric": "mem"
+            },
+            {
+                "kind": "bargrid",
+                "metric": "mem_break",
+                "columns": 1
+            },
+            {
+                "kind": "pie",
+                "metric": "slice"
+            }
+        ]
+    },
+    "cpu": {
+        "title": "CPU",
+        "items": [
+            {
+                "kind": "pie",
+                "metric": "cpu"
+            },
+            {
+                "kind": "bargrid",
+                "metric": "cpu_break",
+                "columns": 2
+            },
+            {
+                "kind": "bargrid",
+                "metric": "cores",
+                "columns": 2
+            },
+            {
+                "kind": "pie",
+                "metric": "vram"
+            },
+            {
+                "kind": "text",
+                "metric": "load"
+            }
+        ]
+    },
+    "network": {
+        "title": "Network",
+        "items": [
+            {
+                "kind": "rate",
+                "metric": "net_io"
+            }
+        ]
+    },
+    "psi": {
+        "title": "PSI",
+        "items": [
+            {
+                "kind": "pie",
+                "metric": "psi_cpu"
+            },
+            {
+                "kind": "bargrid",
+                "metric": "psi",
+                "columns": 6
+            }
+        ]
+    },
+    "guard": {
+        "title": "Guard",
+        "items": [
+            {
+                "kind": "pie",
+                "metric": "guard_worst"
+            },
+            {
+                "kind": "bargrid",
+                "metric": "guard",
+                "columns": 4
+            }
+        ]
+    },
+    "proctable": {
+        "title": "Processes",
+        "items": [
+            {
+                "kind": "text",
+                "metric": "proctable_head"
+            }
+        ]
+    }
+}

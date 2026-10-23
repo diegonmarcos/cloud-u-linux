@@ -1,0 +1,4 @@
+{
+  "_comment": "Verb allowlist for home-manager-command-catcher.nix. Only verbs that actually evaluate and build a generation belong here -- everything else (news, generations, expire-generations, uninstall, help) is cheap and must pass straight through with zero UI, exactly like `nix eval` / `nix path-info` do in the sibling system-level nix-command-catcher.json.",
+  "heavy_home_manager_verbs": ["switch", "build"]
+}

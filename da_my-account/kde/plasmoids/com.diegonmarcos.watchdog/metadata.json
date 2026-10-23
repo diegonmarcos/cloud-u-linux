@@ -1,0 +1,15 @@
+{
+  "KPlugin": {
+    "Id": "com.diegonmarcos.watchdog",
+    "Name": "Watchdog",
+    "Description": "System metrics from the my-konsole watchdog daemon — one file read, no sensor stack",
+    "Icon": "utilities-system-monitor",
+    "Authors": [ { "Name": "Diego Nepomuceno Marcos" } ],
+    "Category": "System Information",
+    "License": "MIT",
+    "Version": "1.0",
+    "ServiceTypes": [ "Plasma/Applet" ]
+  },
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "KPackageStructure": "Plasma/Applet"
+}

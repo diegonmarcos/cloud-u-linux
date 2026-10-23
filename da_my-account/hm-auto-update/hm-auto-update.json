@@ -1,0 +1,25 @@
+{
+  "_doc": "Single source of truth for the GHCR layered-HM-cache subscription. Consumed by BOTH programs/hm-auto-update.nix (the poll timer) AND ba_flakes_desktop/build.sh (cmd_ci_build push, cmd_switch_runner incremental-first pull) — build.sh reads image/tag/activation_label from here via jq so nothing is hardcoded twice. Polls the image digest directly (no ntfy/webhook); on change pops a cancellable countdown then launches `build.sh switch` detached via systemd-run.",
+  "image": "ghcr.io/diegonmarcos/unix-hm-cache-mc",
+  "tag": "latest",
+  "activation_label": "com.diegonmarcos.activation-path",
+  "poll_interval_seconds": 300,
+  "on_boot_delay_seconds": 90,
+  "repo_build_sh": "$HOME/git/cloud-infra-desktop/ba_flakes_desktop/build.sh",
+  "safety": {
+    "_comment": "2026-07-10: the auto-updater must NEVER trigger a heavy switch when the desktop is already memory-full — that is exactly what froze the box on the 13:41 bootstrap (avail RAM ~900MB, the pull tipped user-1000.slice into reclaim-thrash). min_free_mb: if MemAvailable is below this, DEFER the switch (do NOT record the digest, so the next poll retries) until the box has headroom. switch_memory_max / switch_swap_max bound the switch's OWN transient scope so its footprint can't pile onto the desktop and, if it balloons, oomd/OOM kills the switch — not the compositor. 2026-07-24: switch_memory_max raised 2G→4G — the 2G cap cgroup-OOM-killed a LEGITIMATE `nix-store --import` of the home-manager-files NAR (peak anon-rss 2.07G, journal `hm-switch-isolated.service: Failed with result 'oom-kill'`), so every incremental switch failed at the import step. workload.slice has memory.swap.max=0 (swap can't spill the anon pages), so the fix is headroom in RAM, not swap. 4G fits the import ~2x over and still leaves 4G on the 8G box → desktop stays protected and a true runaway (>4G) is still killed.",
+    "min_free_mb": 2500,
+    "switch_memory_max": "4G",
+    "switch_swap_max": "4G",
+    "_isolate_comment": "2026-07-10 v3.1 — a heavy HM switch/pull must run ISOLATED from the desktop, not in its own app.slice (that is what froze the box 5×). When isolate=true, `build.sh switch` re-execs (as this user, with the desktop session env passed so `systemctl --user` activation still works) into isolation_slice — a SYSTEM slice sibling of user.slice, NOT under user-1000.slice — bounded by switch_memory_max/switch_swap_max. The transfer can no longer thrash the compositor; if it balloons the kernel OOM-kills the switch there. Same mechanism as the NixOS engine's switch_isolation.",
+    "isolate": true,
+    "isolation_slice": "workload.slice",
+    "_incremental_comment": "2026-07-10: the docker-layered 'incremental' pull (ghcr_pull_layered) is BROKEN and disabled. dockerTools.buildLayeredImage has no shell, so `docker run <img> sh -c 'ls /nix/store'` always fails and copies 0 paths; worse, OCI layers carry raw files with NO nix-DB metadata, so extracted paths can't be registered/activated. The correct nix closure transport is the nar.zst artifact (nix-store --import carries the DB info). incremental_pull=false makes the switch skip the broken docker path and go straight to the reliable nar.zst download+import+activate. TRUE incremental (only-changed-paths, memory-light) needs a nix binary cache (nix copy --from) — a separate future project, tracked in memory.",
+    "incremental_pull": false
+  },
+  "countdown": {
+    "_comment": "Cancellable pre-switch gate. On a new digest: notify-send + a centered kdialog (Yes=switch now, No=skip THIS build, Cancel/timeout=proceed at countdown end). delay_seconds is the auto-proceed timeout. Headless (no DISPLAY/WAYLAND or no kdialog) skips the dialog and proceeds after a journal note — never blocks unattended operation.",
+    "delay_seconds": 60,
+    "channels": { "dialog_center": true, "notify_send": true, "journal": true }
+  }
+}

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Which metrics the widget shows. Every one is a field already in the
+     snapshot, so enabling one costs a label rather than another applet — which
+     is the entire reason this widget exists instead of fourteen KSysGuard
+     instances. -->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+                          http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <!-- Which cluster this instance renders. One widget serves the whole
+         panel; another metric is a config change rather than another applet,
+         which is the thing being fixed. Valid values (2026-08-11 — replaced
+         the old "left"/"right" 4-cluster split with one mode per domain, so
+         each widget can carry its own title and autoscale to the panel
+         instead of several clusters fighting over one row):
+           "storage"  — per-mount disk bars + disk read/write rates
+           "mem"      — layered mem ring, swap pie, user-slice pie
+           "cpu"      — cpu pie, vram pie (GPU sibling of cpu), load1/5/15
+           "network"  — net_rx / net_tx
+           "psi"      — the 3x2 some/full PSI grid (Sc Si Sm / Fc Fi Fm)
+           "guard"    — freeze-guard voters from /run/freeze-guard.json
+           "proctable"— sortable multi-column process table with multiple
+                        kill signals, replacing the compact/expanded content
+                        of an instance in this mode
+         The actual per-mode title + item composition is data, not here —
+         see contents/data/clusters.json. No <choices> restriction here
+         (plain String), so validity is enforced in main.qml's clusters
+         lookup, not this schema. -->
+    <entry name="mode" type="String">
+      <default>cpu</default>
+    </entry>
+    <!-- The snapshot lives in /run/user/<uid> and QML has no getenv. Declared
+         rather than hardcoded so this is not silently single-user. -->
+    <entry name="uid" type="Int">
+      <default>1000</default>
+    </entry>
+    <!-- proctable ONLY: which set of per-process numbers the table renders.
+         "live" is the current tick; "1m"/"5m"/"15m" read the matching block
+         of each row's "avg" object, which watchdog.rs publishes as an EWMA
+         per pid (same mechanism as load1/load5/load15). Set from the widget's
+         right-click menu, not a config dialog, so it is one action away while
+         reading the table. No <choices> for the same reason as "mode" above:
+         an unknown value falls back to live in main.qml's lookup. -->
+    <entry name="ptWindow" type="String">
+      <default>live</default>
+    </entry>
+  </group>
+</kcfg>

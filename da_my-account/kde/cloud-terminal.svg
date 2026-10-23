@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#171a2e"/>
+      <stop offset="1" stop-color="#0c0d16"/>
+    </linearGradient>
+    <linearGradient id="cloud" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7b7fff"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- rounded app tile -->
+  <rect x="12" y="12" width="232" height="232" rx="52" fill="url(#bg)" stroke="#2a2b3d" stroke-width="2"/>
+
+  <!-- cloud silhouette -->
+  <g filter="url(#glow)">
+    <path fill="url(#cloud)" d="M92 158
+      a34 34 0 0 1 3-67
+      a44 44 0 0 1 84 8
+      a30 30 0 0 1 -6 59
+      z"/>
+  </g>
+
+  <!-- terminal prompt: chevron + cursor, on the cloud -->
+  <g stroke="#0c0d16" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <polyline points="104,110 126,127 104,144"/>
+    <line x1="140" y1="146" x2="168" y2="146"/>
+  </g>
+
+  <!-- accent underline (a 'connection' line to the project purple) -->
+  <rect x="80" y="188" width="96" height="9" rx="4.5" fill="url(#cloud)" opacity="0.9"/>
+</svg>

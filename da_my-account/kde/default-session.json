@@ -1,0 +1,284 @@
+{
+  "_comment": "DECLARATIVE default 4-desktop login layout — single source of truth. Captured live from the running KWin/Konsole session on 2026-06-18 (screen 2304x1536, panel 44px → usable 1492px; every split is at the exact half x=1152). Consumed by default-session.nix → default-session-launcher.sh (the engine) + generated Konsole --tabs-from-file files + kwinrulesrc. Edit THIS file to change the layout, never the launcher. Geometry is stored as logical cells (left|right|full); the launcher computes pixels from the LIVE screen geometry at runtime so the layout is resolution-independent and reproducible on any machine.",
+  "screen_reference": {
+    "width": 2304,
+    "height": 1536,
+    "usable_height": 1492,
+    "panel_height": 44,
+    "split_x": 1152,
+    "work_x": 0,
+    "work_y": 40,
+    "work_width": 2304,
+    "work_height": 1426,
+    "_work_area_doc": "KWin MaximizeArea, measured live 2026-08-21 (panels excluded). NOTE this is 1426 tall, not the 1492 the older usable_height claimed - that value predates the current panel setup. Re-measure with a KWin script calling workspace.clientArea(KWin.MaximizeArea, w)."
+  },
+  "_virtual_desktops_doc": [
+    "THE source of truth for how many virtual desktops exist. Two consumers,",
+    "one datum, so they cannot drift:",
+    "",
+    "  plasma.nix  reads .virtual_desktops into programs.plasma.kwin.virtualDesktops",
+    "              — the declarative path, applied at switch time via kwinrc.",
+    "  the launcher verifies the live count over KWin's DBus VirtualDesktopManager",
+    "              and creates any that are missing — the runtime safety net.",
+    "",
+    "Both are needed. kwinrc is exactly the kind of file KWin rewrites from its",
+    "own in-memory state, which is how the systray lists were lost; a declaration",
+    "that is only ever written at switch time can be silently undone before the",
+    "next one. And the layout below targets desk5 — placing a window on a desktop",
+    "that does not exist puts it wherever KWin feels like, which reads as 'the",
+    "layout is broken' rather than 'a desktop is missing'.",
+    "",
+    "count MUST cover the highest id used in .desktops[] below."
+  ],
+  "virtual_desktops": {
+    "count": 5,
+    "rows": 1,
+    "names": [
+      "Desk1",
+      "Desk2",
+      "Desk3",
+      "Desk4",
+      "Desk5"
+    ]
+  },
+  "fallback": {
+    "_comment": "Guarantees a crashing/hanging app can NEVER hold the login. The launcher runs from a Plasma autostart entry with X-KDE-autostart-condition=ksmserver and phase=2 — i.e. AFTER the session is up, so it cannot block login. (It is NOT a systemd oneshot; this line said so until 2026-08-21.) Each app is spawned detached, and each launch is wrapped in `timeout`. A failed/timed-out launch is logged (and ntfy'd) and the launcher moves on to the next app.",
+    "_gate_doc": "There is deliberately NO boot-type knob here any more. run_on/fresh_only tested `noresume` on /proc/cmdline: a per-BOOT signal answering a per-SESSION question, and it tested which rEFInd entry was booted rather than what the kernel actually did. On 2026-08-21 cmdline carried resume= while the kernel loaded ZERO hibernation images - a genuinely fresh session that got no layout. A real resume restores the session from the RAM image, so ksmserver never restarts and this launcher never runs; the gate could only ever be a false negative. The guard is now emptiness: the launcher skips if any of the layout apps are already running.",
+    "per_app_launch_timeout_sec": 25,
+    "service_timeout_sec": 120,
+    "detached_spawn": true,
+    "never_block_login": true,
+    "on_failure": "log_and_continue",
+    "notify_ntfy": false,
+    "_position_doc": "Positioning re-asserts (desktop + tile) idempotently across several passes so SLOW-to-map windows (e.g. systemsettings under dbus-run-session, electron apps) still get placed. passes × interval should exceed the slowest window's map time.",
+    "position_passes": 10,
+    "position_interval_sec": 1.5
+  },
+  "_apps_doc": "App registry — the launcher is GENERIC and reads everything here. To add/change an app you edit ONLY this block + reference it from a desktop window by its key. type=konsole gets the tab/title builder (matched for positioning by PID). For every other app: exec=binary, match_class=KWin resourceClass used to find its window for positioning (case-insensitive), fixed_args=always-passed args, arg_mode=how the window's per-instance value is appended: path→args[0], url→url (single), urls→urls[] (one browser tab per URL), paths→args[] (existing dirs only), none→nothing. single_instance=true means a second launch would fold into the ALREADY RUNNING process instead of creating a window this launcher can match by PID - skip it. Default false: konsole is launched --separate --nofork precisely so desk3 can hold two windows while desk1 has one.",
+  "apps": {
+    "konsole": {
+      "type": "konsole",
+      "exec": "konsole",
+      "konsole_flags": [
+        "--separate",
+        "--nofork"
+      ]
+    },
+    "dolphin": {
+      "exec": "dolphin",
+      "match_class": "org.kde.dolphin",
+      "arg_mode": "paths",
+      "fixed_args": [
+        "--new-window"
+      ]
+    },
+    "systemsettings": {
+      "exec": "systemsettings",
+      "match_class": "systemsettings",
+      "arg_mode": "none",
+      "launch_prefix": [
+        "dbus-run-session",
+        "--"
+      ]
+    },
+    "obsidian": {
+      "exec": "obsidian",
+      "match_class": "obsidian",
+      "arg_mode": "none",
+      "single_instance": true
+    },
+    "kate": {
+      "exec": "kate",
+      "match_class": "org.kde.kate",
+      "arg_mode": "none",
+      "single_instance": true,
+      "_single_instance_doc": "Kate reuses its running instance by default (Behavior > Open each document in its own window is off), so a second launch adds a document to the existing window rather than a new one to position."
+    },
+    "cloud-terminal": {
+      "exec": "cloud-terminal-nix-flakes",
+      "match_class": "cloud-terminal-nix-flakes",
+      "arg_mode": "none",
+      "fixed_args": [
+        "--show"
+      ],
+      "_doc": "Cloud Terminal (Electron, da_cloud-terminal). Launcher on PATH via `build.sh install` → ~/.local/bin. --class sets the Wayland app_id = resourceClass used for positioning."
+    },
+    "redroid": {
+      "exec": "redroid",
+      "match_class": "scrcpy",
+      "arg_mode": "none",
+      "_doc": "Redroid Android (da_redroid). The `redroid` launcher (HM containers-cloud/redroid.nix, ~/.local/bin) runs `redroid up` = docker pull+run the BAKED redroid-cloud GHCR image (apps + layout + theme baked in), then scrcpy to mirror it. match_class=scrcpy is the mirror window's Wayland app_id used for positioning. NOTE: first-ever login after a fresh pull may exceed the per-app launch timeout while the multi-GB image downloads — fallback logs+continues (never blocks login); the window lands on Desktop 3 on subsequent logins once the image is cached."
+    },
+    "my-konsole": {
+      "exec": "my-konsole",
+      "match_class": "my-konsole"
+    },
+    "brave": {
+      "exec": "brave",
+      "match_class": "brave-browser",
+      "arg_mode": "urls",
+      "single_instance": true,
+      "_single_instance_doc": "Brave is one process: a second `brave` invocation opens a tab/window inside the running one and exits, so the launcher can never match the new window by PID. Skip instead of guessing."
+    },
+    "my-browser-qute": {
+      "exec": "my-browser-qute",
+      "match_class": "my-browser-qute",
+      "arg_mode": "urls",
+      "single_instance": true
+    }
+  },
+  "desktops": [
+    {
+      "id": 1,
+      "windows": [
+        {
+          "cell": "left",
+          "app": "konsole",
+          "instance": "pane-left",
+          "_comment": "5 tabs: yazi, fzf, home (plain), ___ (plain), my-ai. command runs in the tab-s root pane; missing binary falls back to a plain shell.",
+          "tabs": [
+            {
+              "title": "yazi",
+              "command": "yazi"
+            },
+            {
+              "title": "fzf",
+              "command": "fzf"
+            },
+            {
+              "title": "home",
+              "command": ""
+            },
+            {
+              "title": "___",
+              "command": ""
+            },
+            {
+              "title": "my-ai",
+              "command": "my-ai"
+            }
+          ]
+        },
+        {
+          "cell": "right",
+          "app": "my-konsole",
+          "instance": "hub"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "windows": [
+        {
+          "cell": "left",
+          "app": "kate",
+          "_comment": "Left half only. The right half is deliberately empty - kate is the whole point of this desktop and a second window would just be in the way."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "windows": [
+        {
+          "cell": "left-top",
+          "app": "konsole",
+          "instance": "journal",
+          "_comment": "Live journal views. The -f tabs follow; boot and errors are one-shot snapshots of the current boot.",
+          "tabs": [
+            {
+              "title": "system",
+              "command": "journalctl -f"
+            },
+            {
+              "title": "user",
+              "command": "journalctl --user -f"
+            },
+            {
+              "title": "kernel",
+              "command": "journalctl -kf"
+            },
+            {
+              "title": "boot",
+              "command": "journalctl -b"
+            },
+            {
+              "title": "errors",
+              "command": "journalctl -p err -b"
+            }
+          ]
+        },
+        {
+          "cell": "left-bottom",
+          "app": "konsole",
+          "instance": "scratch",
+          "_comment": "Deliberately empty - a plain shell to work in, under the journals. No command, so it is just fish.",
+          "tabs": [
+            {
+              "title": "shell",
+              "command": ""
+            }
+          ]
+        },
+        {
+          "cell": "right",
+          "app": "konsole",
+          "instance": "monitors",
+          "_comment": "ONE window, full height, split top/bottom: atop above, htop below. dir=tb splits the pane horizontally into a top and a bottom half; pane=0 targets the tab root, so the new pane is the bottom one and takes htop while the root keeps atop.",
+          "tabs": [
+            {
+              "title": "monitors",
+              "command": "atop",
+              "splits": [
+                {
+                  "pane": 0,
+                  "dir": "tb",
+                  "command": "htop"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "windows": [
+        {
+          "cell": "left",
+          "app": "dolphin",
+          "_comment": "arg_mode=paths - dolphin opens ONE TAB PER PATH, so this list is the tab bar left to right. Details view is the default via dolphinrc GlobalViewProps (see plasma.nix).",
+          "args": [
+            "/home/diego",
+            "/home/diego/git",
+            "/home/diego/git/cloud",
+            "/home/diego/git/cloud-infra-desktop",
+            "/home/diego/Downloads"
+          ]
+        },
+        {
+          "cell": "right",
+          "app": "brave",
+          "urls": []
+        }
+      ]
+    }
+  ],
+  "konsole_cell": {
+    "cell_w": 7,
+    "cell_h": 16,
+    "pad_w": 32,
+    "pad_h": 31
+  },
+  "_konsole_cell_doc": [
+    "Konsole sizes itself in CHARACTER CELLS. On Wayland the CLIENT decides its size - KWin sends a configure and Konsole answers with the nearest whole cell count - so the -p TerminalColumns/TerminalRows values at launch ARE the final geometry. Nothing compositor-side overrides them: not frameGeometry, not quick-tile, not the strictgeometry window rule (an X11-era hint, tested with no effect).",
+    "",
+    "Measured 2026-08-21 from three live windows: 39 rows -> 655px, 40 -> 671, 84 -> 1375.",
+    "  cell_h = 671-655 = 16",
+    "  pad_h  = 655 - 39*16 = 31",
+    "and across the width: 160 cols -> 1152px, so cell_w = 7, pad_w = 1152 - 160*7 = 32.",
+    "",
+    "An earlier derivation from two THROWAWAY konsoles gave pad_h=77, and that 46px error is what left a seam between the stacked windows. Measure the windows the layout actually creates, not test ones - the frame differs.",
+    "",
+    "A stacked pair must be sized AS A PAIR: total = (h - 2*pad)/cell, top = ceil(total/2), bottom = the rest. Independent halves do not meet."
+  ]
+}

@@ -1,0 +1,111 @@
+#!/bin/sh
+# my-account — holds the user's config data per application and deploys it to
+# non-mobile applications (the user-scope job of Nix home-manager).
+# Desktop counterpart of cloud-account.apk. Dry-run by default; --apply writes.
+#
+#   my-account [--apply] [--force] [--profile desktop|termux] [--app NAME]
+#
+# Layout: <app>/manifest + the app's files. Manifest = TAB-separated lines:
+#   kind  variants  source  target(under $HOME)  flake_src
+# kinds: file|dir  deployed to $HOME/<target>
+#        inline    held only (home-manager inlines it into a generated file / wraps it)
+#        sops      reference to a sops-encrypted path; the value is never copied
+#        canon     held copy; another deployer owns it (claude -> my-ai)
+#        secret    private file from the private repo cloud-me, flake_src = me:<path in cloud-me>.
+#                  The public repo holds the path only. Resolved at --apply, first match wins:
+#                    1. local clone: $MY_ACCOUNT_ME_DIR, else $GIT_BASE|~/git|~/git-repos|~ + /cloud-me
+#                    2. HTTPS GET <api>/<path>?ref=main, bearer from $MY_ACCOUNT_ME_TOKEN,
+#                       $GITHUB_TOKEN or `gh auth token`; <api> = $MY_ACCOUNT_ME_API, default
+#                       https://api.github.com/repos/diegonmarcos/cloud-me/contents (read-only).
+#                  Values are never printed; the dry-run only names the source that would be used.
+set -u
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+H="${MY_ACCOUNT_HOME:-$HOME}"
+APPLY=0; FORCE=0; ONLY=""
+case "${PREFIX:-}" in *com.termux*) PROFILE=termux ;; *) PROFILE=desktop ;; esac
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --apply) APPLY=1 ;; --force) FORCE=1 ;;
+    --profile) PROFILE="${2:?}"; shift ;; --app) ONLY="${2:?}"; shift ;;
+    -h|--help) sed -n 2,14p "$0"; exit 0 ;;
+    *) echo "my-account: unknown option $1" >&2; exit 2 ;;
+  esac; shift
+done
+[ "$APPLY" = 1 ] && echo "my-account: APPLY profile=$PROFILE home=$H" || echo "my-account: dry-run (plan only; --apply writes) profile=$PROFILE home=$H"
+TAB="$(printf '\t')"; n_new=0; n_same=0; n_diff=0; n_skip=0; n_held=0
+
+ME_API="${MY_ACCOUNT_ME_API:-https://api.github.com/repos/diegonmarcos/cloud-me/contents}"
+me_dir() {
+  for d in "${MY_ACCOUNT_ME_DIR:-}" "${GIT_BASE:-}/cloud-me" "$H/git/cloud-me" "$H/git-repos/cloud-me" "$H/cloud-me" "$ROOT/../../cloud-me"; do
+    [ -n "$d" ] && [ -d "$d" ] && { (cd "$d" && pwd); return 0; }
+  done; return 1
+}
+me_token() {
+  [ -n "${MY_ACCOUNT_ME_TOKEN:-}" ] && { printf '%s' "$MY_ACCOUNT_ME_TOKEN"; return 0; }
+  [ -n "${GITHUB_TOKEN:-}" ] && { printf '%s' "$GITHUB_TOKEN"; return 0; }
+  command -v gh >/dev/null 2>&1 && gh auth token 2>/dev/null
+}
+# me_where <path>: prints "local:<dir>" | "api" | nothing (no value read, no network)
+me_where() {
+  d="$(me_dir)" && [ -f "$d/$1" ] && { echo "local:$d"; return 0; }
+  [ -n "$(me_token)" ] && { echo api; return 0; }
+  return 1
+}
+# me_fetch <path> <outfile> <where>: writes the value 0600; never echoes it
+me_fetch() {
+  case "$3" in
+    local:*) ( umask 077; cp "${3#local:}/$1" "$2" ) ;;
+    api) tok="$(me_token)"; ( umask 077; printf 'header = "Authorization: Bearer %s"\nheader = "Accept: application/vnd.github.raw"\nsilent\nfail\nmax-time = 60\n' "$tok" \
+           | curl -K - -o "$2" "$ME_API/$1?ref=main" ) ;;
+  esac
+}
+same() { if [ -d "$1" ]; then diff -r "$1" "$2" >/dev/null 2>&1; else cmp -s "$1" "$2"; fi; }
+put() { mkdir -p "$(dirname "$2")"; if [ -d "$1" ]; then rm -rf "$2"; cp -rp "$1" "$2"; else cp -p "$1" "$2"; fi; }
+
+for m in "$ROOT"/*/manifest; do
+  app="$(basename "$(dirname "$m")")"
+  [ -z "$ONLY" ] || [ "$ONLY" = "$app" ] || continue
+  while IFS="$TAB" read -r kind variants source target _flake; do
+    case "$kind" in ''|'#'*) continue ;; esac
+    case ",$variants," in *",$PROFILE,"*) ;; *) continue ;; esac
+    case "$kind" in
+      secret)
+        ref="${_flake#me:}"; w="$(me_where "$ref")" || w=""
+        case "$w" in local:*) lbl="cloud-me clone" ;; api) lbl="cloud-me api" ;; *) lbl="UNRESOLVED" ;; esac
+        if [ "$target" = - ] || [ "$w" = "" ]; then
+          n_held=$((n_held + 1)); printf '  secret %s -> %s [source: %s; me:%s]\n' "$app" "$target" "$lbl" "$ref"; continue
+        fi
+        dst="$H/$target"
+        if [ "$APPLY" != 1 ]; then
+          [ -e "$dst" ] && n_same=$((n_same + 1)) || n_new=$((n_new + 1))
+          printf '  secret %s -> %s [source: %s; me:%s]%s\n' "$app" "$target" "$lbl" "$ref" "$([ -e "$dst" ] && echo ' (exists)')"; continue
+        fi
+        tmp="$(umask 077; mktemp)"
+        if ! me_fetch "$ref" "$tmp" "$w"; then rm -f "$tmp"; n_skip=$((n_skip + 1)); printf '  skip  secret %s -> %s (fetch failed via %s)\n' "$app" "$target" "$lbl"; continue; fi
+        if [ -e "$dst" ] && cmp -s "$tmp" "$dst"; then n_same=$((n_same + 1))
+        elif [ -e "$dst" ] && [ "$FORCE" != 1 ]; then n_diff=$((n_diff + 1)); printf '  diff  secret %s -> %s (differs; --force to overwrite)\n' "$app" "$target"
+        else
+          mkdir -p "$(dirname "$dst")"; [ -e "$dst" ] && mv "$dst" "$dst.my-account.bak"
+          ( umask 077; cp "$tmp" "$dst" ); chmod 600 "$dst"; n_new=$((n_new + 1)); printf '  wrote secret %s -> %s (0600, via %s)\n' "$app" "$target" "$lbl"
+        fi
+        rm -f "$tmp"; continue ;;
+      inline|canon|sops) n_held=$((n_held + 1)); printf '  held  %-9s %s/%s\n' "$kind" "$app" "$source"; continue ;;
+    esac
+    src="$ROOT/$app/$source"; dst="$H/$target"
+    if [ -L "$dst" ] && case "$(readlink -f "$dst")" in /nix/store/*) true ;; *) false ;; esac; then
+      n_skip=$((n_skip + 1)); printf '  skip  %s -> %s (managed by home-manager)\n' "$app" "$target"; continue
+    fi
+    if [ ! -e "$dst" ]; then
+      n_new=$((n_new + 1)); printf '  new   %s -> %s\n' "$app" "$target"
+      [ "$APPLY" = 1 ] && put "$src" "$dst"
+    elif same "$src" "$dst"; then
+      n_same=$((n_same + 1))
+    elif [ "$FORCE" = 1 ]; then
+      n_diff=$((n_diff + 1)); printf '  over  %s -> %s (backup .my-account.bak)\n' "$app" "$target"
+      if [ "$APPLY" = 1 ]; then rm -rf "$dst.my-account.bak"; mv "$dst" "$dst.my-account.bak"; put "$src" "$dst"; fi
+    else
+      n_diff=$((n_diff + 1)); printf '  diff  %s -> %s (differs; --force to overwrite)\n' "$app" "$target"
+    fi
+  done < "$m"
+done
+echo "my-account: new=$n_new same=$n_same differ=$n_diff skipped=$n_skip held=$n_held"

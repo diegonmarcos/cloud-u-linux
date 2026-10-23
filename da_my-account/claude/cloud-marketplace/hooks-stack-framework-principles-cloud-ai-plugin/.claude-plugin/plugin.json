@@ -1,0 +1,7 @@
+{
+  "name": "hooks-stack-framework-principles-cloud-ai-plugin",
+  "displayName": "Hooks Stack Framework Principles",
+  "version": "1.0.0",
+  "description": "The core engine: declarative/data-driven/sops CORE PRINCIPLES + FIRE rules + repo reference injected at SessionStart, plus PreToolUse:Bash guard (allow/deny/warn) and PostToolUse nudge. Replaces static CLAUDE.md. Split from cloud-principles-ai-plugin.",
+  "author": { "name": "Diego Nepomuceno Marcos" }
+}

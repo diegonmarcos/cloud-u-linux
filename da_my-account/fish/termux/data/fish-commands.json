@@ -1,0 +1,523 @@
+{
+  "_doc": "SINGLE SOURCE OF TRUTH for every fish abbreviation, alias and function \u2014 and for the Aliases/Functions sections of fish_greeting. fish.nix generates programs.fish.{shellAbbrs,shellAliases,functions} from this file AND generates the __cloud_commands_help function the greeting calls, so the greeting can never advertise something that isn't installed (or miss something that is). flake.nix derives sharedAliases (bash+zsh) from the entries flagged shared:true. Add a command HERE \u2014 nothing else to edit. Descriptions must not contain double quotes (they are embedded in generated fish echo lines).",
+  "_groups_doc": "Render order + colour of the greeting sections. An entry whose group is unknown falls into 'other'.",
+  "groups": [
+    {
+      "id": "ai",
+      "title": "AI"
+    },
+    {
+      "id": "flakes",
+      "title": "Nix Flakes",
+      "color": "magenta"
+    },
+    {
+      "id": "git",
+      "title": "Git",
+      "color": "yellow"
+    },
+    {
+      "id": "dev",
+      "title": "Dev",
+      "color": "green"
+    },
+    {
+      "id": "cloud",
+      "title": "Cloud",
+      "color": "red"
+    },
+    {
+      "id": "cli",
+      "title": "Modern CLI",
+      "color": "blue"
+    },
+    {
+      "id": "nav",
+      "title": "Navigation",
+      "color": "blue"
+    },
+    {
+      "id": "sys",
+      "title": "System",
+      "color": "magenta"
+    },
+    {
+      "id": "py",
+      "title": "Python",
+      "color": "green"
+    },
+    {
+      "id": "docker",
+      "title": "Docker",
+      "color": "cyan"
+    },
+    {
+      "id": "other",
+      "title": "Others",
+      "color": "yellow"
+    }
+  ],
+  "_abbrs_doc": "Expand on space in fish. name -> cmd.",
+  "abbrs": [
+    {
+      "name": "gs",
+      "cmd": "git status -sb",
+      "group": "git",
+      "desc": "status (short + branch)"
+    },
+    {
+      "name": "ga",
+      "cmd": "git add",
+      "group": "git",
+      "desc": "add"
+    },
+    {
+      "name": "gaa",
+      "cmd": "git add --all",
+      "group": "git",
+      "desc": "add all"
+    },
+    {
+      "name": "gc",
+      "cmd": "git commit",
+      "group": "git",
+      "desc": "commit"
+    },
+    {
+      "name": "gcm",
+      "cmd": "git commit -m",
+      "group": "git",
+      "desc": "commit -m"
+    },
+    {
+      "name": "gp",
+      "cmd": "git push",
+      "group": "git",
+      "desc": "push (runs the sync engine via pre-push)"
+    },
+    {
+      "name": "gl",
+      "cmd": "git log --oneline --graph --decorate -20",
+      "group": "git",
+      "desc": "log graph, last 20"
+    },
+    {
+      "name": "gd",
+      "cmd": "git diff",
+      "group": "git",
+      "desc": "diff"
+    },
+    {
+      "name": "gco",
+      "cmd": "git checkout",
+      "group": "git",
+      "desc": "checkout"
+    },
+    {
+      "name": "gpl",
+      "cmd": "git pull",
+      "group": "git",
+      "desc": "pull"
+    },
+    {
+      "name": "dps",
+      "cmd": "docker ps",
+      "group": "docker",
+      "desc": "running containers"
+    },
+    {
+      "name": "dpsa",
+      "cmd": "docker ps -a",
+      "group": "docker",
+      "desc": "all containers"
+    },
+    {
+      "name": "dcu",
+      "cmd": "docker compose up",
+      "group": "docker",
+      "desc": "compose up"
+    },
+    {
+      "name": "dcd",
+      "cmd": "docker compose down",
+      "group": "docker",
+      "desc": "compose down"
+    }
+  ],
+  "_aliases_doc": "shared:true also lands in bash + zsh (flake.nix sharedAliases). Everything here is a fish alias.",
+  "aliases": [
+    {
+      "name": "up",
+      "cmd": "flakes.switch",
+      "group": "flakes",
+      "desc": "compat shortcut for flakes.switch"
+    },
+    {
+      "name": "conf",
+      "cmd": "nano ~/git/cloud-infra-desktop/bb_flakes_termux/src/flake.nix",
+      "group": "flakes",
+      "desc": "edit flake.nix",
+      "shared": true
+    },
+    {
+      "name": "dtk",
+      "cmd": "bash ~/git/cloud-mykonsole-dtk/dtk.sh",
+      "group": "cloud",
+      "desc": "Diegos Toolkit (cloud ops, dashboards, webhooks)",
+      "shared": true
+    },
+    {
+      "name": "ls",
+      "cmd": "eza --color=auto --icons",
+      "group": "cli",
+      "desc": "list (eza)"
+    },
+    {
+      "name": "ll",
+      "cmd": "eza -alF --icons",
+      "group": "cli",
+      "desc": "list long + hidden"
+    },
+    {
+      "name": "la",
+      "cmd": "eza -A --icons",
+      "group": "cli",
+      "desc": "list all"
+    },
+    {
+      "name": "l",
+      "cmd": "eza -CF --icons",
+      "group": "cli",
+      "desc": "list columns"
+    },
+    {
+      "name": "lh",
+      "cmd": "eza -lh --icons",
+      "group": "cli",
+      "desc": "list human sizes"
+    },
+    {
+      "name": "lt",
+      "cmd": "eza --tree --level=2 --icons",
+      "group": "cli",
+      "desc": "tree, 2 levels"
+    },
+    {
+      "name": "cat",
+      "cmd": "bat --paging=never",
+      "group": "cli",
+      "desc": "cat with syntax highlight (bat)"
+    },
+    {
+      "name": "grep",
+      "cmd": "rg",
+      "group": "cli",
+      "desc": "ripgrep"
+    },
+    {
+      "name": "find",
+      "cmd": "fd",
+      "group": "cli",
+      "desc": "fd"
+    },
+    {
+      "name": "..",
+      "cmd": "cd ..",
+      "group": "nav",
+      "desc": "up one"
+    },
+    {
+      "name": "...",
+      "cmd": "cd ../..",
+      "group": "nav",
+      "desc": "up two"
+    },
+    {
+      "name": "....",
+      "cmd": "cd ../../..",
+      "group": "nav",
+      "desc": "up three"
+    },
+    {
+      "name": "rm",
+      "cmd": "rm -i",
+      "group": "sys",
+      "desc": "remove, interactive"
+    },
+    {
+      "name": "cp",
+      "cmd": "cp -i",
+      "group": "sys",
+      "desc": "copy, interactive"
+    },
+    {
+      "name": "mv",
+      "cmd": "mv -i",
+      "group": "sys",
+      "desc": "move, interactive"
+    },
+    {
+      "name": "du",
+      "cmd": "ncdu",
+      "group": "sys",
+      "desc": "disk usage TUI"
+    },
+    {
+      "name": "free",
+      "cmd": "free -h",
+      "group": "sys",
+      "desc": "memory, human"
+    },
+    {
+      "name": "ports",
+      "cmd": "ss -tulanp",
+      "group": "sys",
+      "desc": "listening sockets"
+    },
+    {
+      "name": "myip",
+      "cmd": "curl -s ifconfig.me",
+      "group": "sys",
+      "desc": "public IP"
+    },
+    {
+      "name": "c",
+      "cmd": "clear",
+      "group": "sys",
+      "desc": "clear"
+    },
+    {
+      "name": "cls",
+      "cmd": "clear",
+      "group": "sys",
+      "desc": "clear"
+    },
+    {
+      "name": "h",
+      "cmd": "history",
+      "group": "sys",
+      "desc": "history"
+    },
+    {
+      "name": "path",
+      "cmd": "echo $PATH | tr ':' '\\n'",
+      "group": "sys",
+      "desc": "PATH one per line"
+    },
+    {
+      "name": "reload",
+      "cmd": "source ~/.config/fish/config.fish",
+      "group": "sys",
+      "desc": "reload fish config"
+    },
+    {
+      "name": "welcome",
+      "cmd": "fish_greeting",
+      "group": "sys",
+      "desc": "reprint this greeting"
+    },
+    {
+      "name": "py",
+      "cmd": "python3",
+      "group": "py",
+      "desc": "python3"
+    },
+    {
+      "name": "python",
+      "cmd": "python3",
+      "group": "py",
+      "desc": "python3"
+    },
+    {
+      "name": "pip",
+      "cmd": "pip3",
+      "group": "py",
+      "desc": "pip3"
+    },
+    {
+      "name": "ppy",
+      "cmd": "poetry run python3",
+      "group": "py",
+      "desc": "poetry python3"
+    },
+    {
+      "name": "sshd",
+      "cmd": "cloud-ide-sshd",
+      "group": "sys",
+      "desc": "mesh sshd wrapper {start|stop|status|restart|ensure} \u2014 shadows openssh sshd on purpose (bare `sshd` re-execs and dies)",
+      "shared": true
+    },
+    {
+      "name": "sshd-up",
+      "cmd": "cloud-ide-sshd ensure",
+      "group": "sys",
+      "desc": "start/self-heal the pinned mesh sshd on :8024",
+      "shared": true
+    },
+    {
+      "name": "sshd-status",
+      "cmd": "cloud-ide-sshd status",
+      "group": "sys",
+      "desc": "is the mesh sshd bound on :8024?",
+      "shared": true
+    },
+    {
+      "name": "sshd-boot",
+      "cmd": "nix-shell -p openssh jq --run 'bash $HOME/git/cloud-infra-desktop/bb_flakes_termux/bootstrap-sshd.sh'",
+      "group": "sys",
+      "desc": "EMERGENCY sshd on :8022 when HM not applied",
+      "shared": true
+    }
+  ],
+  "_functions_doc": "file is relative to modules/programs/shells/fish/functions/. body is an inline one-liner alternative (mutually exclusive with file).",
+  "functions": [
+    {
+      "name": "flakes.switch",
+      "file": "flakes.switch.fish",
+      "group": "flakes",
+      "desc": "git sync local (unix repo) then build.sh switch"
+    },
+    {
+      "name": "hhelp",
+      "file": "hhelp.fish",
+      "group": "flakes",
+      "desc": "parse this flake (config/tools/alias/envvar)"
+    },
+    {
+      "name": "myhelp",
+      "file": "myhelp.fish",
+      "group": "flakes",
+      "desc": "quick command cheat-sheet"
+    },
+    {
+      "name": "gacp",
+      "file": "gacp.fish",
+      "group": "git",
+      "desc": "add all + commit -m + sync-push"
+    },
+    {
+      "name": "gcam",
+      "file": "gcam.fish",
+      "group": "git",
+      "desc": "add all + commit -m"
+    },
+    {
+      "name": "gpsh",
+      "file": "gpsh.fish",
+      "group": "git",
+      "desc": "sync-push current branch"
+    },
+    {
+      "name": "git_current_branch",
+      "file": "git_current_branch.fish",
+      "group": "git",
+      "desc": "print current branch",
+      "hidden": true
+    },
+    {
+      "name": "git.push",
+      "file": "git.push.fish",
+      "group": "git",
+      "desc": "sync-then-push in one command (no stale ref)"
+    },
+    {
+      "name": "ai-cli",
+      "file": "ai-cli.fish",
+      "group": "dev",
+      "desc": "Goose AI (default Haiku 4.5)"
+    },
+    {
+      "name": "cloud-ai-cli",
+      "file": "cloud-ai-cli.fish",
+      "group": "dev",
+      "desc": "Goose against the cloud endpoint"
+    },
+    {
+      "name": "serve",
+      "body": "my-webserver start $argv",
+      "group": "cloud",
+      "desc": "serve $HOME over HTTP + Markdown + Eruda"
+    },
+    {
+      "name": "mkcd",
+      "file": "mkcd.fish",
+      "group": "sys",
+      "desc": "mkdir then cd into it"
+    },
+    {
+      "name": "mkd",
+      "file": "mkd.fish",
+      "group": "sys",
+      "desc": "mkdir -p"
+    },
+    {
+      "name": "extract",
+      "file": "extract.fish",
+      "group": "sys",
+      "desc": "extract any archive"
+    },
+    {
+      "name": "qfind",
+      "file": "qfind.fish",
+      "group": "sys",
+      "desc": "find by name fragment"
+    },
+    {
+      "name": "backup",
+      "file": "backup.fish",
+      "group": "sys",
+      "desc": "timestamped copy of a file"
+    },
+    {
+      "name": "duh",
+      "file": "duh.fish",
+      "group": "sys",
+      "desc": "disk usage, sorted"
+    },
+    {
+      "name": "localip",
+      "file": "localip.fish",
+      "group": "sys",
+      "desc": "LAN IP addresses"
+    },
+    {
+      "name": "cpucap",
+      "file": "cpucap.fish",
+      "group": "sys",
+      "desc": "CPU frequency caps"
+    },
+    {
+      "name": "hg",
+      "file": "hg.fish",
+      "group": "sys",
+      "desc": "grep your shell history"
+    },
+    {
+      "name": "fish_greeting",
+      "file": "fish_greeting.fish",
+      "group": "other",
+      "desc": "the login banner",
+      "hidden": true
+    },
+    {
+      "name": "__fzf_search_commands",
+      "file": "__fzf_search_commands.fish",
+      "group": "other",
+      "desc": "Ctrl+P command search",
+      "hidden": true
+    },
+    {
+      "name": "__cloud_commands_help",
+      "generated": true,
+      "group": "other",
+      "desc": "greeting Aliases/Functions sections",
+      "hidden": true
+    },
+    {
+      "name": "claude",
+      "file": "claude.fish",
+      "desc": "Claude Code (PTY-wrapped for Termux/Nix TTY compat)",
+      "group": "ai"
+    }
+  ]
+}

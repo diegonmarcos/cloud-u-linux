@@ -1,0 +1,120 @@
+{
+  "_doc": "Desktop fish commands — SAME schema as bb_flakes_termux/src/modules/data/fish-commands.json, deliberately a separate file: the two machines genuinely run different command sets (plasma/qdbus/chromium here, termux/proot there). What IS shared is the schema and the generator shape, so the greeting section reads identically on both. This file is the ONLY place these live: fish.nix builds shellAbbrs, shellAliases, functions AND the greeting's Aliases & Functions section from it, so nothing can be advertised that isn't installed. Set \"hidden\": true to define a command without listing it; \"shared\": true marks aliases that also belong in the bash/zsh set.",
+
+  "groups": [
+    { "id": "git",    "title": "Git",         "color": "yellow"  },
+    { "id": "docker", "title": "Docker",      "color": "cyan"    },
+    { "id": "cli",    "title": "Modern CLI",  "color": "blue"    },
+    { "id": "nav",    "title": "Navigation",  "color": "blue"    },
+    { "id": "py",     "title": "Python",      "color": "green"   },
+    { "id": "sys",    "title": "System",      "color": "magenta" },
+    { "id": "session","title": "Session (Plasma 6)", "color": "red" },
+    { "id": "dev",    "title": "Dev",         "color": "green"   },
+    { "id": "other",  "title": "Others",      "color": "yellow"  }
+  ],
+
+  "abbrs": [
+    { "name": "gs",   "cmd": "git status -sb",                          "group": "git", "desc": "status (short + branch)" },
+    { "name": "ga",   "cmd": "git add",                                 "group": "git", "desc": "add" },
+    { "name": "gaa",  "cmd": "git add --all",                           "group": "git", "desc": "add everything" },
+    { "name": "gc",   "cmd": "git commit",                              "group": "git", "desc": "commit" },
+    { "name": "gcm",  "cmd": "git commit -m",                           "group": "git", "desc": "commit with message" },
+    { "name": "gp",   "cmd": "git push",                                "group": "git", "desc": "push" },
+    { "name": "gl",   "cmd": "git log --oneline --graph --decorate -20","group": "git", "desc": "last 20 commits, graph" },
+    { "name": "gd",   "cmd": "git diff",                                "group": "git", "desc": "diff" },
+    { "name": "gco",  "cmd": "git checkout",                            "group": "git", "desc": "checkout" },
+    { "name": "gpl",  "cmd": "git pull",                                "group": "git", "desc": "pull" },
+    { "name": "gcl",  "cmd": "git clone",                               "group": "git", "desc": "clone <url>" },
+
+    { "name": "dps",  "cmd": "docker ps",              "group": "docker", "desc": "running containers" },
+    { "name": "dpsa", "cmd": "docker ps -a",           "group": "docker", "desc": "all containers" },
+    { "name": "dcu",  "cmd": "docker compose up",      "group": "docker", "desc": "compose up" },
+    { "name": "dcd",  "cmd": "docker compose down",    "group": "docker", "desc": "compose down" }
+  ],
+
+  "aliases": [
+    { "name": "ls",   "cmd": "eza --color=auto --icons", "group": "cli", "desc": "list", "shared": true },
+    { "name": "ll",   "cmd": "eza -alF --icons",         "group": "cli", "desc": "long list, all", "shared": true },
+    { "name": "la",   "cmd": "eza -A --icons",           "group": "cli", "desc": "list almost-all", "shared": true },
+    { "name": "l",    "cmd": "eza -CF --icons",          "group": "cli", "desc": "columns", "shared": true },
+    { "name": "lh",   "cmd": "eza -lh --icons",          "group": "cli", "desc": "long, human sizes", "shared": true },
+    { "name": "lt",   "cmd": "eza --tree --level=2 --icons", "group": "cli", "desc": "tree, 2 deep", "shared": true },
+    { "name": "cat",  "cmd": "bat --paging=never",       "group": "cli", "desc": "bat, no pager", "shared": true },
+    { "name": "grep", "cmd": "rg",                       "group": "cli", "desc": "ripgrep", "shared": true },
+    { "name": "find", "cmd": "fd",                       "group": "cli", "desc": "fd", "shared": true },
+
+    { "name": "..",   "cmd": "cd ..",       "group": "nav", "desc": "up one", "shared": true },
+    { "name": "...",  "cmd": "cd ../..",    "group": "nav", "desc": "up two", "shared": true },
+    { "name": "....", "cmd": "cd ../../..", "group": "nav", "desc": "up three", "shared": true },
+
+    { "name": "rm", "cmd": "rm -i", "group": "nav", "desc": "prompt before delete", "shared": true },
+    { "name": "cp", "cmd": "cp -i", "group": "nav", "desc": "prompt before overwrite", "shared": true },
+    { "name": "mv", "cmd": "mv -i", "group": "nav", "desc": "prompt before overwrite", "shared": true },
+
+    { "name": "py",     "cmd": "python3",             "group": "py", "desc": "python3", "shared": true },
+    { "name": "python", "cmd": "python3",             "group": "py", "desc": "python3", "shared": true },
+    { "name": "pip",    "cmd": "pip3",                "group": "py", "desc": "pip3", "shared": true },
+    { "name": "ppy",    "cmd": "poetry run python3",  "group": "py", "desc": "python3 inside poetry env" },
+
+    { "name": "du",    "cmd": "ncdu",             "group": "sys", "desc": "disk usage browser", "shared": true },
+    { "name": "free",  "cmd": "free -h",          "group": "sys", "desc": "memory, human sizes", "shared": true },
+    { "name": "ports", "cmd": "ss -tulanp",       "group": "sys", "desc": "listening sockets" },
+    { "name": "myip",  "cmd": "curl -s ifconfig.me", "group": "sys", "desc": "public IP", "shared": true },
+    { "name": "top-batch", "cmd": "echo '=== CPU/MEM ===' && top -bn1 | head -5 && echo '\\n=== TOP PROCS (CPU) ===' && top -bn1 -o %CPU | tail -n+8 | head -15 && echo '\\n=== DISK ===' && df -h / /home /boot 2>/dev/null && echo '\\n=== DOCKER ===' && docker stats --no-stream --format 'table {{.Name}}\\t{{.CPUPerc}}\\t{{.MemUsage}}\\t{{.MemPerc}}' 2>/dev/null || true", "group": "sys", "desc": "one-shot CPU/mem/disk/docker snapshot" },
+
+    { "name": "c",      "cmd": "clear",                              "group": "other", "desc": "clear", "shared": true },
+    { "name": "cls",    "cmd": "clear",                              "group": "other", "desc": "clear", "shared": true },
+    { "name": "h",      "cmd": "history",                            "group": "other", "desc": "history", "shared": true },
+    { "name": "path",   "cmd": "echo $PATH | tr ':' '\\n'",          "group": "other", "desc": "PATH one per line", "shared": true },
+    { "name": "reload", "cmd": "source ~/.config/fish/config.fish",  "group": "other", "desc": "reload fish config" },
+
+    { "name": "logout",       "cmd": "killall -9 -u $USER; qdbus org.kde.Shutdown /Shutdown logout", "group": "session", "desc": "end the Plasma session" },
+    { "name": "reboot",       "cmd": "sudo reboot-with-session",                                     "group": "session", "desc": "hibernate image + reboot; rEFInd 'Primary' resumes" },
+    { "name": "reboot-fresh", "cmd": "qdbus org.kde.Shutdown /Shutdown logoutAndReboot",             "group": "session", "desc": "plain graceful reboot, no session image" },
+    { "name": "poweroff",     "cmd": "qdbus org.kde.Shutdown /Shutdown logoutAndShutdown",           "group": "session", "desc": "shut down" },
+
+    { "name": "chrome_no_CORS", "cmd": "chromium --disable-web-security --user-data-dir=/tmp/chrome-nocors", "group": "dev", "desc": "chromium with web security off (throwaway profile)" },
+
+    { "name": "dtk",     "cmd": "bash ~/git/cloud-mykonsole-dtk/dtk.sh", "group": "other", "desc": "Tools TUI menu (~/git/cloud-mykonsole-dtk/dtk.sh)" },
+    { "name": "gdrive",  "cmd": "bash /home/diego/Documents/Git/mylibs/mytools/0_unix/rclone_mount.sh", "group": "other", "desc": "mount Google Drive via rclone" },
+    { "name": "welcome", "cmd": "_show_welcome", "group": "other", "desc": "reprint the welcome screen" }
+  ],
+
+  "functions": [
+    { "name": "gacp",              "file": "gacp.fish",              "group": "git", "desc": "git add . && commit && push" },
+    { "name": "gcam",              "file": "gcam.fish",              "group": "git", "desc": "add --all && commit -m" },
+    { "name": "gpsh",              "file": "gpsh.fish",              "group": "git", "desc": "push current branch" },
+    { "name": "git_current_branch","file": "git_current_branch.fish","group": "git", "desc": "print current branch", "hidden": true },
+
+    { "name": "mkcd",    "file": "mkcd.fish",    "group": "nav", "desc": "mkdir -p then cd into it" },
+    { "name": "mkd",     "file": "mkd.fish",     "group": "nav", "desc": "mkdir -p" },
+    { "name": "qfind",   "file": "qfind.fish",   "group": "nav", "desc": "quick find by name" },
+    { "name": "extract", "file": "extract.fish", "group": "nav", "desc": "extract any archive by extension" },
+    { "name": "backup",  "file": "backup.fish",  "group": "nav", "desc": "timestamped copy of a file" },
+
+    { "name": "duh",     "file": "duh.fish",     "group": "sys", "desc": "disk usage here, sorted" },
+    { "name": "localip", "file": "localip.fish", "group": "sys", "desc": "LAN IP addresses" },
+    { "name": "hg",      "file": "hg.fish",      "group": "sys", "desc": "grep the shell history" },
+    { "name": "cpucap",  "file": "cpucap.fish",  "group": "sys", "desc": "cap CPU frequency / governor" },
+
+    { "name": "plasmashell", "file": "plasmashell.fish", "group": "session", "desc": "start|stop|restart (default restart) the Plasma shell" },
+
+    { "name": "serve",       "file": "serve.fish",       "group": "dev", "desc": "static HTTP server in this folder" },
+    { "name": "fish-e",      "file": "fish-e.fish",      "group": "dev", "desc": "Web terminal + mobile keys (ttyd on WireGuard)" },
+    { "name": "fish-e-stop", "file": "fish-e-stop.fish", "group": "dev", "desc": "stop the web terminal" },
+
+    { "name": "ai-cli",       "file": "ai-cli.fish",       "group": "other", "desc": "local AI CLI" },
+    { "name": "cloud-ai-cli", "file": "cloud-ai-cli.fish", "group": "other", "desc": "cloud AI CLI (goose)" },
+    { "name": "hhelp",        "file": "hhelp.fish",        "group": "other", "desc": "parse flake configs (config/tools/alias/envvar)" },
+    { "name": "myhelp",       "file": "myhelp.fish",       "group": "other", "desc": "personal cheat sheet" },
+
+    { "name": "fish_greeting",         "file": "fish_greeting.fish",         "group": "other", "hidden": true },
+    { "name": "__fzf_search_commands", "file": "__fzf_search_commands.fish", "group": "other", "hidden": true },
+
+    { "name": "_notify_wrap",  "file": "_notify_wrap.fish",  "group": "other", "hidden": true,
+      "note": "Global Nix CLI notify-send catcher (2026-07-18): every nix/nixos-rebuild/home-manager invocation runs silent for minutes with no popup, so these wrap it with start + finish/fail notify-send." },
+    { "name": "nix",           "file": "nix.fish",           "group": "other", "hidden": true },
+    { "name": "nixos-rebuild", "file": "nixos-rebuild.fish", "group": "other", "hidden": true },
+    { "name": "home-manager",  "file": "home-manager.fish",  "group": "other", "hidden": true }
+  ]
+}

@@ -1,0 +1,299 @@
+{
+  "_doc": [
+    "THE panel definition. One file, one runner (plasma-panels-apply.sh), one",
+    "trigger (plasma-manager's run_all.sh autostart, plus the same binary at HM",
+    "activation so a switch applies without a logout).",
+    "",
+    "2026-08-24 — why this file exists. Panels used to be defined in FOUR places",
+    "that each owned a different slice and fought each other:",
+    "  top-panel.nix/.json + bottom-panel.nix/.json -> plasma-manager, which",
+    "    generated desktop_script_panels.js and ran it from XDG autostart;",
+    "  systray-items.json + plasma-systray-config.sh -> tray CONTENTS, which",
+    "    plasma-manager structurally cannot write (they live in the PRIVATE",
+    "    systemtray containment, not the applet), delivered by a systemd user",
+    "    unit whose .wants symlink was a regular file on this box, so it never",
+    "    ran and the trays showed Plasma's compiled-in stock icon set;",
+    "  plasma-panel-repair.json + plasma-fix-missing-panel-widgets.sh -> a",
+    "    post-pass re-adding widgets plasmashell DROPPED, because plasma-manager",
+    "    batches every addWidget() across every panel into ONE evaluateScript",
+    "    call and plasmashell silently drops the 3rd+ call for the same custom",
+    "    KPackage plugin id in a single script;",
+    "  plasma-panel-sync.sh -> a reconciler over all of the above, itself",
+    "    defeated by plasma-manager's 0_script_reset_lastrun_desktopscripts.sh,",
+    "    which deletes the very markers it seeds whenever the generated JS moves.",
+    "",
+    "plasma-manager no longer defines any panel (programs.plasma.panels is left",
+    "empty, so its desktopScript.\"panels\" — and with it the reset script and the",
+    "destructive rebuild — is never generated at all). The runner issues ONE",
+    "D-Bus evaluateScript call PER WIDGET, so the batching bug that the whole",
+    "repair mechanism existed to paper over cannot fire: no insert_after",
+    "anchors, no AppletOrder splicing, no orphan sweep. A full rebuild from this",
+    "file is the only thing that ever writes the layout, so anything not listed",
+    "here is gone by construction rather than by a compensating delete pass.",
+    "",
+    "Panel order below is creation order, and creation order fixes both",
+    "panels()[i] and the [Containments][N] order the tray step matches against.",
+    "BOTTOM IS FIRST because that is the order the generated script this",
+    "replaces actually emitted (verified against the live",
+    "~/.local/share/plasma-manager/data/desktop_script_panels.js, which is the",
+    "reverse of the old import order in session-default-config.nix). Do not",
+    "reorder without re-checking the tray mapping.",
+    "",
+    "alignment defaults to \"center\" in the runner, matching what the generated",
+    "script set on both panels; a panel can override it here.",
+    "",
+    "Dropped in the merge: bottom-panel.json's pager_names (nothing read it —",
+    "the virtual-desktop names come from default-session.json)."
+  ],
+  "_always_hidden_doc": [
+    "There is deliberately no per-tray 'hidden' list: hiddenItems is computed as",
+    "the complement of 'shown', because the systray's default for an id it was",
+    "never told about is *shown*. Listing hidden items only hides what we",
+    "predicted, which is how my-ai-usage, Xwayland Video Bridge and diskquota",
+    "leaked in, and how clipboard-systray (registered by the daemon, declared",
+    "nowhere) surfaced in tray 2 among the KDE indicators on 2026-08-21.",
+    "always_hidden is for ids that must be hidden in EVERY tray."
+  ],
+  "always_hidden": [
+    "Xwayland Video Bridge_pipewireToXProxy",
+    "org.kde.plasma.keyboardlayout",
+    "org.kde.plasma.keyboardindicator"
+  ],
+  "panels": [
+    {
+      "_doc": [
+        "Bottom panel. Left-to-right: kickoff, pager, [spacer], icontasks,",
+        "[spacer], two system trays. No clock — two clocks on one screen is",
+        "just two clocks.",
+        "",
+        "A panelspacer on EACH side of the launchers: both are expanding, so",
+        "they split the leftover width evenly and the launcher row lands",
+        "centred. With only the trailing one it was pinned against the pager.",
+        "icontasks has no centring setting of its own; panel layout is the",
+        "mechanism.",
+        "",
+        "No watchdog widget on this panel by request (2026-08-11) — watchdog",
+        "lives on the top panel only.",
+        "",
+        "height=70. The old 64 was a workaround for KDE bug 489307, where",
+        "org.kde.plasma.systemmonitor's rendered size came from the ksysguard",
+        "sensor face and rounded to near-zero on a short horizontal panel. That",
+        "widget is gone; watchdog draws its own text and pies, so the panel is",
+        "now sized for how it looks.",
+        "",
+        "launchers are freedesktop desktop-ids in pin order.",
+        "",
+        "TWO trays: one holds OUR daemons and shows them permanently, the other",
+        "holds KDE's indicators and lets them auto-hide, so battery and volume",
+        "appear when they have something to say while nix-flakes, docker and",
+        "my-ai stay one click away. A single tray cannot express both policies —",
+        "shownItems/hiddenItems are per-tray. Tray 1's ids are the ones",
+        "da__my-konsole's configs/systrays.json publishes (one --tray-daemon",
+        "process, NINE items)."
+      ],
+      "location": "bottom",
+      "height": 70,
+      "floating": false,
+      "widgets": [
+        {
+          "plugin": "org.kde.plasma.kickoff",
+          "config": {
+            "General": {
+              "icon": "nix-snowflake-white"
+            }
+          }
+        },
+        {
+          "plugin": "org.kde.plasma.pager"
+        },
+        {
+          "plugin": "org.kde.plasma.marginsseparator"
+        },
+        {
+          "plugin": "org.kde.plasma.panelspacer"
+        },
+        {
+          "plugin": "org.kde.plasma.icontasks",
+          "config": {
+            "General": {
+              "launchers": [
+                "applications:my-konsole.desktop",
+                "applications:org.kde.konsole.desktop",
+                "applications:org.kde.dolphin.desktop",
+                "applications:org.kde.kate.desktop",
+                "applications:obsidian.desktop",
+                "applications:brave-browser.desktop",
+                "applications:org.mybrowser.qute.desktop",
+                "applications:systemsettings.desktop",
+                "applications:waydroid-container.desktop",
+                "applications:waydroid-container-mobile.desktop"
+              ]
+            }
+          }
+        },
+        {
+          "plugin": "org.kde.plasma.panelspacer"
+        },
+        {
+          "_doc": "Tray 1 — our own daemons, always visible.",
+          "plugin": "org.kde.plasma.systemtray",
+          "shown": [
+            "clipboard-systray",
+            "cloud-systray",
+            "docker-systray",
+            "my-ai-systray",
+            "my-ai-usage",
+            "my-webserver-systray",
+            "nix-flakes-systray",
+            "vault-systray",
+            "watchdog-systray",
+            "workflow-systray"
+          ]
+        },
+        {
+          "_doc": "Tray 2 — KDE's own indicators.",
+          "plugin": "org.kde.plasma.systemtray",
+          "shown": [
+            "org.kde.plasma.battery",
+            "org.kde.plasma.bluetooth",
+            "org.kde.plasma.brightness",
+            "org.kde.plasma.networkmanagement",
+            "org.kde.plasma.volume",
+            "org.kde.plasma.clipboard",
+            "org.kde.plasma.devicenotifier",
+            "org.kde.plasma.notifications",
+            "org.kde.kdeconnect",
+            "org.kde.kscreen",
+            "org.kde.plasma.cameraindicator",
+            "org.kde.plasma.manage-inputmethod",
+            "org.kde.plasma.mediacontroller"
+          ]
+        }
+      ]
+    },
+    {
+      "_doc": [
+        "Top panel. Left-to-right: storage, mem, cpu, network, proctable,",
+        "[spacer], clock, [spacer], guard, psi — psi deliberately rightmost.",
+        "",
+        "The eight org.kde.plasma.systemmonitor widgets that used to live here",
+        "are gone. Each instance builds a sensor-face controller and a",
+        "KQuickCharts scene graph inside plasmashell; fourteen of them settled",
+        "at ~24% CPU and 410MB (135MB of it QML JS heap) to show eight numbers,",
+        "while ksystemstats — which actually reads /proc — measures 2.5%. The",
+        "com.diegonmarcos.watchdog widgets read one JSON my-konsole's tray",
+        "daemon publishes every 2s and draw text, so adding a metric costs a",
+        "label rather than another sub-application. PSI is displayable at all",
+        "only because of that: /proc/pressure has no KSystemStats backend, which",
+        "is why the old panel faked it with diskusage widgets pointed at",
+        "pressure paths under titles that named something else.",
+        "",
+        "The plasmoid is vendored in this flake (modules/dotfiles/kde/plasmoids/",
+        "com.diegonmarcos.watchdog) since 2026-08-22, so it comes from a store",
+        "path rather than a working-tree cp.",
+        "",
+        "panelspacer carries no config: the applet's own QML default is",
+        "expanding=true, so the two of them centre the clock between the groups."
+      ],
+      "location": "top",
+      "height": 40,
+      "floating": false,
+      "widgets": [
+        {
+          "plugin": "com.diegonmarcos.watchdog",
+          "config": {
+            "General": {
+              "mode": "storage",
+              "uid": 1000
+            }
+          }
+        },
+        {
+          "plugin": "org.kde.plasma.marginsseparator"
+        },
+        {
+          "plugin": "com.diegonmarcos.watchdog",
+          "config": {
+            "General": {
+              "mode": "mem",
+              "uid": 1000
+            }
+          }
+        },
+        {
+          "plugin": "org.kde.plasma.marginsseparator"
+        },
+        {
+          "plugin": "com.diegonmarcos.watchdog",
+          "config": {
+            "General": {
+              "mode": "cpu",
+              "uid": 1000
+            }
+          }
+        },
+        {
+          "plugin": "org.kde.plasma.marginsseparator"
+        },
+        {
+          "plugin": "com.diegonmarcos.watchdog",
+          "config": {
+            "General": {
+              "mode": "network",
+              "uid": 1000
+            }
+          }
+        },
+        {
+          "plugin": "org.kde.plasma.marginsseparator"
+        },
+        {
+          "_doc": "The process table. Not a summary duplicate: a sortable per-process table (cpu/mem/rss/psi-cpu/read/write) with the full kill-signal menu. Its compact form is one headline label, so it costs a panel slot the width of a word; the table is the expanded popup. It sits at the end of the left group because 8a285547 took watchdog off the bottom panel entirely.",
+          "plugin": "com.diegonmarcos.watchdog",
+          "config": {
+            "General": {
+              "mode": "proctable",
+              "uid": 1000
+            }
+          }
+        },
+        {
+          "plugin": "org.kde.plasma.panelspacer"
+        },
+        {
+          "_doc": "dateFormat=longDate is the full date WITH weekday under the time. It was live-only drift until 2026-08-21: set by hand in the GUI, present in appletsrc, declared nowhere — and undeclared panel state does not survive a rebuild from this file, which is exactly how it would silently revert to time-only.",
+          "plugin": "org.kde.plasma.digitalclock",
+          "config": {
+            "Appearance": {
+              "dateFormat": "longDate"
+            }
+          }
+        },
+        {
+          "plugin": "org.kde.plasma.panelspacer"
+        },
+        {
+          "plugin": "com.diegonmarcos.watchdog",
+          "config": {
+            "General": {
+              "mode": "guard",
+              "uid": 1000
+            }
+          }
+        },
+        {
+          "plugin": "org.kde.plasma.marginsseparator"
+        },
+        {
+          "plugin": "com.diegonmarcos.watchdog",
+          "config": {
+            "General": {
+              "mode": "psi",
+              "uid": 1000
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

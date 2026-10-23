@@ -1,0 +1,141 @@
+{
+  "_comment": "Single source of truth for system-wide energy/power policy on the Surface Pro 8 host. All thresholds, idle timers, lid/power-button behaviour, and CPU profile bindings live here. Consumed by host modules (configuration_security.nix, configuration_power.nix) and the home-manager flake (ba_flakes_desktop/.../plasma.nix → PowerDevil + kscreenlockerrc). Replicated verbatim in ba_flakes_desktop/src/modules/desktop/cloud-data-power.json because Nix pure-eval flakes cannot read paths outside their own source root. The battery-watchdog (cloud-data-battery-protection.json) keeps its own per-voter thresholds: those describe the LAST-RESORT tier that does not trust the SAM data path.",
+  "version": 1,
+  "enabled": true,
+
+  "thresholds": {
+    "_comment": "Battery percentage thresholds shared by upowerd + PowerDevil. critical_pct = where the healthy-SAM path hibernates; MUST match the host replica + watchdog bat_capacity.critical_pct. Owner requirement 2026-06-13: hibernation at 15% ONLY; above that, idle only locks/screensaves. REPLICA — keep in sync with aa_desk-usr_x86_surface-linux_nixos/src/modules/cloud-data-power.json (Nix pure-eval flakes can't read across source roots).",
+    "warn_pct": 30,
+    "low_pct": 20,
+    "critical_pct": 15
+  },
+
+  "idle_minutes": {
+    "_comment": "Minutes of user inactivity before each step. lock applies on both AC and Battery (security is power-source-independent). null disables a step. hibernate DISABLED on idle 2026-07-09 (owner requirement: hibernation triggers on battery-level ONLY — see thresholds.critical_pct / actions.critical — never on idle time, on AC or battery). Idle still locks the screen; it just never auto-hibernates.",
+    "ac":      { "lock": 15, "hibernate": null },
+    "battery": { "lock": 15, "hibernate": null }
+  },
+
+  "events": {
+    "_comment": "Hardware-event handlers. Allowed verbs: lock, ignore, hibernate, poweroff. Sleep/suspend are never permitted (see actions.never).",
+    "lid_close":    { "ac": "lock", "battery": "lock", "docked": "ignore" },
+    "power_button": { "short": "lock" }
+  },
+
+  "actions": {
+    "_comment": "Verb policy. critical = what every layer tries on critical-battery hit. low/warn = notification-only. The 'never' list is a HARD GUARD: every consumer reading this JSON MUST refuse to emit configuration that maps any event/threshold to a banned verb. Surface Pro 8 SAM/DRM suspend (S3, s2idle) is unreliable: surface_hid reprobe fails, DRM atomic commit errors, logind marks the session Active=no which makes kscreenlocker reject correct passwords. Therefore sleep/suspend stay banned forever — use hibernate or lock instead.",
+    "critical": "hibernate",
+    "low":      "notify",
+    "warn":     "notify",
+    "never":    ["sleep", "suspend", "s2idle"]
+  },
+
+  "kernel": {
+    "_comment": "Kernel power-management cmdline options. mem_sleep_default=deep forces S3 over s2idle so any rogue suspend attempt fails fast (S3 is broken too, but at least it errors out instead of half-sleeping forever in s2idle). Appended to boot.kernelParams.",
+    "mem_sleep_default": "deep"
+  },
+
+  "cpu_profile": {
+    "_comment": "power-profiles-daemon profile target per power source. Auto-switching is driven by the KDE Plasma battery applet; this is the declared intent — the runtime daemon honors it. Not enforced in a service; informational + future-driven.",
+    "ac":      "balanced",
+    "battery": "power-saver"
+  },
+
+  "consumers": [
+    "aa_desk-usr_x86_surface-linux_nixos/src/modules/configuration_security.nix (services.logind.lidSwitch family)",
+    "aa_desk-usr_x86_surface-linux_nixos/src/modules/configuration_power.nix (UPower.conf + logind HandlePowerKey + kernelParams)",
+    "ba_flakes_desktop/src/modules/desktop/plasma.nix (PowerDevil [BatteryManagement] + [*][SuspendAndShutdown] + HandleButtonEvents + kscreenlockerrc lock idle)"
+  ],
+
+  "testers": {
+    "_comment": "Each invariant verifies one consumer is using the configured value. Run after any threshold/timer change.",
+    "checks": [
+      {
+        "id": "logind_lid_battery",
+        "description": "logind lid action on battery matches events.lid_close.battery (logind keys are NOT exposed via systemctl show — read the conf file directly)",
+        "command": "awk -F= '/^HandleLidSwitch=/ {gsub(/[ \\t]/,\"\",$2); print $2; exit}' /etc/systemd/logind.conf",
+        "expect": "lock"
+      },
+      {
+        "id": "logind_lid_external_power",
+        "description": "logind lid action on AC matches events.lid_close.ac",
+        "command": "awk -F= '/^HandleLidSwitchExternalPower=/ {gsub(/[ \\t]/,\"\",$2); print $2; exit}' /etc/systemd/logind.conf",
+        "expect": "lock"
+      },
+      {
+        "id": "logind_lid_docked",
+        "description": "logind lid action when docked matches events.lid_close.docked",
+        "command": "awk -F= '/^HandleLidSwitchDocked=/ {gsub(/[ \\t]/,\"\",$2); print $2; exit}' /etc/systemd/logind.conf",
+        "expect": "ignore"
+      },
+      {
+        "id": "logind_power_key",
+        "description": "logind HandlePowerKey matches events.power_button.short (last-occurrence wins per systemd-logind merge order)",
+        "command": "awk -F= '/^HandlePowerKey=/ {gsub(/[ \\t]/,\"\",$2); v=$2} END{print v}' /etc/systemd/logind.conf",
+        "expect": "lock"
+      },
+      {
+        "id": "upower_critical_pct",
+        "description": "/etc/UPower/UPower.conf PercentageCritical matches thresholds.critical_pct",
+        "command": "awk -F= '/^PercentageCritical=/ {gsub(/[ \\t]/,\"\",$2); print $2}' /etc/UPower/UPower.conf",
+        "expect": "15"
+      },
+      {
+        "id": "upower_low_pct",
+        "description": "/etc/UPower/UPower.conf PercentageLow matches thresholds.low_pct",
+        "command": "awk -F= '/^PercentageLow=/ {gsub(/[ \\t]/,\"\",$2); print $2}' /etc/UPower/UPower.conf",
+        "expect": "20"
+      },
+      {
+        "id": "upower_critical_action",
+        "description": "/etc/UPower/UPower.conf CriticalPowerAction reflects actions.critical",
+        "command": "awk -F= '/^CriticalPowerAction=/ {gsub(/[ \\t]/,\"\",$2); print $2}' /etc/UPower/UPower.conf",
+        "expect": "Hibernate"
+      },
+      {
+        "id": "kernel_mem_sleep_default",
+        "description": "kernel cmdline forces deep sleep (no s2idle) per kernel.mem_sleep_default. Reads /proc/cmdline (always-current truth, bootloader-agnostic). Requires a reboot for changes from boot.json to take effect.",
+        "command": "grep -hoE 'mem_sleep_default=[a-z]+' /proc/cmdline | head -1",
+        "expect": "mem_sleep_default=deep"
+      },
+      {
+        "id": "powerdevil_battery_critical_level",
+        "description": "PowerDevil BatteryCriticalLevel matches thresholds.critical_pct (run as user)",
+        "command": "awk -F= '/^BatteryCriticalLevel=/ {gsub(/[ \\t]/,\"\",$2); print $2}' $HOME/.config/powerdevilrc",
+        "expect": "15"
+      },
+      {
+        "id": "powerdevil_battery_low_level",
+        "description": "PowerDevil BatteryLowLevel matches thresholds.low_pct (run as user)",
+        "command": "awk -F= '/^BatteryLowLevel=/ {gsub(/[ \\t]/,\"\",$2); print $2}' $HOME/.config/powerdevilrc",
+        "expect": "20"
+      },
+      {
+        "id": "powerdevil_battery_idle_hibernate_disabled",
+        "description": "PowerDevil [Battery][SuspendAndShutdown] AutoSuspendIdleTimeoutSec is 0 (disabled) — idle_minutes.battery.hibernate=null, hibernation is battery-level-only (run as user)",
+        "command": "awk '/^\\[Battery\\]\\[SuspendAndShutdown\\]/{f=1;next} /^\\[/{f=0} f && /^AutoSuspendIdleTimeoutSec=/ {gsub(/.*=/,\"\"); gsub(/[ \\t]/,\"\"); print; exit}' $HOME/.config/powerdevilrc",
+        "expect": "0"
+      },
+      {
+        "id": "powerdevil_ac_idle_hibernate_disabled",
+        "description": "PowerDevil [AC][SuspendAndShutdown] AutoSuspendIdleTimeoutSec is 0 (disabled) — idle_minutes.ac.hibernate=null, hibernation is battery-level-only (run as user)",
+        "command": "awk '/^\\[AC\\]\\[SuspendAndShutdown\\]/{f=1;next} /^\\[/{f=0} f && /^AutoSuspendIdleTimeoutSec=/ {gsub(/.*=/,\"\"); gsub(/[ \\t]/,\"\"); print; exit}' $HOME/.config/powerdevilrc",
+        "expect": "0"
+      },
+      {
+        "id": "kscreenlocker_idle_lock",
+        "description": "kscreenlockerrc Daemon.Timeout (minutes) matches idle_minutes.battery.lock (run as user)",
+        "command": "awk '/^\\[Daemon\\]/{f=1;next} /^\\[/{f=0} f && /^Timeout=/ {gsub(/.*=/,\"\"); gsub(/[ \\t]/,\"\"); print; exit}' $HOME/.config/kscreenlockerrc",
+        "expect": "15"
+      }
+    ]
+  },
+
+  "deployment": {
+    "_comment": "After editing this JSON, the host flake AND the home-manager flake both need a switch (each consumes its own replica).",
+    "reload_commands": [
+      "cd ~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos && ./build.sh switch",
+      "cd ~/git/cloud-infra-desktop/ba_flakes_desktop && ./build.sh switch"
+    ]
+  }
+}

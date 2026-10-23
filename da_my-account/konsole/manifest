@@ -1,0 +1,4 @@
+# kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me_configs>)
+inline	desktop	konsolestaterc	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/konsole/konsolestaterc
+inline	desktop	Breeze.colorscheme	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/konsole/Breeze.colorscheme
+inline	desktop	Profile 1.profile	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/konsole/Profile 1.profile

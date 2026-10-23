@@ -1,0 +1,1 @@
+history | command grep $argv

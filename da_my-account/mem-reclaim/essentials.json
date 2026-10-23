@@ -1,0 +1,16 @@
+{
+  "_comment": "mem-reclaim policy. The boundary is the systemd USER cgroup, NOT process names (nix-wrapped binaries report unmatchable '.name-wrapped' comm). The user manager already splits session daemons (user@<uid>.service/session.slice/*: kwin, plasmashell, kded, powerdevil, …) from launched apps (.../app.slice/*: browser, electron, …). mem-reclaim kills ONLY app.slice members, and spares the app scope containing mem-reclaim itself (that scope holds the terminal + Claude + its MCP servers). So every KDE session daemon and the active Claude session are protected automatically. Curated 2026-06-28 from the live cgroup layout.",
+  "version": 2,
+  "protect": {
+    "only_kill_under": "/app.slice/",
+    "_only_note": "A process is a kill candidate ONLY if its cgroup path contains this. Everything else (session.slice daemons, init.scope, user@.service root) is spared.",
+    "spare_active_app_scope": true,
+    "_active_note": "The app scope (.scope/.service) containing mem-reclaim itself is never killed — terminal + Claude + MCP all live there.",
+    "keep_scope_regex": "",
+    "_keep_note": "Optional extra app scopes to spare, matched against the cgroup path (e.g. 'org.kde.dolphin|app-code'). Empty = kill every other app.slice scope."
+  },
+  "signals": {
+    "term_wait_s": 6,
+    "_signals_note": "SIGTERM all candidates, wait term_wait_s, then SIGKILL any survivor."
+  }
+}

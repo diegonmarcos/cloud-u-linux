@@ -1,0 +1,18 @@
+{
+  "_doc": "Config for `flakes-switch-progress-logs` — ONE copyable Konsole window (dark KDE-native) shown for any nix command build.sh wraps (programs/flakes-switch-progress-logs/default.nix). Driven by parsing `nix build --log-format internal-json` activity events into a real %. No labels/icons/colors hardcoded in the .nix/.mjs — all here (data-driven). Over SSH/TTY or with konsole absent the wrapper passes the command through unchanged (no window). Plan: user asked 2026-06-20, enriched 2026-07-04 (step phases, git/PSI/closure-size panel, persistent window with copy-log-on-failure), then collapsed from 3 windows (2 kdialog bars + Konsole) to this 1 Konsole window same day per direct request — all progress data (both bars, sizes, ETA) now lives in the one log stream instead. Moved into flakes-switch-progress-logs/ (2026-08-02) alongside the owner/nested-mode split (see default.nix) that lets build.sh wrap EVERY invocation, not just nix/home-manager calls, without opening more than one window.",
+  "title": "Nix Switch Progress",
+  "icon": "nix-snowflake",
+  "notify_on_finish": true,
+  "cap_pct_until_done": 99,
+  "psi_refresh_seconds": 5,
+  "spinner_frames": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+  "konsole_geometry": "110x40",
+  "colors": {
+    "banner": "1;36",
+    "ok": "1;32",
+    "fail": "1;31",
+    "dim": "2",
+    "warn": "1;33",
+    "value": "1;37"
+  }
+}

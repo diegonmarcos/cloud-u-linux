@@ -1,0 +1,33 @@
+# global gitignore — translated from modules/programs/git.nix (programs.git.ignores)
+# OS
+.DS_Store
+*~
+.directory
+Thumbs.db
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+# Build
+node_modules/
+build/
+__pycache__/
+*.pyc
+.cache/
+target/
+# Env/Secrets
+.env
+.env.local
+*.pem
+*.key
+# Logs
+*.log
+*.sqlite
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+# Nix
+result
+result-*

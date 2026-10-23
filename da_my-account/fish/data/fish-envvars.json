@@ -1,0 +1,49 @@
+{
+  "_doc": "Env vars advertised by fish_greeting, rendered by fish.nix into the generated __cloud_envvars_help function. Same contract as fish-commands.json: this file is the ONLY place the list lives, so the greeting can never advertise a variable nobody declares. Values are read LIVE at greeting time (fish indirection) rather than baked in at build time — a var declared but not exported must show as unset, that is the diagnostic. Set \"secret\": true for anything whose value must never be painted on the terminal; it renders as 'set (hidden)'.",
+
+  "groups": [
+    { "id": "shell",   "title": "Shell" },
+    { "id": "runtime", "title": "Runtime (declared in modules/system.nix)" },
+    { "id": "ai",      "title": "AI / LLM" },
+    { "id": "auth",    "title": "Auth" },
+    { "id": "dev",     "title": "Dev" },
+    { "id": "system",  "title": "System" }
+  ],
+
+  "vars": [
+    { "name": "EDITOR",    "group": "shell" },
+    { "name": "VISUAL",    "group": "shell" },
+    { "name": "PAGER",     "group": "shell" },
+    { "name": "MANPAGER",  "group": "shell" },
+    { "name": "LANG",      "group": "shell" },
+
+    { "name": "SHELL",             "group": "runtime" },
+    { "name": "NODE_PATH",         "group": "runtime" },
+    { "name": "XDG_RUNTIME_DIR",   "group": "runtime" },
+    { "name": "DTK_NODE_NAME",     "group": "runtime" },
+    { "name": "TF_PLUGIN_CACHE_DIR", "group": "runtime" },
+    { "name": "MALLOC_ARENA_MAX",  "group": "runtime" },
+    { "name": "LD_PRELOAD",        "group": "runtime" },
+
+    { "name": "ANTHROPIC_API_KEY", "group": "ai", "secret": true },
+    { "name": "OPENAI_API_KEY",    "group": "ai", "secret": true },
+    { "name": "OPENAI_BASE_URL",   "group": "ai" },
+
+    { "name": "AUTHELIA_OIDC_CLIENT_ID",       "group": "auth" },
+    { "name": "AUTHELIA_TOKEN_URL",            "group": "auth" },
+    { "name": "AUTHELIA_OIDC_CREDENTIALS_DIR", "group": "auth" },
+    { "name": "AUTHELIA_OIDC_TOKENS_DIR",      "group": "auth" },
+
+    { "name": "CARGO_HOME",        "group": "dev" },
+    { "name": "GOPATH",            "group": "dev" },
+    { "name": "PIP_CACHE_DIR",     "group": "dev" },
+    { "name": "npm_config_cache",  "group": "dev" },
+    { "name": "npm_config_prefix", "group": "dev" },
+
+    { "name": "DEVICE",            "group": "system" },
+    { "name": "HM_PROFILE",        "group": "system" },
+    { "name": "BUILDSH_GUARDRAIL", "group": "system" },
+    { "name": "GNUPGHOME",         "group": "system" },
+    { "name": "GIT_EDITOR",        "group": "system" }
+  ]
+}

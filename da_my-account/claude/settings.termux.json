@@ -1,0 +1,47 @@
+{
+  "enableAllProjectMcpServers": true,
+  "env": {
+    "MCP_TIMEOUT": "5000",
+    "STATUSLINE_MIN_INTERVAL": "60",
+    "DISABLE_AUTOUPDATER": "1",
+    "MCP_CONNECT_TIMEOUT_MS": "3000"
+  },
+  "_env_comment": "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC removed 2026-09-07: it also disables feature-flag evaluation, and Remote Control (`claude rc`) refuses to start without it. Saving a little background traffic is not worth losing rc on the phone, which is the machine that needs it most.",
+  "effortLevel": "xhigh",
+  "_hooks_comment": "The transcript archive's trigger, and it is here rather than in settings.base.json because it is a property of THIS device: galaxy has no scheduler at all (no systemd user session under nix-on-droid, no apt layer so no termux-services, no Termux:API so no termux-job-scheduler, and crontab answers 'must be suid to work properly'), while surface archives from a systemd.user.timer. Claude Code is the process that writes the transcripts, so its own lifecycle is the one signal on this device that is true exactly when there is new data. Stop fires per assistant turn and is rate-limited by min_sync_interval_seconds in the archive's bin/session-limits.json, which is what keeps a session that is killed rather than exited cheap; SessionEnd forces a flush of the tail on a clean exit. `command -v` guards both so a device without the launcher is a silent no-op rather than an error every turn, and both end in `|| true` so a broken archive can never block a turn. Body and the full argument: cloud-infra-desktop/bb_flakes_termux/src/claude/assets/scripts/claude-sync-sessions.sh.",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v claude-sync-sessions >/dev/null 2>&1 && claude-sync-sessions >/dev/null 2>&1 || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v claude-sync-sessions >/dev/null 2>&1 && claude-sync-sessions --force >/dev/null 2>&1 || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "_doc_device_prefs": "theme/model are THIS device's Claude Code UI prefs (what /config writes). They live in the overlay, not base, so a linux-store switch — which renders settings.json whole — keeps them.",
+  "theme": "dark",
+  "model": "fable",
+  "_env_autoupdater_comment": "DISABLE_AUTOUPDATER: on the phone Claude Code's own updater re-runs npm postinstall, whose hard-link under proot leaves /usr/local/bin/claude dangling (2026-10-05, twice, 2.1.281→2.1.289). Updates on this box go through the declared store, not the updater.",
+  "_env_mcp_timeout_comment": "MCP_CONNECT_TIMEOUT_MS 3000 / MCP_TIMEOUT 5000 on the phone (base says 30000/10000): the list carries two mesh-only servers (cloud-cgc-pvt-mcp, cloud-vault-mcp at 10.0.0.6) that cannot connect while the mesh is down, and Claude Code waits the full connect timeout on each at startup — 2026-10-06 that was 5 minutes before the prompt appeared. A dead server on the phone must cost a second, not thirty; the mesh-up case reconnects fine within 3 s on wg.",
+  "_statusLine_comment": "Phone: NO timed repaint (refreshInterval null: Claude Code repaints on each message) and a full render at most once a minute (STATUSLINE_MIN_INTERVAL 60). Measured 2026-10-17: every 5 s paint forked bash under proot, every 15 s a 1.4 s render forked ~40 tools (awk, jq, stat, md5sum, date...), on a phone with 233 MB free and 3 GB swapped; new sessions hung for minutes. The prompt/action age timers no longer tick between messages.",
+  "statusLine": {
+    "refreshInterval": null
+  }
+}

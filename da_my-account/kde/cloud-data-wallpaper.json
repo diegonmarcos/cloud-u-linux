@@ -1,0 +1,50 @@
+{
+  "_comment": "Source of truth for the unified system wallpaper used by SDDM (host flake aa_desk-usr_x86_surface-linux_nixos) + desktop + lock screen (home-manager flake ba_flakes_desktop). All three converge on the same image so login → desktop → lock screen present a coherent visual. Resolved at run time via /run/current-system/sw/share/wallpapers/<theme>/contents/images/<image> (KDE plasma-workspace-wallpapers is in environment.systemPackages so this path is stable across rebuilds). Replicated verbatim from aa_desk-usr_x86_surface-linux_nixos/src/modules/cloud-data-wallpaper.json because Nix pure-eval flakes cannot read paths outside their own source root.",
+  "version": 1,
+
+  "wallpaper": {
+    "_comment": "KDE wallpaper theme name + image filename inside <theme>/contents/images/. Available themes: ls /run/current-system/sw/share/wallpapers/.",
+    "_mode_comment": "mode=color renders a SOLID COLOUR via plasma-manager's workspace.wallpaperPlainColor and ignores theme/image entirely; mode=image uses theme/image as before. 2026-08-12: switched to color/black on request. plasma-workspace-wallpapers ships no solid-black theme (Grey is the closest), so the colour plugin is the only way to get true black without shipping an image derivation just to hold one RGB value. theme/image are deliberately KEPT populated so flipping mode back to image needs no other edit.",
+    "mode": "image",
+    "color": "0,0,0",
+    "theme": "Path",
+    "image": "2560x1600.jpg"
+  },
+
+  "consumers": [
+    "~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos/src/modules/configuration_display.nix (SDDM login Background)",
+    "~/git/cloud-infra-desktop/ba_flakes_desktop/src/modules/desktop/plasma.nix (workspace.wallpaper + lockScreenWallpaper activation)"
+  ],
+
+  "testers": {
+    "_comment": "Each invariant verifies one consumer is using the configured wallpaper. Update alongside any change to wallpaper.theme/image.",
+    "checks": [
+      {
+        "id": "wallpaper_image_exists",
+        "description": "Configured wallpaper image is present in /run/current-system/sw/share/wallpapers",
+        "command": "test -f /run/current-system/sw/share/wallpapers/Path/contents/images/2560x1600.jpg && echo ok",
+        "expect": "ok"
+      },
+      {
+        "id": "sddm_theme_conf_uses_wallpaper",
+        "description": "SDDM Astronaut theme.conf Background= references the configured wallpaper",
+        "command": "grep -c 'Path/contents/images/2560x1600.jpg' /run/current-system/sw/share/sddm/themes/sddm-astronaut-theme/theme.conf",
+        "expect": "1"
+      },
+      {
+        "id": "kscreenlocker_uses_wallpaper",
+        "description": "User kscreenlockerrc Greeter Wallpaper image matches the configured wallpaper (run as the desktop user)",
+        "command": "grep -c 'Path/contents/images/2560x1600.jpg' $HOME/.config/kscreenlockerrc 2>/dev/null || echo 0",
+        "expect_regex": "^[12]$"
+      }
+    ]
+  },
+
+  "deployment": {
+    "_comment": "After editing this JSON, both flakes need a rebuild for SDDM and home-manager to pick up the new value.",
+    "reload_commands": [
+      "cd ~/git/cloud-infra-desktop/aa_desk-usr_x86_surface-linux_nixos && ./build.sh switch",
+      "cd ~/git/cloud-infra-desktop/ba_flakes_desktop && ./build.sh switch"
+    ]
+  }
+}

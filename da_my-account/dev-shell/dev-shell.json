@@ -1,0 +1,8 @@
+{
+  "_doc": "Config for the `dev` bwrap launcher (programs/dev-shell.nix). `dev [cmd]` enters the DEV USERSPACE: bubblewrap masks the pool /nix/store with the p5 dev-store (storeDir=/nix/store, physical root on /mnt/shared-lib/dev-store) so ONLY the heavy dev toolchain (built by bc_flakes_dev-store) is reachable — the kernel-enforced dev/user wall. Host HOME/Wayland/network/devices pass through (--dev-bind / /) so GUI dev tools (android emulator) work. Outside `dev`, none of the toolchain is on PATH. Boot-independent: fails closed if p5 absent. Plan: a0_tasks/PLAN_dev-store-split.md.",
+  "name": "dev",
+  "p5_store_root": "/mnt/shared-lib/dev-store",
+  "profile_bin": "/mnt/shared-lib/dev-store/profile/bin",
+  "prompt_marker": "[dev] ",
+  "marker_env": "DEV_SHELL"
+}
