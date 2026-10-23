@@ -14,9 +14,11 @@
 #        secret    private file from the private repo cloud-me, flake_src = me:<path in cloud-me>.
 #                  The public repo holds the path only. Resolved at --apply, first match wins:
 #                    1. local clone: $MY_ACCOUNT_ME_DIR, else $GIT_BASE|~/git|~/git-repos|~ + /cloud-me
-#                    2. HTTPS GET <api>/<path>?ref=main, bearer from $MY_ACCOUNT_ME_TOKEN,
-#                       $GITHUB_TOKEN or `gh auth token`; <api> = $MY_ACCOUNT_ME_API, default
-#                       https://api.github.com/repos/diegonmarcos/cloud-me/contents (read-only).
+#                    2. cloud-me-api (read-only): GET <base>/repos/cloud-me/file?path=<path>
+#                       with `Authorization: Bearer $MY_ACCOUNT_ME_TOKEN` (the fleet bearer).
+#                       <base> = $MY_ACCOUNT_ME_API alone when set, else mesh first
+#                       (http://cloud-me-api.app:8124/me) then c3-pvt
+#                       (https://c3-pvt.diegonmarcos.com/cloud-me-api/me).
 #                  Values are never printed; the dry-run only names the source that would be used.
 set -u
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -34,7 +36,8 @@ done
 [ "$APPLY" = 1 ] && echo "my-account: APPLY profile=$PROFILE home=$H" || echo "my-account: dry-run (plan only; --apply writes) profile=$PROFILE home=$H"
 TAB="$(printf '\t')"; n_new=0; n_same=0; n_diff=0; n_skip=0; n_held=0
 
-ME_API="${MY_ACCOUNT_ME_API:-https://api.github.com/repos/diegonmarcos/cloud-me/contents}"
+ME_API_MESH="http://cloud-me-api.app:8124/me"; ME_API_PVT="https://c3-pvt.diegonmarcos.com/cloud-me-api/me"
+ME_REPO=cloud-me
 me_dir() {
   for d in "${MY_ACCOUNT_ME_DIR:-}" "${GIT_BASE:-}/cloud-me" "$H/git/cloud-me" "$H/git-repos/cloud-me" "$H/cloud-me" "$ROOT/../../cloud-me"; do
     [ -n "$d" ] && [ -d "$d" ] && { (cd "$d" && pwd); return 0; }
@@ -42,8 +45,7 @@ me_dir() {
 }
 me_token() {
   [ -n "${MY_ACCOUNT_ME_TOKEN:-}" ] && { printf '%s' "$MY_ACCOUNT_ME_TOKEN"; return 0; }
-  [ -n "${GITHUB_TOKEN:-}" ] && { printf '%s' "$GITHUB_TOKEN"; return 0; }
-  command -v gh >/dev/null 2>&1 && gh auth token 2>/dev/null
+  return 1
 }
 # me_where <path>: prints "local:<dir>" | "api" | nothing (no value read, no network)
 me_where() {
@@ -55,8 +57,11 @@ me_where() {
 me_fetch() {
   case "$3" in
     local:*) ( umask 077; cp "${3#local:}/$1" "$2" ) ;;
-    api) tok="$(me_token)"; ( umask 077; printf 'header = "Authorization: Bearer %s"\nheader = "Accept: application/vnd.github.raw"\nsilent\nfail\nmax-time = 60\n' "$tok" \
-           | curl -K - -o "$2" "$ME_API/$1?ref=main" ) ;;
+    api) tok="$(me_token)"
+         for base in ${MY_ACCOUNT_ME_API:-$ME_API_MESH $ME_API_PVT}; do
+           ( umask 077; printf 'header = "Authorization: Bearer %s"\nheader = "Accept: text/plain"\nsilent\nfail\nconnect-timeout = 5\nmax-time = 60\n' "$tok" \
+             | curl -K - -o "$2" "$base/repos/$ME_REPO/file?path=$1" ) && return 0
+         done; return 1 ;;
   esac
 }
 same() { if [ -d "$1" ]; then diff -r "$1" "$2" >/dev/null 2>&1; else cmp -s "$1" "$2"; fi; }

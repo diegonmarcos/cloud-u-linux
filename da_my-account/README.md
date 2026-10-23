@@ -55,17 +55,18 @@ At `--apply` the value is resolved, first match wins:
 
 1. local clone of `cloud-me`: `$MY_ACCOUNT_ME_DIR`, else `$GIT_BASE`, `~/git`,
    `~/git-repos`, `~` + `/cloud-me`;
-2. HTTPS GET `<api>/<path>?ref=main` with a bearer token (`$MY_ACCOUNT_ME_TOKEN`,
-   `$GITHUB_TOKEN` or `gh auth token`), `<api>` = `$MY_ACCOUNT_ME_API`, default the GitHub
-   contents API of `diegonmarcos/cloud-me` with `Accept: application/vnd.github.raw`:
-   the same contract as the apk's and `linux-account connect --github` token tile.
-   The token goes to curl on stdin, never argv. A dedicated `cloud-me-api` endpoint is not
-   documented anywhere in cloud-u-android, so none is assumed; point `MY_ACCOUNT_ME_API` at
-   it if it serves `GET <base>/<path>` with a bearer.
+2. `cloud-me-api` (read-only; contract in `infra-api_cloud-me-api` of cloud-u-containers):
+   `GET <base>/repos/cloud-me/file?path=<path>` returns the file as `text/plain`, with
+   `Authorization: Bearer $MY_ACCOUNT_ME_TOKEN` (the fleet bearer; a GitHub token is not
+   accepted). `<base>` = `$MY_ACCOUNT_ME_API` alone when set, else mesh first
+   (`http://cloud-me-api.app:8124/me`), then c3-pvt
+   (`https://c3-pvt.diegonmarcos.com/cloud-me-api/me`). The token goes to curl on stdin,
+   never argv. The service must declare the `cloud-me` repo and serve `my-account/` paths
+   (owner step, see ticket); until then only the local clone resolves.
 
 The dry-run only names the source that would be used (`cloud-me clone`, `cloud-me api`
-or `UNRESOLVED`). Values are written 0600 and never printed. The owner still has to
-populate those paths in `cloud-me`.
+or `UNRESOLVED`). Values are written 0600 and never printed. The paths exist in `cloud-me` as
+placeholders (`# owner: fill in`); the owner fills in the values.
 
 ## claude/ (canonical copy: my-ai)
 

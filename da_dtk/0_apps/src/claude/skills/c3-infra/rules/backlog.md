@@ -1,5 +1,5 @@
 # Product Backlog
-- A message starting "New task" is a ticket: write it to repo cloud-data-my-ai-memory (main), `1___BACKLOG___/1.1.Product-Backlog/tasks/<session-id>/<max+1>.json`, before anything else. Why: single task ledger. Guard: test-backlog-metadata.sh.
+- A message starting "New task" is a ticket: write it to repo cloud-me-my-ai (main), `1___BACKLOG___/1.1.Product-Backlog/tasks/<session-id>/<max+1>.json`, before anything else. Why: single task ledger. Guard: test-backlog-metadata.sh.
 - Schema: id, subject `#N ...`, description, activeForm, status, blocks, blockedBy, optional metadata.closed (YYYY-MM-DD). Why: build.js reads it. Guard: build.js.
 - After the write run `node build.js` in the Product-Backlog dir, then `bash ../../4___ASSETS___/4.1.Bin/test-backlog-metadata.sh`, then commit and push main. Why: the dashboards are generated. Guard: that test.
 - New tickets go to the bottom unless the owner says prioritise; push every status change. Why: owner ordering, no stale state. Guard: none.
