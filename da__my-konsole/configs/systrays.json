@@ -149,7 +149,7 @@
             },
             {
               "label": "Check: mesh DNS A + AAAA",
-              "command": "konsole --hold -e bash -lc 'for n in diegonmarcos.com auth.diegonmarcos.com maddy.app; do echo \"== $n\"; dig +short $n A; dig +short $n AAAA; done; read'"
+              "command": "konsole --hold -e bash -lc 'for n in diegonmarcos.com auth.diegonmarcos.com maddy.mesh.diegonmarcos.com; do echo \"== $n\"; dig +short $n A; dig +short $n AAAA; done; read'"
             },
             {
               "label": "Check: which stack does a name use?",

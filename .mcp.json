@@ -17,7 +17,7 @@
       "args": [
         "${CLAUDE_PROJECT_DIR:-.}/.claude/mcp-connect.mjs",
         "--mesh",
-        "https://c3-cloud-superapp-mcp.app/mcp",
+        "https://c3-cloud-superapp-mcp.mesh.diegonmarcos.com/mcp",
         "--public",
         "https://mcp.diegonmarcos.com/cloud-superapp-mcp/mcp"
       ]

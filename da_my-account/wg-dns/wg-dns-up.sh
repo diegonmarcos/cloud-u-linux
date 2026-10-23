@@ -1,4 +1,4 @@
-# wg-dns-up — route .app queries to Hickory DNS once wg0 comes up
+# wg-dns-up — route mesh.diegonmarcos.com queries to Hickory DNS once wg0 comes up
 #
 # Extracted from cloud-network-wg-dns.nix
 # (systemd.user.services.wg-dns-config.Service.ExecStart). Runtime-data-driven:
@@ -45,7 +45,7 @@ if ! "$IP" link show "$WG_IFACE" >/dev/null 2>&1; then
   exit 0
 fi
 
-echo "[wg-dns] Adding $HICKORY_DNS to resolv.conf for .app names"
+echo "[wg-dns] Adding $HICKORY_DNS to resolv.conf for mesh names"
 
 # Method 1: systemd-resolved (if available)
 if command -v resolvectl >/dev/null 2>&1 && systemctl is-active systemd-resolved >/dev/null 2>&1; then
@@ -75,6 +75,6 @@ else
   fi
 fi
 
-echo "[wg-dns] Verifying: dig @$HICKORY_DNS authelia.app"
-"$DIG" "@$HICKORY_DNS" +short authelia.app 2>/dev/null || echo "(hickory not reachable — wg0 may need time)"
+echo "[wg-dns] Verifying: dig @$HICKORY_DNS authelia.mesh.diegonmarcos.com"
+"$DIG" "@$HICKORY_DNS" +short authelia.mesh.diegonmarcos.com 2>/dev/null || echo "(hickory not reachable — wg0 may need time)"
 echo "[wg-dns] Done"

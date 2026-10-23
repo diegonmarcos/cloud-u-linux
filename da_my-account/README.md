@@ -59,7 +59,7 @@ At `--apply` the value is resolved, first match wins:
    `GET <base>/repos/cloud-me/file?path=<path>` returns the file as `text/plain`, with
    `Authorization: Bearer $MY_ACCOUNT_ME_TOKEN` (the fleet bearer; a GitHub token is not
    accepted). `<base>` = `$MY_ACCOUNT_ME_API` alone when set, else mesh first
-   (`http://cloud-me-api.app:8124/me`), then c3-pvt
+   (`http://cloud-me-api.mesh.diegonmarcos.com:8124/me`), then c3-pvt
    (`https://c3-pvt.diegonmarcos.com/cloud-me-api/me`). The token goes to curl on stdin,
    never argv. The service must declare the `cloud-me` repo and serve `my-account/` paths
    (owner step, see ticket); until then only the local clone resolves.

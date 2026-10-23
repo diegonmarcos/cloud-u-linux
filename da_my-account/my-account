@@ -17,7 +17,7 @@
 #                    2. cloud-me-api (read-only): GET <base>/repos/cloud-me/file?path=<path>
 #                       with `Authorization: Bearer $MY_ACCOUNT_ME_TOKEN` (the fleet bearer).
 #                       <base> = $MY_ACCOUNT_ME_API alone when set, else mesh first
-#                       (http://cloud-me-api.app:8124/me) then c3-pvt
+#                       (http://cloud-me-api.mesh.diegonmarcos.com:8124/me) then c3-pvt
 #                       (https://c3-pvt.diegonmarcos.com/cloud-me-api/me).
 #                  Values are never printed; the dry-run only names the source that would be used.
 set -u
@@ -36,7 +36,7 @@ done
 [ "$APPLY" = 1 ] && echo "my-account: APPLY profile=$PROFILE home=$H" || echo "my-account: dry-run (plan only; --apply writes) profile=$PROFILE home=$H"
 TAB="$(printf '\t')"; n_new=0; n_same=0; n_diff=0; n_skip=0; n_held=0
 
-ME_API_MESH="http://cloud-me-api.app:8124/me"; ME_API_PVT="https://c3-pvt.diegonmarcos.com/cloud-me-api/me"
+ME_API_MESH="http://cloud-me-api.mesh.diegonmarcos.com:8124/me"; ME_API_PVT="https://c3-pvt.diegonmarcos.com/cloud-me-api/me"
 ME_REPO=cloud-me
 me_dir() {
   for d in "${MY_ACCOUNT_ME_DIR:-}" "${GIT_BASE:-}/cloud-me" "$H/git/cloud-me" "$H/git-repos/cloud-me" "$H/cloud-me" "$ROOT/../../cloud-me"; do
