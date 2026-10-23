@@ -4,6 +4,7 @@
 //! my-ai-api (OpenRouter, not Claude) as the upstream. Universal: KDE / TTY / Termux.
 use anyhow::{anyhow, Result};
 use my_ai_core as core;
+#[path = "../../engines/tray/tray.rs"]
 mod tray;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
@@ -67,6 +68,7 @@ fn main() -> Result<()> {
         ),
         Some("setup") => setup(&args[1..], &ep),
         Some("usage") => usage_cmd(&args[1..]),
+        Some("engine" | "engines") => engine_cmd(&args[1..]),
         Some("sync-scripts") => {
             let written = core::scripts_assets::install_to_local_bin()?;
             println!("synced {} scripts to ~/.local/bin", written.len());
@@ -80,6 +82,73 @@ fn main() -> Result<()> {
         Some("gemini") => exec_passthrough("gemini", &args[1..]),
         Some("antigravity") => exec_passthrough("antigravity", &args[1..]),
         _ => route(args, &ep),
+    }
+}
+
+// ── engines: my-ai as orchestrator of routines (engines/<name>/manifest.json) ─
+fn engine_cmd(args: &[String]) -> Result<()> {
+    use my_ai_core::engines;
+    match args.first().map(|s| s.as_str()) {
+        None | Some("list" | "ls") => {
+            for m in engines::list() {
+                println!("{:<18} {:<13} {}", m.name, m.trigger, m.description);
+            }
+            Ok(())
+        }
+        Some("status") => {
+            let only = args.get(1).map(|s| s.as_str());
+            for m in engines::list().iter().filter(|m| only.map_or(true, |n| n == m.name)) {
+                let last = match engines::last_run(&m.name) {
+                    Some((t, c)) => format!("last run @{t} exit {c}"),
+                    None => "never run via `engine run`".to_string(),
+                };
+                println!("{:<18} {:<13} {:<8} {}", m.name, m.trigger, m.run.kind, last);
+            }
+            if let Some(n) = only {
+                if engines::find(n).is_none() {
+                    return Err(anyhow!("unknown engine: {n}"));
+                }
+            }
+            Ok(())
+        }
+        Some("run") => {
+            let name = args.get(1).ok_or_else(|| anyhow!("usage: my-ai engine run <name> [-- args…]"))?;
+            let m = engines::find(name).ok_or_else(|| anyhow!("unknown engine: {name} (see `my-ai engine list`)"))?;
+            let rest: Vec<String> = args[2..].iter().skip_while(|a| a.as_str() == "--").cloned().collect();
+            let code = match m.run.kind.as_str() {
+                "builtin" => match m.name.as_str() {
+                    "statusline-assets" => {
+                        let w = core::statusline_assets::install(&core::statusline_assets::claude_dir())?;
+                        println!("statusline assets written: {}", w.len());
+                        0
+                    }
+                    "scripts-assets" => {
+                        let w = core::scripts_assets::install_to_local_bin()?;
+                        println!("synced {} scripts to ~/.local/bin", w.len());
+                        0
+                    }
+                    "usage" => {
+                        usage_cmd(&rest)?;
+                        0
+                    }
+                    "dash" => {
+                        engines::record_run(&m.name, 0);
+                        return launch_dash();
+                    }
+                    other => {
+                        eprintln!("engine {other} has no standalone run; it starts with the usage daemon (my-ai usage --daemon)");
+                        2
+                    }
+                },
+                _ => engines::run_external(&m, &rest)?,
+            };
+            engines::record_run(&m.name, code);
+            if code != 0 {
+                std::process::exit(code);
+            }
+            Ok(())
+        }
+        Some(x) => Err(anyhow!("unknown engine subcommand: {x} (list | run <name> | status [name])")),
     }
 }
 

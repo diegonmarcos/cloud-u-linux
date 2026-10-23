@@ -1,0 +1,8 @@
+{
+  "name": "tray",
+  "description": "StatusNotifierItem system tray, spawned by the usage daemon when a display session exists",
+  "trigger": "daemon-start",
+  "inputs": ["WAYLAND_DISPLAY or DISPLAY","usage snapshot"],
+  "outputs": ["system tray icon and tooltip"],
+  "run": { "kind": "builtin", "target": "tray" }
+}

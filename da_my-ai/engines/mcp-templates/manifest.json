@@ -1,0 +1,8 @@
+{
+  "name": "mcp-templates",
+  "description": "Regenerates the per-platform MCP client lists from cloud-infra's derived server set and mcp-policy.json",
+  "trigger": "on-demand",
+  "inputs": ["data/claude/mcp-policy.json","cloud-infra 1_cloud-configs/dist/mcp.json"],
+  "outputs": ["data/claude/mcp.termux.json.tpl","data/claude/mcp.desktop.json.tpl","cloud-u-containers claude-config mcp.tpl.json"],
+  "run": { "kind": "checkout", "target": "data/claude/gen-mcp-tpl.sh" }
+}

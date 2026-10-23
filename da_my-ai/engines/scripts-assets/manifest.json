@@ -1,0 +1,8 @@
+{
+  "name": "scripts-assets",
+  "description": "Extracts the embedded claude/goose/claude-superset helper scripts into ~/.local/bin (also runs on every CLI launch)",
+  "trigger": "on-demand",
+  "inputs": ["scripts/**"],
+  "outputs": ["~/.local/bin/claude-*","~/.local/bin/goose-*"],
+  "run": { "kind": "builtin", "target": "scripts-assets" }
+}

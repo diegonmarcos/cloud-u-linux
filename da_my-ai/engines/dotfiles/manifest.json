@@ -1,0 +1,8 @@
+{
+  "name": "dotfiles",
+  "description": "Deploys a repo's dotfiles source tree (src/dotfiles manifest) into dist and the target repo, refreshing the Claude repo-scoped copy from data/claude first",
+  "trigger": "on-demand",
+  "inputs": ["<dotfiles-src-dir>/manifest.json","data/claude/{agents,cloud-marketplace/c3-infra,mcp-auth-headers.sh,settings.project.json}"],
+  "outputs": ["<dist-dir>","<repo-root>/.claude/**","<repo-root>/.mcp.json and other manifest targets"],
+  "run": { "kind": "embedded", "target": "deploy-dotfiles.sh" }
+}

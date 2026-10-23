@@ -1,0 +1,8 @@
+{
+  "name": "dash",
+  "description": "ratatui TTY dashboard (internal my-ai-dash binary, execed from the CLI)",
+  "trigger": "on-demand",
+  "inputs": ["my-ai-dash binary","data/claude/claude-flags.json"],
+  "outputs": ["terminal UI"],
+  "run": { "kind": "builtin", "target": "dash" }
+}

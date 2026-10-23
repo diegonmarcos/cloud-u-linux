@@ -52,7 +52,7 @@ pub fn load_mcps() -> Vec<Mcp> {
 }
 
 /// Bundled default set of selectable claude startup flags (data/claude/claude-flags.json).
-const DEFAULT_CLAUDE_FLAGS_JSON: &str = include_str!("../../data/claude/claude-flags.json");
+const DEFAULT_CLAUDE_FLAGS_JSON: &str = include_str!("../../../data/claude/claude-flags.json");
 
 pub struct ClaudeFlag {
     pub key: String,

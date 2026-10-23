@@ -14,59 +14,59 @@ static ASSETS: &[(&str, &str, bool)] = &[
     // ── claude-superset scripts ───────────────────────────────────────────────
     (
         "claude-superset",
-        include_str!("../../scripts/claude-superset/claude-superset"),
+        include_str!("scripts/claude-superset/claude-superset"),
         true,
     ),
     (
         "claude-superset-setup.sh",
-        include_str!("../../scripts/claude-superset/claude-superset-setup.sh"),
+        include_str!("scripts/claude-superset/claude-superset-setup.sh"),
         true,
     ),
     (
         "claude-superset-restore.mjs",
-        include_str!("../../scripts/claude-superset/claude-superset-restore.mjs"),
+        include_str!("scripts/claude-superset/claude-superset-restore.mjs"),
         false,
     ),
     (
         "claude-superset-help.txt",
-        include_str!("../../scripts/claude-superset/claude-superset-help.txt"),
+        include_str!("scripts/claude-superset/claude-superset-help.txt"),
         false,
     ),
     (
         "claude-superset.json",
-        include_str!("../../scripts/claude-superset/claude-superset.json"),
+        include_str!("scripts/claude-superset/claude-superset.json"),
         false,
     ),
     // ── claude scripts ────────────────────────────────────────────────────────
     (
         "claude-malloc",
-        include_str!("../../scripts/claude/claude-malloc"),
+        include_str!("scripts/claude/claude-malloc"),
         true,
     ),
     (
         "claude-orphan-sweep",
-        include_str!("../../scripts/claude/claude-orphan-sweep"),
+        include_str!("scripts/claude/claude-orphan-sweep"),
         true,
     ),
     (
         "claude-rescue",
-        include_str!("../../scripts/claude/claude-rescue"),
+        include_str!("scripts/claude/claude-rescue"),
         true,
     ),
     (
         "claude-termux",
-        include_str!("../../scripts/claude/claude-termux"),
+        include_str!("scripts/claude/claude-termux"),
         true,
     ),
     // ── goose scripts ─────────────────────────────────────────────────────────
     (
         "goose-malloc",
-        include_str!("../../scripts/goose/goose-malloc"),
+        include_str!("scripts/goose/goose-malloc"),
         true,
     ),
     (
         "goose-orphan-sweep",
-        include_str!("../../scripts/goose/goose-orphan-sweep"),
+        include_str!("scripts/goose/goose-orphan-sweep"),
         true,
     ),
 ];

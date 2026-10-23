@@ -1,0 +1,8 @@
+{
+  "name": "usage",
+  "description": "Native token-usage counter; with --daemon it is the long-running publisher that also starts the other daemon-start engines",
+  "trigger": "on-demand",
+  "inputs": ["~/.claude/projects/**/*.jsonl","data/pricing.json"],
+  "outputs": ["usage snapshot and status line segment under the my-ai store"],
+  "run": { "kind": "builtin", "target": "usage" }
+}

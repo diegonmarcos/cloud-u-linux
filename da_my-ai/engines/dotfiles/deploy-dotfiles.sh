@@ -1,0 +1,219 @@
+#!/bin/sh
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║ dotfiles deploy — src/dotfiles/<tool>/ → dist/ → <repo>/<target> ║
+# ║                                                                  ║
+# ║ Usage: deploy.sh <dotfiles-src-dir> <dist-dir> <repo-root>       ║
+# ╚══════════════════════════════════════════════════════════════════╝
+#
+# CANONICAL COPY: cloud-u-linux da_my-ai/engines/dotfiles (my-ai engine
+# `dotfiles`). cloud-infra's 9_others/src/deploy-dotfiles.sh is a thin wrapper.
+#
+# THE single implementation, shared by every repo. cloud's richer
+# 9_others/build.sh calls it as its `dotfiles` verb; repos without cloud's
+# TypeScript engines ship a thin build.sh that calls exactly the same script.
+# Duplicating this logic per repo is how the gitea mirror list drifted — one
+# implementation, many callers.
+#
+# Plain POSIX sh + node (for JSON only). No repo-specific assumptions.
+#
+# node, not python3: node is already an unconditional dependency of every
+# caller (the derive engines are TypeScript run through tsx), whereas python3
+# is NOT installed in the cloud-builder image. gen-configs died here on
+# 2026-08-10 with "python3: command not found" — and because the interpreter
+# failure was swallowed by the `|| FATAL: invalid JSON` guard below, the error
+# accused the data instead of naming the missing interpreter.
+#
+# Deploy is ADDITIVE PER FILE and never purges the target directory. Unlike
+# 1_cicd/dist, the target dirs mix managed config with per-machine state:
+#   .obsidian/workspace.json        pane ids + layout for ONE device
+#   .claude/settings.local.json     documented place for local overrides
+#   .claude/agents/                 may exist per-repo and is not ours
+# A purge-then-copy would destroy all of that on every build. Files are copied
+# individually so anything not named in src/ is left exactly as found.
+
+set -e
+
+DF_SRC="$1"
+DF_DIST="$2"
+REPO_ROOT="$3"
+
+[ -n "$DF_SRC" ] && [ -n "$DF_DIST" ] && [ -n "$REPO_ROOT" ] || {
+    echo "usage: deploy.sh <dotfiles-src-dir> <dist-dir> <repo-root>" >&2; exit 2; }
+
+MANIFEST="$DF_SRC/manifest.json"
+[ -d "$DF_SRC" ]   || { echo "no dotfiles src at $DF_SRC — nothing to do"; exit 0; }
+[ -f "$MANIFEST" ] || { echo "FATAL: $MANIFEST missing" >&2; exit 1; }
+
+log() { printf "[%s]   %s\n" "$(date '+%H:%M:%S')" "$1"; }
+
+command -v node >/dev/null 2>&1 || {
+    echo "FATAL: node not found — required to read $MANIFEST" >&2; exit 1; }
+
+# Manifest readers live in one place so a missing interpreter can never again
+# be reported as malformed data.
+# Directory targets and root files each come in two sections: the universal
+# one, and public_* (leak-scan gates — see manifest _public_doc). This repo
+# owns the manifest and is public, so it installs both.
+json_keys()   { node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(Object.keys({...m.targets,...m.public_targets}).join(" "))' "$1"; }
+json_target() { node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String({...m.targets,...m.public_targets}[process.argv[2]]))' "$1" "$2"; }
+json_root_keys()   { node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(Object.keys({...m.root_targets,...m.public_root_targets}).join(" "))' "$1"; }
+json_root_target() { node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String({...m.root_targets,...m.public_root_targets}[process.argv[2]]))' "$1" "$2"; }
+# is_public <section-key>: 0 when the key belongs to public_targets / public_root_targets.
+is_public() { node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(process.argv[2] in {...m.public_targets,...m.public_root_targets}?0:1)' "$MANIFEST" "$1"; }
+
+# The public gates land in .github/workflows/ and the repo root, where every
+# deployed artifact carries the GENERATED-FILE banner (test_generated_header_present)
+# — a hand edit to a repo copy must say where the source is. So they go through
+# the same stamping engine as 1_cicd/dist; the universal dotfiles stay verbatim.
+# INJECT_HEADER: this script now lives in cloud-u-linux (my-ai engine `dotfiles`)
+# while inject-header.sh stays in cloud-infra; cloud-infra's wrapper sets it.
+INJECT="${INJECT_HEADER:-$(cd "$(dirname "$0")" && pwd)/inject-header.sh}"
+stamp_or_copy() { # <src> <dest> <key>  (src may be a dir)
+    if is_public "$3" && [ -f "$INJECT" ]; then
+        if [ -d "$1" ]; then mode=tree; else mode=file; fi
+        REPO_ROOT="$REPO_ROOT" ENGINE_NAME=9_others/src/deploy-dotfiles.sh bash "$INJECT" "$mode" "$1" "$2"
+    elif [ -d "$1" ]; then cp -rf "$1"/. "$2"/ 2>/dev/null || true
+    else cp -f "$1" "$2"; fi
+}
+
+# ── refresh src/claude/ from the ONE claude SoT ─────────────────────────────
+# Same pattern as the mcp.json refresh below, one tier up: src/ is a GENERATED
+# copy, not a hand-kept mirror, so "regenerate the source of truth" changes what
+# gets deployed.
+#
+# The SoT is da_my-ai/data/claude/, which already feeds ~/.claude via both
+# flakes' home.activation.claudeAssets. Until now cloud-infra held its OWN copy
+# of agents/ and its own settings.json, whose _doc said "edit there, then
+# re-copy here" — and agents/README.md had duplicate rule numbering in one copy
+# and a stale `unix/` path in the other, each claiming to be the same file.
+#
+# NOT symlinks. That was tried and it is what line 89's comment is about:
+# a cross-repo link resolves on one laptop and dangles in every clone, CI runner
+# and container, and Claude Code loads NOTHING from an unreadable .mcp.json
+# without saying so. Two dangling .mcp.json links from that attempt still exist
+# in cloud-infra-desktop. Real files, refreshed at build time.
+#
+# CLAUDE_SOT_DIR is the same override the flakes' claude.nix uses, so one
+# variable relocates every consumer of the SoT.
+#
+# Absent checkout SKIPS, loudly but without failing: a clone or a CI runner that
+# has cloud-infra and not cloud-u-linux must still be able to deploy the copies
+# already committed here. Only a machine that HAS the SoT can refresh them.
+CLAUDE_SOT="${CLAUDE_SOT_DIR:-$HOME/git/cloud-u-linux/da_my-ai/data/claude}"
+if [ -d "$DF_SRC/claude" ]; then
+    if [ -d "$CLAUDE_SOT" ]; then
+        # <name in SoT>:<name under src/claude/>. settings.project.json is
+        # renamed on the way in: in the SoT it sits beside settings.base.json /
+        # settings.{termux,desktop}.json and needs a distinguishing suffix,
+        # while Claude Code will only read `.claude/settings.json`.
+        # skills/c3-infra and hooks/c3: cloud sessions do not install plugins
+        # but do load a repo's .claude/, so the c3-infra plugin's skill and
+        # guard hooks are copied there too (settings.project.json wires them).
+        for _pair in agents:agents mcp-auth-headers.sh:mcp-auth-headers.sh mcp-connect.mjs:mcp-connect.mjs settings.project.json:settings.json cloud-marketplace/c3-infra/skills/c3-infra:skills/c3-infra cloud-marketplace/c3-infra/hooks:hooks/c3; do
+            _from="$CLAUDE_SOT/${_pair%%:*}"
+            _to="$DF_SRC/claude/${_pair##*:}"
+            if [ -d "$_from" ]; then
+                # Wiped then copied, like claude.nix does for agents/: for a
+                # directory that IS the whole semantics, a merge would leave a
+                # deleted agent behind forever.
+                rm -rf "$_to"; mkdir -p "$(dirname "$_to")"; cp -a "$_from" "$_to"
+                # plugin manifest, not a hook script: the repo wires hooks in settings.json
+                rm -f "$_to/hooks.json"
+                log "claude: ${_pair##*:}/ refreshed from the SoT ($(find "$_to" -type f | wc -l | tr -d ' ') files)"
+            elif [ -f "$_from" ]; then
+                cmp -s "$_from" "$_to" 2>/dev/null || {
+                    cp -f "$_from" "$_to"
+                    log "claude: ${_pair##*:} refreshed from the SoT"
+                }
+            else
+                log "claude: '${_pair%%:*}' absent from $CLAUDE_SOT — skipping"
+            fi
+        done
+    else
+        log "claude: SoT not checked out at $CLAUDE_SOT — deploying the committed copies unchanged"
+    fi
+fi
+
+# Validate every source file BEFORE touching the working tree — a half-applied
+# set of broken JSON is worse than not deploying at all.
+for f in $(find "$DF_SRC" -maxdepth 2 -path '*app-*' -name '*.json'); do
+    node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$f" \
+        || { echo "FATAL: invalid JSON: $f" >&2; exit 1; }
+done
+
+rm -rf "$DF_DIST"
+mkdir -p "$DF_DIST"
+
+TOOLS=$(json_keys "$MANIFEST")
+for tool in $TOOLS; do
+    target=$(json_target "$MANIFEST" "$tool")
+    if [ ! -d "$DF_SRC/$tool" ]; then
+        log "dotfiles: no src for '$tool' — skipping"
+        continue
+    fi
+    mkdir -p "$DF_DIST/$tool" "$REPO_ROOT/$target"
+    # -r, so subdirectories come along. Without it `cp -f src/*` silently drops
+    # every directory (the error is swallowed by `2>/dev/null || true`), which
+    # is how .claude/agents/ deployed as nothing while the log still said
+    # "claude -> .claude (1 files)" and looked fine.
+    #
+    # Still additive, never a purge: .claude/ and .obsidian/ mix managed config
+    # with machine state (see never_manage), so the target is never emptied.
+    stamp_or_copy "$DF_SRC/$tool" "$DF_DIST/$tool" "$tool"
+    cp -rf "$DF_DIST/$tool"/. "$REPO_ROOT/$target"/ 2>/dev/null || true
+    n=$(find "$DF_DIST/$tool" -type f 2>/dev/null | wc -l | tr -d ' ')
+    log "dotfiles: $tool -> $target ($n files)"
+done
+
+# ── repo-root files ─────────────────────────────────────────────────────────
+# Some agent config is a single file at the repo ROOT, not a directory:
+# .mcp.json is the one that matters. cloud carried it as a symlink to
+# /home/diego/.mcp.json, so every clone, CI runner and container got a dangling
+# link — and Claude Code loads NO servers when .mcp.json is unreadable, without
+# saying so. Shipping a real file per repo is what makes each one self-contained.
+ROOT_FILES=$(json_root_keys "$MANIFEST")
+for rf in $ROOT_FILES; do
+    target=$(json_root_target "$MANIFEST" "$rf")
+    src="$DF_SRC/root/$rf"
+
+    # Refresh src/ from the derive output when this repo HAS a derive engine.
+    #
+    # mcp.json is generated by 1_cloud-configs/src/derive/derive-mcp-json.ts
+    # into 1_cloud-configs/dist/. Nothing connected that to src/apps/root/, so
+    # the file every repo ships was a hand-made copy, and "regenerate the
+    # derive" did not change what got deployed. That is how .mcp.json in vault
+    # ended up without the cloud-infra-mcp headersHelper while cloud's had it —
+    # both claiming, in their own _doc, to be the same file.
+    #
+    # No-op in the other repos: they have no 1_cloud-configs/, so the guard
+    # fails and the committed src/ copy is used unchanged. The module stays
+    # portable (see manifest _portability).
+    # sops.yaml lives in its own tier (2_sops/), not under apps/root/.
+    [ "$rf" = "sops.yaml" ] && [ -f "$REPO_ROOT/2_sops/sops.yaml" ] && src="$REPO_ROOT/2_sops/sops.yaml"
+    _derived="$REPO_ROOT/1_cloud-configs/dist/$rf"
+    # .mcp.json ships the PROJECT shape (owner decision 31: mesh-first stdio
+    # bridge, bearer fallback, no OAuth). dist/mcp.json keeps the url shape that
+    # gen-mcp-tpl.sh derives the user-level client lists from.
+    [ "$rf" = "mcp.json" ] && _derived="$REPO_ROOT/1_cloud-configs/dist/mcp.project.json"
+    if [ -f "$_derived" ] && [ -f "$src" ] && ! cmp -s "$_derived" "$src"; then
+        cp -f "$_derived" "$src"
+        log "root: $rf refreshed from 1_cloud-configs/dist/ (derive is the source of truth)"
+    fi
+
+    [ -f "$src" ] || { log "root: no src for '$rf' — skipping"; continue; }
+    mkdir -p "$DF_DIST/root"
+    stamp_or_copy "$src" "$DF_DIST/root/$rf" "$rf"
+    # Replace a symlink outright rather than writing through it — the whole
+    # point is to stop pointing at a machine-local path.
+    [ -L "$REPO_ROOT/$target" ] && rm -f "$REPO_ROOT/$target"
+    cp -f "$DF_DIST/root/$rf" "$REPO_ROOT/$target"
+    log "root: $rf -> $target"
+done
+
+# Say out loud what was left alone, so "why isn't workspace.json in src/"
+# never has to be rediscovered.
+node -e '
+const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+const keep = m.never_manage || [];
+if (keep.length) console.log("            preserved (machine state, never managed): " + keep.join(", "));
+' "$MANIFEST"

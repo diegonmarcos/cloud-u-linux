@@ -1,0 +1,8 @@
+{
+  "name": "claude-config",
+  "description": "Applies data/claude to ~/.claude on hosts without home-manager (inert assets, settings base+overlay, ~/.claude.json keys)",
+  "trigger": "on-demand",
+  "inputs": ["data/claude/**"],
+  "outputs": ["~/.claude/settings.json","~/.claude/agents","~/.claude/cloud-marketplace","~/.claude.json keys"],
+  "run": { "kind": "checkout", "target": "build.sh assets" }
+}

@@ -131,6 +131,9 @@ USAGE / TOKEN TRACKING
                         on every render.
   usage --since <hours>  Restrict the report to usage from the last N hours.
 
+  engine list|status      Orchestrated routines (engines/<name>/manifest.json).
+  engine run <name> [-- args]  Run one engine (e.g. dotfiles, claude-config).
+
 SETUP (installer / deps-solver, for the goose agent)
   setup                 Ensure `goose` is installed. Platform-aware:
                         nix/termux = flake-managed (declarative); other = goose

@@ -16,7 +16,7 @@ delivery paths a file takes:
 
 1. **Binary-carried** — `sot-statusline/`. `statusline-command.sh`,
    `claude-{mcp,plugins,hooks,flags}-status.sh`, `claude-pricing.json`. Embedded via
-   `include_str!` (`core/src/statusline_assets.rs`), written to `~/.claude` by the
+   `include_str!` (`engines/statusline-assets/statusline_assets.rs`), written to `~/.claude` by the
    daemon on every start, so the scripts can never drift out of step with the binary
    that shells out to them. **No flake may declare these** — a `home.file` entry lays a
    second copy on top, which is exactly how the deployed status line sat 141 lines
@@ -29,9 +29,13 @@ delivery paths a file takes:
    instead would mean a GH release for every asset edit.
 
 3. **Repo-scoped copy** — `agents/`, `settings.project.json`,
-   `mcp-auth-headers.sh`. Read by cloud-infra's
-   `9_others/src/deploy-dotfiles.sh`, which refreshes `0_apps/src/claude/` from
-   here and then deploys it to `<repo>/.claude/` in every repo. This is the path
+   `mcp-auth-headers.sh`, the `c3-infra` skill and hooks. Deployed by the my-ai
+   **`dotfiles` engine** (`da_my-ai/engines/dotfiles/deploy-dotfiles.sh`; run it
+   with `my-ai engine run dotfiles -- <dotfiles-src> <dist> <repo-root>`). It
+   refreshes cloud-infra's `0_apps/src/claude/` from here and then deploys it to
+   `<repo>/.claude/` in every repo. cloud-infra's
+   `9_others/src/deploy-dotfiles.sh` is now only a thin wrapper that calls the
+   engine, so `build.sh dotfiles` and CI are unchanged. This is the path
    for a consumer with **no home-manager**: a fresh clone, CI, Claude Code on
    the web. `settings.project.json` is renamed to `settings.json` on the way in
    — here it needs a suffix to sit beside `settings.base.json`, there Claude
@@ -122,7 +126,7 @@ Minting takes an id and a secret instead and produces a short-lived token per se
 consumer, not a second owner — the two drifted once already (it still called the server
 `cloud-infra-mcp` after the rename to `c3-infra-mcp`), which is the failure mode the
 provenance-header check at the bottom of `test-claude-sot.sh` exists to catch. It is now
-regenerated from here by `deploy-dotfiles.sh` (delivery path 3 above) rather than
+regenerated from here by the `dotfiles` engine (delivery path 3 above) rather than
 hand-copied, and `test-claude-sot.sh` fails if it is not byte-identical.
 
 ## settings.json

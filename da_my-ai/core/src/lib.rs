@@ -8,9 +8,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+// Engine code lives in engines/<name>/; core only mounts it.
+#[path = "../../engines/scripts-assets/scripts_assets.rs"]
 pub mod scripts_assets;
+#[path = "../../engines/statusline-assets/statusline_assets.rs"]
 pub mod statusline_assets;
+#[path = "../../engines/usage/usage.rs"]
 pub mod usage;
+pub mod engines;
 
 /// Endpoints are compiled in from data/endpoints.json (data-driven, single source).
 pub const ENDPOINTS_JSON: &str = include_str!("../../data/endpoints.json");

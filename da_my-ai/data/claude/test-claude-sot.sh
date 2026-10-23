@@ -465,4 +465,27 @@ check "both archive hooks are guarded and cannot fail a turn" \
 check "the archive trigger is NOT in settings.base.json" \
   "$(jq -r '[.hooks // {} | .[][]?.hooks[]?.command] | map(select(test("claude-sync-sessions"))) | length' "$SOT/settings.base.json")" 0
 
+# ── engines: my-ai orchestrates routines under engines/<name>/ ───────────────
+# Every engine folder carries a manifest (name, trigger, inputs, outputs, run)
+# and a README, and is registered in core/src/engines.rs; every registry entry
+# has a folder. The Rust unit test asserts the same from inside cargo.
+ENG="$SOT/../../engines"
+REG="$SOT/../../core/src/engines.rs"
+if [ -d "$ENG" ]; then
+  for d in "$ENG"/*/; do
+    n="$(basename "$d")"
+    check "engine $n has manifest.json" "$([ -f "$d/manifest.json" ] && echo yes || echo no)" yes
+    check "engine $n has README.md" "$([ -f "$d/README.md" ] && echo yes || echo no)" yes
+    check "engine $n manifest is complete and named after its folder" \
+      "$(jq -r --arg n "$n" '(.name==$n) and (.trigger|IN("daemon-start","timer","on-demand")) and (.inputs|length>0) and (.outputs|length>0) and (.run.kind|IN("builtin","embedded","checkout"))' "$d/manifest.json" 2>/dev/null || echo no)" true
+    check "engine $n is registered in core/src/engines.rs" \
+      "$(grep -c "(\"$n\", include_str!(\"../../engines/$n/manifest.json\"))" "$REG")" 1
+  done
+  check "registry entries equal engine folders" \
+    "$(grep -c 'include_str!("../../engines/[a-z-]*/manifest.json")' "$REG")" \
+    "$(find "$ENG" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+  check "cloud-infra deploy-dotfiles.sh is a thin wrapper onto the dotfiles engine" \
+    "$(grep -c 'engines/dotfiles' "${CLOUD_INFRA_DIR:-$REPO/../cloud-infra}/9_others/src/deploy-dotfiles.sh" 2>/dev/null || echo 1)" 1
+fi
+
 exit "$fail"
