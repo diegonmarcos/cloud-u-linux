@@ -1,0 +1,17 @@
+# Light check for da_my-account: manifests complete, lin: drift (claude vs
+# da_my-ai/data/claude), sandboxed deploy and secret-resolution tests.
+# cmc: drift (against cloud-me_configs) runs locally: see da_my-account/README.md.
+name: test-my-account
+on:
+  push:
+    branches: [main]
+    paths: ['da_my-account/**', 'da_my-ai/data/claude/**', '.github/workflows/test-my-account.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh da_my-account/test/test-my-account.sh
