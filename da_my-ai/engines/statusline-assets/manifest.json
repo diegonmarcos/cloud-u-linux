@@ -2,7 +2,7 @@
   "name": "statusline-assets",
   "description": "Writes the embedded status line scripts and pricing table into ~/.claude",
   "trigger": "daemon-start",
-  "inputs": ["data/statusline/*.sh","data/pricing.json"],
-  "outputs": ["~/.claude/statusline-command.sh","~/.claude/claude-*-status.sh","~/.claude/claude-status-refresh.sh","~/.claude/claude-pricing.json"],
+  "inputs": ["data/statusline/*.sh","data/claude/cloud-marketplace/c3-infra/hooks/ai-usage-post.sh","data/pricing.json"],
+  "outputs": ["~/.claude/statusline-command.sh","~/.claude/claude-*-status.sh","~/.claude/claude-status-refresh.sh","~/.claude/claude-ai-usage-post.sh","~/.claude/claude-pricing.json"],
   "run": { "kind": "builtin", "target": "statusline-assets" }
 }

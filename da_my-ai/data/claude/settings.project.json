@@ -91,7 +91,7 @@
   "deniedMcpServers": [{"serverName": "github"}],
   "_deniedMcpServers_doc": "2026-10-23 owner decision: the GitHub MCP (~60 tools, ~28k tokens per session/agent) is redundant; use gh CLI (proxy-authenticated) and cloud-infra-mcp devops_workflows_gha_*. permissions.allow no longer lists mcp__github.",
 
-  "_hooks_doc": "c3-infra guard hooks (cloud-marketplace/c3-infra/hooks). Cloud sessions do not install plugins, so deploy-dotfiles copies the scripts to <repo>/.claude/hooks/c3 and this block wires them. Declared ONCE: the retired sync-to-repo.sh appended a fresh copy on every run.",
+  "_hooks_doc": "c3-infra guard hooks (cloud-marketplace/c3-infra/hooks). Cloud sessions do not install plugins, so deploy-dotfiles copies the scripts to <repo>/.claude/hooks/c3 and this block wires them. Declared ONCE: the retired sync-to-repo.sh appended a fresh copy on every run. StopFailure(rate_limit) -> ai-usage-post.sh (#1151): cloud sessions run no statusLine and no hook input carries rate_limits, so the only usage fact a cloud session can publish to c3-infra-api is that it was rate limited; the percentages come from the statusLine path (claude-ai-usage-post.sh via statusline-assets). It reads C3_AI_USAGE_TOKEN (or mints from the AUTHELIA_* client credentials the cloud environment injects) and is a no-op without a token.",
   "hooks": {
     "PreToolUse": [
       {
@@ -103,6 +103,14 @@
           {"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/c3\"/main-only-push.sh"},
           {"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/c3\"/no-branch-create.sh"},
           {"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/c3\"/no-secrets-commit.sh"}
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "rate_limit",
+        "hooks": [
+          {"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/c3\"/ai-usage-post.sh", "timeout": 5}
         ]
       }
     ]

@@ -21,6 +21,9 @@ delivery paths a file takes:
    that shells out to them. **No flake may declare these** — a `home.file` entry lays a
    second copy on top, which is exactly how the deployed status line sat 141 lines
    stale from 2026-08-01 to 2026-08-09.
+   Also carried: `claude-ai-usage-post.sh` (#1151), whose source is
+   `cloud-marketplace/c3-infra/hooks/ai-usage-post.sh` (one script; the same file is the cloud-session
+   StopFailure hook). The statusline refresher posts `rate_limits` through it, throttled to 1/min.
 
 2. **Flake output** — `sot/`. `agents/`, `cloud-marketplace/`, `claude-plugins.json`,
    `rgignore`, `settings.base.json` + `settings.{termux,desktop}.json`. Exposed by

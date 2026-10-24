@@ -28,6 +28,7 @@ const ASSETS: &[(&str, &str, bool)] = &[
     ("claude-hooks-status.sh", include_str!("../../data/statusline/claude-hooks-status.sh"), true),
     ("claude-flags-status.sh", include_str!("../../data/statusline/claude-flags-status.sh"), true),
     ("claude-status-refresh.sh", include_str!("../../data/statusline/claude-status-refresh.sh"), true),
+    ("claude-ai-usage-post.sh", include_str!("../../data/claude/cloud-marketplace/c3-infra/hooks/ai-usage-post.sh"), true),
     ("claude-pricing.json", include_str!("../../data/pricing.json"), false),
 ];
 

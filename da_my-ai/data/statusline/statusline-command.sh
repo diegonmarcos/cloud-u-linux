@@ -84,6 +84,7 @@ eval "$(echo "$input" | jq -r '
     @sh "effort_level=\(.effort.level // empty)",
     @sh "session_name=\(.session_name // empty)",
     @sh "rl_5h=\(.rate_limits.five_hour.used_percentage // empty)",
+    @sh "rl_5h_reset=\(.rate_limits.five_hour.resets_at // empty)",
     @sh "rl_7d=\(.rate_limits.seven_day.used_percentage // empty)",
     @sh "rl_7d_reset=\(.rate_limits.seven_day.resets_at // empty)"
 ')"
@@ -113,6 +114,11 @@ session_short="${session_id:0:8}"
 rl_sticky="/tmp/statusline_rl.cache"
 if [ -n "$rl_5h" ] || [ -n "$rl_7d" ]; then
     printf '%s\n%s\n%s\n' "$rl_5h" "$rl_7d" "$rl_7d_reset" > "$rl_sticky" 2>/dev/null
+    # #1151 Publish the fresh reading for the Cloud SuperApp AI card. Only a payload that carried rate_limits gets here
+    # (never the sticky fallback below), and the poster throttles itself (one post a minute for the whole host), detaches
+    # its network part and always exits 0, so this line cannot slow or fail a render. No curl/jq here by design.
+    [ -x "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/claude-ai-usage-post.sh" ] &&
+        bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/claude-ai-usage-post.sh" statusline "$rl_5h" "$rl_5h_reset" "$rl_7d" "$rl_7d_reset" "$session_id" </dev/null >/dev/null 2>&1
 elif [ -f "$rl_sticky" ]; then
     { read -r rl_5h; read -r rl_7d; read -r rl_7d_reset; } < "$rl_sticky" 2>/dev/null
 fi
