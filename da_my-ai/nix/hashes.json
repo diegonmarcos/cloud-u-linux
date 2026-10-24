@@ -1,11 +1,11 @@
 {
   "version": "latest",
   "aarch64-linux": {
-    "my-ai":      "sha256-c8bw68SvB+C0RfFgimhZGFC8DZouU+J54EAD5pAnIMI=",
-    "my-ai-dash": "sha256-VSy04Sgc2/ui6rJvuHB6rqi2ocsN2QQ8F0shJOiSJ94="
+    "my-ai":      "sha256-YSTm5SDaf7Lnu7u+a4jRgpW4KKsnuvyI5/mOXIH+6BE=",
+    "my-ai-dash": "sha256-g7oe8yUL3QZPJDMblxwTLuGvgJrkSjEkTIXIMQw0veE="
   },
   "x86_64-linux": {
-    "my-ai":      "sha256-b2ev1v/1R3UYRD9ALAnDcd36uJLpRrwD/46kyc9tj0A=",
-    "my-ai-dash": "sha256-6oANefoGkwYyj6QKuFS5uqm2BqWDkCHdiWIefi2ckr4="
+    "my-ai":      "sha256-sU8viuSXc6++LGwjRO7+DvC7C3KvsY+sk7fJ8gqhOUI=",
+    "my-ai-dash": "sha256-fA/zy5oTHeMwWHSJKsXKGDRCjlcS4NmTmqjjWPFt3hU="
   }
 }
