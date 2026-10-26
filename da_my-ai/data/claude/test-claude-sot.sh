@@ -134,7 +134,7 @@ check "settings.project.json denies the github MCP and does not allow it" \
 check "settings.project.json disables claude.ai connectors" \
   "$(jq -r '.disableClaudeAiConnectors' "$SOT/settings.project.json")" true
 check "settings.project.json wires each c3 guard hook exactly once" \
-  "$(jq -r '[.hooks.PreToolUse[].hooks[].command] | (length == (unique | length)) and length == 6' "$SOT/settings.project.json")" true
+  "$(jq -r '[.hooks.PreToolUse[].hooks[].command] | (length == (unique | length)) and length == 7' "$SOT/settings.project.json")" true
 check "the SoT agents are the six lean/fleet agents" \
   "$(ls "$SOT/agents" | grep -v README | tr '\n' ' ')" "build.md explore.md general-purpose.md infra.md ops.md review.md "
 check "the c3-infra guard (rules, agents pinned, lean agents, hook tests) is green" \
