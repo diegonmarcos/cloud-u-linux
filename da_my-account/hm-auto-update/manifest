@@ -1,4 +1,4 @@
 # kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
-file	desktop	hm-auto-update.json	.config/cloud-data/hm-auto-update.json	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/hm-auto-update.json
-inline	desktop	hm-auto-update-check.sh	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/hm-auto-update-check.sh
-inline	desktop	hm-auto-update-cancel.sh	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/hm-auto-update-cancel.sh
+file	desktop	hm-auto-update.json	.config/cloud-data/hm-auto-update.json	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/hm-auto-update.json
+inline	desktop	hm-auto-update-check.sh	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/hm-auto-update-check.sh
+inline	desktop	hm-auto-update-cancel.sh	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/hm-auto-update-cancel.sh

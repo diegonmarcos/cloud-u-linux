@@ -92,7 +92,9 @@ fi
 # invoked with an absolute path from .mcp.json and the cwd is not guaranteed.
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(dirname -- "$SELF_DIR")
-REL="A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/tokens/claude-admin.json"
+REL="Shared/Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/tokens/claude-admin.json"
+# Pre-2026-10-28 vault layout (A_A0-Providers at the root); dual-read for one cycle until every checkout is pulled.
+REL_LEGACY="A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/tokens/claude-admin.json"
 
 # The order matters:
 #   a) $AUTHELIA_OIDC_TOKENS_DIR — explicit, wins over any guess. Exported by
@@ -108,7 +110,10 @@ for _candidate in \
     "${AUTHELIA_OIDC_TOKENS_DIR:+$AUTHELIA_OIDC_TOKENS_DIR/claude-admin.json}" \
     "$REPO_ROOT/IV_vault/$REL" \
     "$HOME/cloud-shared-store/git/cloud-me-pvt-vault/$REL" \
-    "$HOME/cloud-shared-store/git/cloud-me_vault/$REL"
+    "$HOME/cloud-shared-store/git/cloud-me_vault/$REL" \
+    "$HOME/cloud-shared-store/git/cloud-me-pvt-vault/$REL" \
+    "$HOME/cloud-shared-store/git/cloud-me_vault/$REL_LEGACY" \
+    "$HOME/cloud-shared-store/git/cloud-me-pvt-vault/$REL_LEGACY"
 do
     [ -n "$_candidate" ] || continue
     if [ -r "$_candidate" ]; then TOKEN_FILE="$_candidate"; break; fi

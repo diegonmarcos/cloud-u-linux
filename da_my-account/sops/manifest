@@ -1,5 +1,5 @@
 # kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
-file	desktop	sops-paths	.local/bin/sops-paths	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/scripts/sops-paths.sh
-sops	desktop	-	.config/sops/age/keys.txt	sops:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/secrets/secrets.yaml
-sops	termux	-	.config/cloud-ide-sshd	sops:B_CONFIGS-MACHINES/_shared/nix-os-flakes/bb_flakes_termux/src/modules/cloud-ide-sshd/secrets.yaml
-sops	termux	-	.config/my-webserver	sops:B_CONFIGS-MACHINES/_shared/nix-os-flakes/bb_flakes_termux/src/modules/my-webserver/secrets.yaml
+file	desktop	sops-paths	.local/bin/sops-paths	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/scripts/sops-paths.sh
+sops	desktop	-	.config/sops/age/keys.txt	sops:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/secrets/secrets.yaml
+sops	termux	-	.config/cloud-ide-sshd	sops:Desktop-GUI/_shared/nix-os-flakes/bb_flakes_termux/src/modules/cloud-ide-sshd/secrets.yaml
+sops	termux	-	.config/my-webserver	sops:Desktop-GUI/_shared/nix-os-flakes/bb_flakes_termux/src/modules/my-webserver/secrets.yaml

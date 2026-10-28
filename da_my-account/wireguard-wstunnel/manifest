@@ -1,6 +1,6 @@
 # kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
 secret	desktop	-	-	me:my-account/wireguard-wstunnel/mesh-bootstrap.json
-inline	desktop	wireguard-wstunnel.sh	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/wireguard-wstunnel.sh
-inline	termux	termux/wireguard-wstunnel.sh	-	cmc:B_CONFIGS-MACHINES/_shared/nix-os-flakes/bb_flakes_termux/src/modules/wireguard-wstunnel.sh
-inline	desktop	wireguard-wstunnel-render.sh	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/wireguard-wstunnel-render.sh
-inline	termux	termux/wireguard-wstunnel-render.sh	-	cmc:B_CONFIGS-MACHINES/_shared/nix-os-flakes/bb_flakes_termux/src/modules/wireguard-wstunnel-render.sh
+inline	desktop	wireguard-wstunnel.sh	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/wireguard-wstunnel.sh
+inline	termux	termux/wireguard-wstunnel.sh	-	cmc:Desktop-GUI/_shared/nix-os-flakes/bb_flakes_termux/src/modules/wireguard-wstunnel.sh
+inline	desktop	wireguard-wstunnel-render.sh	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/wireguard-wstunnel-render.sh
+inline	termux	termux/wireguard-wstunnel-render.sh	-	cmc:Desktop-GUI/_shared/nix-os-flakes/bb_flakes_termux/src/modules/wireguard-wstunnel-render.sh

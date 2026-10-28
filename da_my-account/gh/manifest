@@ -1,2 +1,2 @@
 # kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
-file	desktop	hosts.yml.tpl	.config/gh/hosts.yml.tpl	cmc:A_CONFIGS-USER/a0-diego-admin/deb-user-configs/src/gh/hosts.yml.tpl
+file	desktop	hosts.yml.tpl	.config/gh/hosts.yml.tpl	cmc:Desktop-GUI/a0-diego-admin/deb-user-configs/src/gh/hosts.yml.tpl

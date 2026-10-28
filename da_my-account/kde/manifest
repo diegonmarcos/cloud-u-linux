@@ -1,12 +1,12 @@
 # kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
-inline	desktop	kdeglobals	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/kde/kdeglobals
-inline	desktop	kglobalshortcutsrc	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/kde/kglobalshortcutsrc
-inline	desktop	kwinrc	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/kde/kwinrc
-dir	desktop	plasmoids/com.diegonmarcos.watchdog	.local/share/plasma/plasmoids/com.diegonmarcos.watchdog	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/kde/plasmoids/com.diegonmarcos.watchdog
-dir	desktop	plasmoids/org.kde.plasma.kstats	.local/share/plasma/plasmoids/org.kde.plasma.kstats	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/kde/plasmoids/org.kde.plasma.kstats
-file	desktop	panels.json	.config/cloud-data/panels.json	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop/panels.json
-file	desktop	cloud-terminal.svg	.local/share/icons/hicolor/scalable/apps/cloud-terminal.svg	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop/cloud-terminal.svg
-inline	desktop	window-rules.json	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop/window-rules.json
-inline	desktop	default-session.json	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop/default-session.json
-inline	desktop	cloud-data-wallpaper.json	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop/cloud-data-wallpaper.json
-inline	desktop	cloud-data-power.json	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop/cloud-data-power.json
+inline	desktop	kdeglobals	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/kde/kdeglobals
+inline	desktop	kglobalshortcutsrc	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/kde/kglobalshortcutsrc
+inline	desktop	kwinrc	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/kde/kwinrc
+dir	desktop	plasmoids/com.diegonmarcos.watchdog	.local/share/plasma/plasmoids/com.diegonmarcos.watchdog	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/kde/plasmoids/com.diegonmarcos.watchdog
+dir	desktop	plasmoids/org.kde.plasma.kstats	.local/share/plasma/plasmoids/org.kde.plasma.kstats	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/kde/plasmoids/org.kde.plasma.kstats
+file	desktop	panels.json	.config/cloud-data/panels.json	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop/panels.json
+file	desktop	cloud-terminal.svg	.local/share/icons/hicolor/scalable/apps/cloud-terminal.svg	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop/cloud-terminal.svg
+inline	desktop	window-rules.json	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop/window-rules.json
+inline	desktop	default-session.json	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop/default-session.json
+inline	desktop	cloud-data-wallpaper.json	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop/cloud-data-wallpaper.json
+inline	desktop	cloud-data-power.json	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop/cloud-data-power.json

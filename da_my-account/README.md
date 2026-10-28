@@ -6,8 +6,8 @@ into non-mobile applications: the user-scope job Nix home-manager does today
 and `da_my-ai`.
 
 **Redundant for now.** The home-manager flakes (`cloud-me-pvt-configs`:
-`A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop` and
-`B_CONFIGS-MACHINES/_shared/nix-os-flakes/bb_flakes_termux`) keep deploying and are
+`Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop` and
+`Desktop-GUI/_shared/nix-os-flakes/bb_flakes_termux`) keep deploying and are
 unchanged. Everything here is a COPY; nothing was moved. A target that is a symlink into
 `/nix/store` is skipped ("managed by home-manager"), a differing plain file is reported
 and left alone unless `--force` (then backed up as `<file>.my-account.bak`).

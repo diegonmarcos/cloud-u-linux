@@ -1,4 +1,4 @@
 # kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
 secret	desktop	-	.config/cloud-data/cloud-network-wg-dns.json	me:my-account/wg-dns/cloud-network-wg-dns.json
-inline	desktop	wg-dns-up.sh	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/wg-dns-up.sh
-inline	desktop	wg-dns-down.sh	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/wg-dns-down.sh
+inline	desktop	wg-dns-up.sh	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/wg-dns-up.sh
+inline	desktop	wg-dns-down.sh	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/wg-dns-down.sh

@@ -1,3 +1,3 @@
 # kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
-file	desktop	essentials.json	.config/mem-reclaim/essentials.json	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop-session/mem-reclaim-essentials.json
-inline	desktop	mem-reclaim.sh	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop-session/mem-reclaim.sh
+file	desktop	essentials.json	.config/mem-reclaim/essentials.json	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop-session/mem-reclaim-essentials.json
+inline	desktop	mem-reclaim.sh	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/desktop-session/mem-reclaim.sh
