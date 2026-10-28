@@ -16,7 +16,7 @@ Same engine interface everywhere: `build.sh` (universal engine) + `build.json` (
 
 **front**: TypeScript strict, Svelte 5 runes / Vue 3 Composition API. No inline CSS (SCSS mixins only). No `fetch()` for JSON — read `globalThis.PORTAL_DATA[key]` from `data-<key>.json.js`. Matomo required in every HTML `<head>`. Deploy: `1.ops/build_main.sh` (TUI) or per-project `build.sh build|dev|deploy`. Never `dev`/`serve` after source edits unless asked.
 
-**vault**: paths only referenced from public repos, never copied values. Bearer token: `python ~/cloud-shared-store/git/cloud-me_vault/A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/get_token.py`.
+**vault**: paths only referenced from public repos, never copied values. Bearer token: `python ~/cloud-shared-store/git/cloud-me-pvt-vault/A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/get_token.py`.
 
 ## Live Infra Data — use MCP, don't hardcode here
 

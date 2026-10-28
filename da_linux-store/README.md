@@ -34,11 +34,11 @@ $HOME/.claude/agents -> ~/.linux-store/current/etc/.claude/agents   (stable; the
 ## The declaration
 
 The declaration is config, so it lives with the rest of the user's config in
-**cloud-me_configs**, not beside the engine:
+**cloud-me-pvt-configs**, not beside the engine:
 
 ```
-<git base>/cloud-me_configs/configs.json                         binds configs-user id → directory
-<git base>/cloud-me_configs/A_CONFIGS-USER/a0-diego-admin/
+<git base>/cloud-me-pvt-configs/configs.json                         binds configs-user id → directory
+<git base>/cloud-me-pvt-configs/A_CONFIGS-USER/a0-diego-admin/
     deb-user-configs/linux-store.json                            ← this user's declaration
 ```
 
@@ -123,7 +123,7 @@ linux-store serve [port]             html, then my-webserver on $HOME → http:/
 
 Two tiers, drawn apart on purpose:
 
-- **OS · Terraforms** — the machine. What `cloud-me_configs/B_CONFIGS-MACHINES/<machine>` owns
+- **OS · Terraforms** — the machine. What `cloud-me-pvt-configs/B_CONFIGS-MACHINES/<machine>` owns
   (`nix-os-flakes`, `deb-os-configs`, `cloud-terraforms`), plus kernel and userland. The store reads it, never writes it.
 - **Home-Manager · Desktop** — the user. What this store realises: Binaries (`bin`), Scripts · Libs (`lib`),
   Configs (`etc`, `activate`), Secrets (names and modes only), each row with its **app** and whether it is
@@ -184,7 +184,7 @@ linux-store serve [port]             html, then my-webserver on $HOME → http:/
 
 Two tiers, drawn apart on purpose:
 
-- **OS · Terraforms** — the machine. What `cloud-me_configs/B_CONFIGS-MACHINES/<machine>` owns
+- **OS · Terraforms** — the machine. What `cloud-me-pvt-configs/B_CONFIGS-MACHINES/<machine>` owns
   (`nix-os-flakes`, `deb-os-configs`, `cloud-terraforms`), plus kernel and userland. The store reads it, never writes it.
 - **Home-Manager · Desktop** — the user. What this store realises: Binaries (`bin`), Scripts · Libs (`lib`),
   Configs (`etc`, `activate`), Secrets (names and modes only), each row with its **app** and whether it is
@@ -206,7 +206,7 @@ rows on the page; without it the app is derived from the source's repo directory
 
 
 Like the flakes, the declaration directory has its own `build.sh`:
-`cloud-me_configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs/build.sh switch`
+`cloud-me-pvt-configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs/build.sh switch`
 renders `dist/` and switches, exactly where `bb_flakes_termux/build.sh switch` used to.
 
 ## Setup: bootstrap
@@ -233,7 +233,7 @@ sh test/test-linux-store.sh     # sandboxed $HOME; never touches the real ~/.cla
 68 checks covering profiles, every layer, idempotence (a re-apply adds zero
 objects), diff/rollback/switch, fault injection at each stage, tamper detection
 and repair, ownership refusals, cross-profile refusal, the fetch hash, dev mode,
-removal, gc, the lock, finding the declaration through cloud-me_configs, and secrets (throwaway age key: refusal without the key, modes, no value under the store root, tamper and mode drift, repair). It takes about 5 minutes on the phone, almost all of
+removal, gc, the lock, finding the declaration through cloud-me-pvt-configs, and secrets (throwaway age key: refusal without the key, modes, no value under the store root, tamper and mode drift, repair). It takes about 5 minutes on the phone, almost all of
 it jq start-up.
 
 ## Known gaps

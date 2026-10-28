@@ -13,7 +13,7 @@ Hard rules first, index last. Each rule has a one-line why in `rules/*.md` (read
 4. Number every question put to the owner. Ask only when truly blocked. Why: answer by number. Guard: none.
 5. Do only what was asked; explain/how/what-is questions are read-only. Why: scope creep costs trust. Guard: none.
 6. Reports are short: result, files touched, verification, blockers. Why: token budget. Guard: none.
-7. "New task" is a ticket: write it to the Product Backlog first, build, test, push (rules/backlog.md). Why: single task ledger. Guard: test-backlog-metadata.sh.
+7. "New task" is a ticket: write it to the Product Backlog (repo cloud-a-docs) first, build, test, push (rules/backlog.md). Why: single task ledger. Guard: test-backlog-metadata.sh.
 8. Builds run in CI only. No local Gradle, no npm/npx, never start servers; `build.sh build` after source edits. Why: runners are the only trusted builders. Guard: hook no-local-gradle.
 9. Android work is not done on green CI: the on-phone check stays pending on every close. Why: CI cannot see the device. Guard: none.
 10. One agent at a time, within about 14% of the daily token budget; Opus orchestrates, Sonnet workers. Why: the budget is shared across sessions. Guard: none.
@@ -37,4 +37,4 @@ Hard rules first, index last. Each rule has a one-line why in `rules/*.md` (read
 | rules/security.md | secrets, gitleaks, geo-fence, MCP auth |
 
 ## Delivery
-Source of truth: cloud-u-linux `da_my-ai/data/claude/cloud-marketplace/c3-infra` (this plugin) and `agents/`. Local sessions use the plugin via `cloud-marketplace` + `enabledPlugins`. Claude Code cloud sessions do NOT install plugins (docs: cloud-environments, "What carries over"), so cloud-infra `9_others/src/deploy-dotfiles.sh` copies this skill to `<repo>/.claude/skills/c3-infra`, the hooks to `<repo>/.claude/hooks/c3`, the agents to `<repo>/.claude/agents`, and `settings.project.json` (hooks wired) to `<repo>/.claude/settings.json`. Edit upstream, never the repo copies.
+Source of truth: cloud-u-linux `da_my-ai/data/claude/cloud-marketplace/c3-infra` (this plugin) and `agents/`. The former plugin repo `c3-infra-plugin` is archived (`z-archived_c3-infra-plugin`) and is not a source. Local sessions use the plugin via `cloud-marketplace` + `enabledPlugins`. Claude Code cloud sessions do NOT install plugins (docs: cloud-environments, "What carries over"), so the my-ai `dotfiles` engine (`da_my-ai/engines/dotfiles/deploy-dotfiles.sh`; cloud-infra `9_others/src/deploy-dotfiles.sh` is a wrapper) copies this skill to `<repo>/.claude/skills/c3-infra`, the hooks to `<repo>/.claude/hooks/c3`, the agents to `<repo>/.claude/agents`, and `settings.project.json` (hooks wired) to `<repo>/.claude/settings.json`. Edit upstream, never the repo copies.

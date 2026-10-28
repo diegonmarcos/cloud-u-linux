@@ -11,7 +11,7 @@
 #   1. tools     apt-installs what the engine and the configs need (termux);
 #                on desktop it only reports what is missing
 #   2. checkouts the git base (~/git, or the CloudDrive mount on the phone):
-#                clones cloud-me_configs + cloud-u-linux when absent, and on a
+#                clones cloud-me-pvt-configs + cloud-u-linux when absent, and on a
 #                FUSE mount sets core.createObject=rename so git can write
 #   3. render    deb-user-configs/build.sh build  (src/ → dist/)
 #   4. switch    linux-store switch --backup       (the flake's build.sh switch)
@@ -104,13 +104,13 @@ GB="${GIT_BASE:-$HOME/cloud-shared-store/git}"
 [ -d "$GB" ] || { mkdir -p "$GB"; say "created $GB"; }
 say "git base: $GB"
 
-for r in cloud-me_configs cloud-u-linux; do
+for r in cloud-me-pvt-configs cloud-u-linux; do
     if [ -d "$GB/$r/.git" ]; then
         continue
     fi
     say "cloning $r"
     if ! git clone -q "https://github.com/diegonmarcos/$r.git" "$GB/$r" 2>/dev/null; then
-        [ "$r" = cloud-me_configs ] && die "could not clone $r (private): run 'gh auth login' first, or copy the checkout to $GB/$r"
+        [ "$r" = cloud-me-pvt-configs ] && die "could not clone $r (private): run 'gh auth login' first, or copy the checkout to $GB/$r"
         die "could not clone $r"
     fi
 done
@@ -128,9 +128,9 @@ case "$(realpath "$GB" 2>/dev/null || echo "$GB")" in
 esac
 
 # ── 3. render ───────────────────────────────────────────────────────────────
-UP="$(jq -r --arg u "$USER_ID" '.configs_users[]? | select(.id == $u) | .path // empty' "$GB/cloud-me_configs/configs.json")"
-[ -n "$UP" ] || die "$GB/cloud-me_configs/configs.json declares no configs-user '$USER_ID'"
-DUC="$GB/cloud-me_configs/$UP/deb-user-configs"
+UP="$(jq -r --arg u "$USER_ID" '.configs_users[]? | select(.id == $u) | .path // empty' "$GB/cloud-me-pvt-configs/configs.json")"
+[ -n "$UP" ] || die "$GB/cloud-me-pvt-configs/configs.json declares no configs-user '$USER_ID'"
+DUC="$GB/cloud-me-pvt-configs/$UP/deb-user-configs"
 [ -f "$DUC/linux-store.json" ] || die "no declaration at $DUC/linux-store.json"
 if [ -f "$DUC/build.sh" ]; then
     say "render: $DUC/build.sh build"

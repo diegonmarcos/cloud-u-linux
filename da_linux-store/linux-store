@@ -103,7 +103,7 @@ legacy_store_migrate() {  # $1 = the old name in $HOME, $2 = the store
 # reached directly by both terminals). There is no ~/git fallback — a second
 # candidate is how two copies of a repo happen. GIT_BASE overrides it (the
 # tests point it at a fixture tree). Needed BEFORE the declaration, because
-# the declaration itself lives in a checkout (cloud-me_configs).
+# the declaration itself lives in a checkout (cloud-me-pvt-configs).
 git_base() {
     [ -n "${GIT_BASE:-}" ] || legacy_store_migrate "$HOME/cloud-drive-shared-store" "$HOME/cloud-shared-store"  # legacy_store_migration
     _gb="${GIT_BASE:-$HOME/cloud-shared-store/git}"
@@ -112,16 +112,16 @@ git_base() {
 }
 
 # The declaration is CONFIG, so it lives with the rest of the user's config in
-# cloud-me_configs — not beside the engine. configs.json binds the user id to
+# cloud-me-pvt-configs — not beside the engine. configs.json binds the user id to
 # its directory; a non-nix user's linux-store declaration is
 #   <user path>/deb-user-configs/linux-store.json
 # LINUX_STORE_USER picks the configs-user (default diego-admin).
 #
-# Order: explicit override, else cloud-me_configs, else the path the last apply
+# Order: explicit override, else cloud-me-pvt-configs, else the path the last apply
 # recorded (so `linux-store verify` still works with the checkout unmounted).
 configs_decl() {
     local cfg u up
-    cfg="$(git_base 2>/dev/null)/cloud-me_configs"
+    cfg="$(git_base 2>/dev/null)/cloud-me-pvt-configs"
     [ -f "$cfg/configs.json" ] || return 1
     u="${LINUX_STORE_USER:-diego-admin}"
     up="$(jq -r --arg u "$u" '.configs_users[]? | select(.id == $u) | .path // empty' "$cfg/configs.json")"
@@ -139,7 +139,7 @@ fi
 DECL="${DECL:-}"
 
 need_decl() {
-    [ -n "$DECL" ] && [ -r "$DECL" ] || die "no declaration: expected cloud-me_configs/<configs-user>/deb-user-configs/linux-store.json (or set LINUX_STORE_DECLARATION)"
+    [ -n "$DECL" ] && [ -r "$DECL" ] || die "no declaration: expected cloud-me-pvt-configs/<configs-user>/deb-user-configs/linux-store.json (or set LINUX_STORE_DECLARATION)"
     jq -e 'type == "object"' "$DECL" >/dev/null 2>&1 || die "$DECL is not a JSON object"
     _bad="$(jq -r '
         ( keys[] | select(startswith("_") | not)
@@ -1135,7 +1135,7 @@ cmd_update() {
     [ "${1:-}" = --no-switch ] && noswitch=1
     need_decl
     gb="$(git_base)" || exit 1
-    for r in "$gb/cloud-me_configs" $(jq -r '.settings.roots // {} | .[]' "$DECL" | sed "s|^|$gb/|" | cut -d/ -f1-"$(printf '%s' "$gb" | tr -cd / | wc -c | awk '{print $1+2}')" | sort -u); do
+    for r in "$gb/cloud-me-pvt-configs" $(jq -r '.settings.roots // {} | .[]' "$DECL" | sed "s|^|$gb/|" | cut -d/ -f1-"$(printf '%s' "$gb" | tr -cd / | wc -c | awk '{print $1+2}')" | sort -u); do
         d="$(cd "$r" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)" || continue
         if git -C "$d" pull -q --ff-only 2>/dev/null; then say "updated ${d##*/}"
         else say "warning — ${d##*/}: pull failed (no auth or not fast-forward); using the checkout as is"; fi
@@ -1293,7 +1293,7 @@ cmd_tui() {
 
 # ── html: the Store as a page, served by my-webserver ──────────────────────
 # Two tiers, drawn apart on purpose: OS · Terraforms (the machine: what
-# cloud-me_configs/B_CONFIGS-MACHINES/<machine> owns — NixOS flakes, OS
+# cloud-me-pvt-configs/B_CONFIGS-MACHINES/<machine> owns — NixOS flakes, OS
 # configs, terraform) versus Home-Manager · Desktop (the user: what this store
 # realises — binaries, scripts/libs, configs, secrets), grouped by app.
 UI="${LINUX_STORE_UI:-$ROOT/ui}"
@@ -1337,14 +1337,14 @@ cmd_html() {
     local p live gb m mdir out n app
     p="$(detect_profile)" || exit 1
     live="$(readlink "$CUR" 2>/dev/null || true)"; gb="$(git_base 2>/dev/null || true)"
-    m="$(machine_of "$p")"; mdir="$gb/cloud-me_configs/B_CONFIGS-MACHINES"
+    m="$(machine_of "$p")"; mdir="$gb/cloud-me-pvt-configs/B_CONFIGS-MACHINES"
     [ -d "$mdir" ] && mdir="$(ls -d "$mdir"/*-"$m" 2>/dev/null | head -1)" || mdir=""
     mkdir -p "$UI"; out="$UI/index.html"
     {
         html_head "linux-store · $p" store
         echo '<main class="two">'
         # ── OS · Terraforms ──
-        printf '<section class="tier os"><h2>OS · Terraforms</h2><p class="lead">The machine, not the user: owned by <code>cloud-me_configs/B_CONFIGS-MACHINES/%s</code>. linux-store reads it, never writes it.</p>\n' "$(basename "${mdir:-<none>}" | hesc)"
+        printf '<section class="tier os"><h2>OS · Terraforms</h2><p class="lead">The machine, not the user: owned by <code>cloud-me-pvt-configs/B_CONFIGS-MACHINES/%s</code>. linux-store reads it, never writes it.</p>\n' "$(basename "${mdir:-<none>}" | hesc)"
         echo '<div class="tiles">'
         printf '<div class="tile"><b>%s</b><span>machine · %s</span></div>' "$m" "$p"
         printf '<div class="tile"><b>%s</b><span>kernel</span></div>' "$(uname -r | hesc)"
@@ -1434,7 +1434,7 @@ Same verbs as nix / home-manager / the flakes' build.sh:
   profile                    print the detected profile
   migrate-store              merge the store's old-named dir into ~/cloud-shared-store, once (idempotent)
 
-Declaration: <git base>/cloud-me_configs/<configs-user>/deb-user-configs/linux-store.json
+Declaration: <git base>/cloud-me-pvt-configs/<configs-user>/deb-user-configs/linux-store.json
 
 Environment: LINUX_STORE_ROOT  LINUX_STORE_DECLARATION  LINUX_STORE_USER
              LINUX_STORE_PROFILE  LINUX_STORE_KEEP  GIT_BASE  LINUX_STORE_FAULT (tests)

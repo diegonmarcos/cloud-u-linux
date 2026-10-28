@@ -1,6 +1,6 @@
 #!/bin/sh
 # test-linux-account.sh — the Account journey end to end, in a throwaway HOME
-# with a FAKE bundle, FAKE vault files and a fake cloud-me_configs. No real
+# with a FAKE bundle, FAKE vault files and a fake cloud-me-pvt-configs. No real
 # secret is read; nothing outside the sandbox is touched.
 set -u
 ENGINE="$(cd "$(dirname "$0")/.." && pwd)/linux-account"
@@ -21,7 +21,7 @@ la() { sh "$ENGINE" "$@" >"$T/out" 2>&1; }
 section() { printf '\n── %s\n' "$1"; }
 
 # ── fixture ────────────────────────────────────────────────────────────────
-V="$GIT_BASE/cloud-me_vault"; WG="$V/A_A0-Providers/C_TOOLS-INFRA/c0-wireguard"
+V="$GIT_BASE/cloud-me-pvt-vault"; WG="$V/A_A0-Providers/C_TOOLS-INFRA/c0-wireguard"
 mkdir -p "$V/C_A1-configs" "$V/A_A0-Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque" "$V/A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh" "$WG/termux" "$WG/termux-public"
 printf 'ghp_FAKE_VAULT_TOKEN\n' > "$V/A_A0-Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque/token"
 printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEVAULTKEY\n-----END OPENSSH PRIVATE KEY-----\n' > "$V/A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_rsa"
@@ -33,7 +33,7 @@ printf 'FAKEPUBKEY=\n' > "$WG/termux-public/publickey"; printf 'notes\n' > "$WG/
 cat > "$V/C_A1-configs/profile-secrets.json" <<'EOF'
 { "schema_version": 1, "_generated": {"emitter": "test"},
   "about": {"profile": {"name": "Ada Lovelace", "email": "ada@example.com", "company": "LEAFY", "location": "Berlin/DE", "website": "example.com", "titles_v2": ["Engineer", "Analyst"]}},
-  "git": {"github_token": "ghp_FAKE_VAULT_TOKEN", "ssh_private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEVAULTKEY\n-----END OPENSSH PRIVATE KEY-----", "ssh_public_key": "ssh-ed25519 AAAAFAKE me@example", "repos": ["diegonmarcos/cloud-me_vault", "diegonmarcos/nope"]},
+  "git": {"github_token": "ghp_FAKE_VAULT_TOKEN", "ssh_private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEVAULTKEY\n-----END OPENSSH PRIVATE KEY-----", "ssh_public_key": "ssh-ed25519 AAAAFAKE me@example", "repos": ["diegonmarcos/cloud-me-pvt-vault", "diegonmarcos/nope"]},
   "mesh": {"profiles": {"config-v4-full": "[Interface]\nPrivateKey = <PROVIDED_BY_DEVICE>\n", "config": "[Interface]\n"}, "public_key": "FAKEPUB="},
   "mail": {"authoritative_store": "stalwart", "endpoints": {"domain": "example.com", "imap": "imaps://imap.example.com:993", "smtp": "smtps://smtp.example.com:465", "jmap": "https://jmap.example.com"},
            "accounts": {"ada": {"name": "ada@example.com", "pass_env": "MAIL_ADA"}, "admin": {"name": "admin@example.com", "pass_env": "MAIL_ADMIN"}},
@@ -47,12 +47,12 @@ cat > "$V/C_A1-configs/profile-secrets.json" <<'EOF'
 EOF
 # a sops-looking file, to be refused
 printf '{"schema_version": 1, "git": {"github_token": "ENC[AES256_GCM,data:xx]"}, "sops": {"age": []}}\n' > "$T/encrypted.json"
-# fake cloud-me_configs with a minimal linux-store declaration
-D="$GIT_BASE/cloud-me_configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"; mkdir -p "$D/src"
-echo '{"configs_users":[{"id":"diego-admin","path":"A_CONFIGS-USER/a0-diego-admin"}]}' > "$GIT_BASE/cloud-me_configs/configs.json"
+# fake cloud-me-pvt-configs with a minimal linux-store declaration
+D="$GIT_BASE/cloud-me-pvt-configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"; mkdir -p "$D/src"
+echo '{"configs_users":[{"id":"diego-admin","path":"A_CONFIGS-USER/a0-diego-admin"}]}' > "$GIT_BASE/cloud-me-pvt-configs/configs.json"
 echo 'x' > "$D/src/marker"
 cat > "$D/linux-store.json" <<'EOF'
-{"settings": {"roots": {"me": "cloud-me_configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"}},
+{"settings": {"roots": {"me": "cloud-me-pvt-configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"}},
  "common": {"etc": {".marker": {"path": "me:src/marker"}}}}
 EOF
 # fake mesh.json for the fleet ssh hosts
@@ -134,7 +134,7 @@ check "mail: identity account picked, env 600" '[ "$(jq -r .mail_account "$CFG/s
 check "ai: tokens env with ANTHROPIC_API_KEY" 'grep -q "^export CLAUDE_API_KEY=" "$CFG/secrets/ai.env" && grep -q "^export ANTHROPIC_API_KEY=.sk-ant-FAKE." "$CFG/secrets/ai.env"'
 check "autocomplete lists 600" '[ "$(stat -c %a "$CFG/secrets/autocomplete/cloud_keys.json")" = 600 ]'
 check "about: contact card seeded (titles joined)" '[ "$(jq -r .titles "$CFG/profile.json")" = "Engineer | Analyst" ] && [ "$(jq -r .email "$CFG/profile.json")" = ada@example.com ]'
-check "no secret value leaked into the store or the config repo (tokens included)" '! grep -rqs -e ghp_FAKE -e FAKEVAULTKEY -e FAKEWGPRIVATEKEY -e sk-ant-FAKE -e FAKE_GH_SECRET_VALUE -e sk-ant-VAULT -e FAKEED25519KEY -e FAKE_AUTHELIA_SECRET "$HOME/.linux-store" "$GIT_BASE/cloud-me_configs"'
+check "no secret value leaked into the store or the config repo (tokens included)" '! grep -rqs -e ghp_FAKE -e FAKEVAULTKEY -e FAKEWGPRIVATEKEY -e sk-ant-FAKE -e FAKE_GH_SECRET_VALUE -e sk-ant-VAULT -e FAKEED25519KEY -e FAKE_AUTHELIA_SECRET "$HOME/.linux-store" "$GIT_BASE/cloud-me-pvt-configs"'
 la journey; check "journey: all four steps done" '[ "$(grep -c "●" "$T/out")" = 4 ]'
 
 section "fleet (the cockpit)"

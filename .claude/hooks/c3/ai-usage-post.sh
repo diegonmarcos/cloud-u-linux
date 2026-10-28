@@ -13,14 +13,14 @@
 # (or the file C3_AI_USAGE_TOKEN_FILE, or minted from the AUTHELIA_* client credentials the cloud environment injects).
 # The credential travels on curl's stdin config, never in argv, and is never printed.
 # Env: C3_AI_USAGE_MESH_URL (default https://c3-infra-api.mesh.diegonmarcos.com), C3_AI_USAGE_URL (public, default
-#      https://api.diegonmarcos.com/c3-infra-api), AI_USAGE_SYNC=1 (foreground, for tests), AI_USAGE_STATE (state dir).
+#      https://c3-pvt.diegonmarcos.com/c3-infra-api), AI_USAGE_SYNC=1 (foreground, for tests), AI_USAGE_STATE (state dir).
 set -u
 MODE="${1:-hook}"
 STATE="${AI_USAGE_STATE:-${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}}"
 MIN="${AI_USAGE_MIN_INTERVAL:-60}"
 case "$MIN" in ""|*[!0-9]*) MIN=60;; esac
 MESH="${C3_AI_USAGE_MESH_URL:-https://c3-infra-api.mesh.diegonmarcos.com}"
-PUB="${C3_AI_USAGE_URL:-https://api.diegonmarcos.com/c3-infra-api}"
+PUB="${C3_AI_USAGE_URL:-https://c3-pvt.diegonmarcos.com/c3-infra-api}"
 
 num()  { case "$1" in ""|*[!0-9.]*|*.*.*|.*) return 1;; esac; return 0; }
 int()  { case "$1" in ""|*[!0-9]*) return 1;; esac; return 0; }

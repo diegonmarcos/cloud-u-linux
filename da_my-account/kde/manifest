@@ -1,4 +1,4 @@
-# kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me_configs>)
+# kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
 inline	desktop	kdeglobals	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/kde/kdeglobals
 inline	desktop	kglobalshortcutsrc	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/kde/kglobalshortcutsrc
 inline	desktop	kwinrc	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/kde/kwinrc

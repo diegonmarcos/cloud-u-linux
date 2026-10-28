@@ -5,7 +5,7 @@ into non-mobile applications: the user-scope job Nix home-manager does today
 (not OS/system config). Sibling of `da_linux-account` (the CLI of the Account journey)
 and `da_my-ai`.
 
-**Redundant for now.** The home-manager flakes (`cloud-me_configs`:
+**Redundant for now.** The home-manager flakes (`cloud-me-pvt-configs`:
 `A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop` and
 `B_CONFIGS-MACHINES/_shared/nix-os-flakes/bb_flakes_termux`) keep deploying and are
 unchanged. Everything here is a COPY; nothing was moved. A target that is a symlink into
@@ -41,7 +41,7 @@ Manifest = TAB-separated: `kind  variants  source  target  flake_src`.
 | `sops` | reference to a sops-encrypted path of the flakes; never copied |
 | `canon` | held copy whose canonical home and deployer is elsewhere |
 
-`flake_src` is where the content comes from: `cmc:<path in cloud-me_configs>` (comma
+`flake_src` is where the content comes from: `cmc:<path in cloud-me-pvt-configs>` (comma
 list when desktop and termux are byte-identical, otherwise two entries, the termux
 source under `<app>/termux/`) or `lin:<path in cloud-u-linux>`.
 
@@ -78,7 +78,7 @@ then refresh this copy. The test fails on drift.
 
 `sh da_my-account/test/test-my-account.sh`: every manifest entry has a source (secret
 entries must have none), every held file is declared, no secret-like file, drift against
-`lin:` sources (always) and `cmc:` sources (when a `cloud-me_configs` checkout is found
+`lin:` sources (always) and `cmc:` sources (when a `cloud-me-pvt-configs` checkout is found
 via `MY_ACCOUNT_CMC` or a sibling dir; otherwise SKIP with a notice, FAIL with
 `MY_ACCOUNT_STRICT=1`), a sandboxed deploy round trip, and the secret resolution
 (fake local `cloud-me`, mocked API, values never printed). CI (`test-my-account.yml`)

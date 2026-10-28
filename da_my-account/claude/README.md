@@ -113,7 +113,7 @@ connection time instead and prints `{}` when it finds none, which is a 403 rathe
 a broken config.
 
 Sources, first hit wins: `AUTHELIA_BEARER_TOKEN` → **client_credentials mint** →
-`$AUTHELIA_OIDC_TOKENS_DIR` → `<repo>/IV_vault` → `~/cloud-shared-store/git/cloud-me_vault`.
+`$AUTHELIA_OIDC_TOKENS_DIR` → `<repo>/IV_vault` → `~/cloud-shared-store/git/cloud-me-pvt-vault`.
 
 The mint is what makes a container work. Every source but the first two needs a vault
 checkout, and a container has none and cannot get one in time — MCP servers bind at

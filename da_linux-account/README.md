@@ -19,7 +19,7 @@ linux-account tui
 
 ## The bundle
 
-`cloud-me_vault/C_A1-configs/profile-secrets.json` — the ONE consolidated
+`cloud-me-pvt-vault/C_A1-configs/profile-secrets.json` — the ONE consolidated
 profile (schema 1): `mesh`, `mail`, `ai`, `git`, `about`, `autocomplete`,
 `electronics`, `settings`. The same file the phone imports.
 
@@ -128,7 +128,7 @@ linux-account apply             # ssh key + github token + WireGuard land, decla
 linux-account repos clone       # every private repo of the fleet into the git base (ssh once the key is in)
 ```
 
-`repos list|clone|pull` covers `cloud-me_configs`, `cloud-me_vault`, `cloud-u-linux` plus the bundle's
+`repos list|clone|pull` covers `cloud-me-pvt-configs`, `cloud-me-pvt-vault`, `cloud-u-linux` plus the bundle's
 `git.repos`; on a FUSE git base it sets `core.createObject=rename` on each clone.
 
 ## Links
@@ -149,7 +149,7 @@ sh test/test-linux-account.sh
 ```
 
 A sandboxed HOME with a fake bundle, fake vault files and a fake
-cloud-me_configs: refusals (encrypted, unknown schema), the journey, plan
+cloud-me-pvt-configs: refusals (encrypted, unknown schema), the journey, plan
 writes nothing, apply declares + writes + switches, no value leaks into the
 store or the config repo, cockpit states and lights, tamper → DIFFERS, remove →
 ABSENT, `linux-store repair` → MATCH, infos set/push-queue/erase, apps export,

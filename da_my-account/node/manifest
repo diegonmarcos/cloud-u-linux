@@ -1,4 +1,4 @@
-# kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me_configs>)
+# kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
 inline	desktop	package.json	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/node/package.json
 inline	termux	termux/package.json	-	cmc:B_CONFIGS-MACHINES/_shared/nix-os-flakes/bb_flakes_termux/src/modules/dotfiles/node/package.json
 inline	termux	esm-loader-register.mjs	-	cmc:B_CONFIGS-MACHINES/_shared/nix-os-flakes/bb_flakes_termux/src/modules/dotfiles/node/esm-loader-register.mjs

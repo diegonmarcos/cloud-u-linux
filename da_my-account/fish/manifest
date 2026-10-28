@@ -1,4 +1,4 @@
-# kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me_configs>)
+# kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
 file	desktop,termux	functions/__fzf_search_commands.fish	.config/fish/functions/__fzf_search_commands.fish	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/shells/fish/functions/__fzf_search_commands.fish,cmc:B_CONFIGS-MACHINES/_shared/nix-os-flakes/bb_flakes_termux/src/modules/programs/shells/fish/functions/__fzf_search_commands.fish
 file	desktop	functions/_notify_wrap.fish	.config/fish/functions/_notify_wrap.fish	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/shells/fish/functions/_notify_wrap.fish
 file	desktop	functions/ai-cli.fish	.config/fish/functions/ai-cli.fish	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/shells/fish/functions/ai-cli.fish

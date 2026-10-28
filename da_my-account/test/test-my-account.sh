@@ -3,12 +3,12 @@
 # drifted from the flake-sourced content (redundant phase), plus a sandboxed
 # deploy round trip. Roots for drift:
 #   lin: = this repo (cloud-u-linux), always available
-#   cmc: = cloud-me_configs checkout: $MY_ACCOUNT_CMC, else a sibling dir;
+#   cmc: = cloud-me-pvt-configs checkout: $MY_ACCOUNT_CMC, else a sibling dir;
 #          absent -> SKIP with notice, or FAIL when MY_ACCOUNT_STRICT=1.
 set -u
 D="$(cd "$(dirname "$0")/.." && pwd)"; REPO="$(cd "$D/.." && pwd)"
 CMC="${MY_ACCOUNT_CMC:-}"
-for c in "$REPO/../cloud-me_configs" "$REPO/../../cloud-me_configs" "${GIT_BASE:-/nonexistent}/cloud-me_configs" "$HOME/cloud-me_configs"; do
+for c in "$REPO/../cloud-me-pvt-configs" "$REPO/../../cloud-me-pvt-configs" "${GIT_BASE:-/nonexistent}/cloud-me-pvt-configs" "$HOME/cloud-me-pvt-configs"; do
   [ -n "$CMC" ] && break; [ -d "$c/A_CONFIGS-USER" ] && CMC="$c"
 done
 T="$(mktemp -d "${TMPDIR:-/tmp}/my-account-test.XXXXXX")"; trap 'rm -rf "$T"' EXIT
@@ -67,7 +67,7 @@ for m in "$D"/*/manifest; do
         lin:*) root="$REPO" ;;
         cmc:*) root="$CMC"
           if [ -z "$root" ]; then
-            [ "${MY_ACCOUNT_STRICT:-0}" = 1 ] && no "$app: cloud-me_configs not found" || skipped=$((skipped + 1)); continue
+            [ "${MY_ACCOUNT_STRICT:-0}" = 1 ] && no "$app: cloud-me-pvt-configs not found" || skipped=$((skipped + 1)); continue
           fi ;;
         *) no "$app: bad flake_src '$ref'"; continue ;;
       esac
@@ -77,7 +77,7 @@ for m in "$D"/*/manifest; do
     done
   done < "$m"
 done
-[ "$skipped" -gt 0 ] && echo "  SKIP $skipped cmc: comparison(s): cloud-me_configs checkout not found (set MY_ACCOUNT_CMC)"
+[ "$skipped" -gt 0 ] && echo "  SKIP $skipped cmc: comparison(s): cloud-me-pvt-configs checkout not found (set MY_ACCOUNT_CMC)"
 
 echo "-- deploy round trip in a sandbox HOME"
 H="$T/home"; mkdir -p "$H"

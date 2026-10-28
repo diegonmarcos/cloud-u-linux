@@ -1,4 +1,4 @@
-# kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me_configs>)
+# kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
 file	desktop	flakes-switch-progress-logs.json	.config/cloud-data/flakes-switch-progress-logs.json	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/flakes-switch-progress-logs/config.json
 inline	desktop	flakes-switch-progress-logs.sh	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/flakes-switch-progress-logs/flakes-switch-progress-logs.sh
 inline	desktop	progress.mjs	-	cmc:A_CONFIGS-USER/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/flakes-switch-progress-logs/progress.mjs
