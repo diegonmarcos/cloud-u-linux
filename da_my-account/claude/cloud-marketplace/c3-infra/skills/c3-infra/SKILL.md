@@ -1,6 +1,6 @@
 ---
 name: c3-infra
-description: Owner rules for ANY fleet, Android app, CI, GitHub Actions, backlog/ticket, MCP, Caddy/addressing, secrets or agent-orchestration work in the c3 repos (cloud-*, git-repos-master). Load before acting.
+description: Owner rules for ANY fleet, Android app, CI, GitHub Actions, backlog/ticket, MCP, Caddy/addressing, secrets or agent-orchestration work in the c3 repos (cloud-*, _git-repos-master). Load before acting.
 ---
 # c3-infra: owner rules
 
