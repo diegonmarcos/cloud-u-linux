@@ -9,14 +9,14 @@
   "mcpServers": {
     "cloud-cgc-pub-mcp": {
       "type": "http",
-      "url": "https://mcp.diegonmarcos.com/cloud-cgc-pub-mcp/mcp",
+      "url": "https://c3-pvt.diegonmarcos.com/cloud-cgc-pub-mcp/mcp",
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
       }
     },
     "cloud-infra-mcp": {
       "type": "http",
-      "url": "https://mcp.diegonmarcos.com/c3-infra-mcp/mcp",
+      "url": "https://c3-pvt.diegonmarcos.com/cloud-infra-mcp/mcp",
       "headers": {
         "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
       }

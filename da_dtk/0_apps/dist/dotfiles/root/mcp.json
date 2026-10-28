@@ -8,32 +8,32 @@
   "mcpServers": {
     "c3-infra-mcp": {
       "type": "http",
-      "url": "https://mcp.diegonmarcos.com/c3-infra-mcp/mcp",
+      "url": "https://c3-pvt.diegonmarcos.com/cloud-infra-mcp/mcp",
       "headersHelper": "sh \"${CLAUDE_PROJECT_DIR:-.}/.claude/mcp-auth-headers.sh\""
     },
     "c3-services-mcp": {
       "type": "http",
-      "url": "https://mcp.diegonmarcos.com/c3-services-mcp/mcp"
+      "url": "https://c3-pvt.diegonmarcos.com/cloud-services-mcp/mcp"
     },
     "cloud-cgc-mcp": {
       "type": "http",
-      "url": "https://mcp.diegonmarcos.com/cloud-cgc-mcp/mcp"
+      "url": "https://c3-pvt.diegonmarcos.com/cloud-cgc-mcp/mcp"
     },
     "google-personal-mcp": {
       "type": "http",
-      "url": "https://mcp.diegonmarcos.com/g-personal/mcp"
+      "url": "https://c3-pvt.diegonmarcos.com/google-personal-mcp/mcp"
     },
     "google-workspace-mcp": {
       "type": "http",
-      "url": "https://mcp.diegonmarcos.com/g-workspace/mcp"
+      "url": "https://c3-pvt.diegonmarcos.com/google-workspace-mcp/mcp"
     },
     "mail-mcp": {
       "type": "http",
-      "url": "https://mcp.diegonmarcos.com/mail-mcp/mcp"
+      "url": "https://c3-pvt.diegonmarcos.com/cloud-mail-mcp/mcp"
     },
     "mattermost-mcp": {
       "type": "http",
-      "url": "https://mcp.diegonmarcos.com/mattermost-mcp/mcp"
+      "url": "https://c3-pvt.diegonmarcos.com/cloud-mattermost-mcp/mcp"
     }
   }
 }

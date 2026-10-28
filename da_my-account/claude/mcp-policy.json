@@ -3,7 +3,7 @@
   "auth_header": {
     "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
   },
-  "auth_host": "mcp.diegonmarcos.com",
+  "auth_host": "c3-pvt.diegonmarcos.com",
   "direct_http": {
     "cloud-cgc-pvt-mcp": {
       "type": "http",
