@@ -5,7 +5,7 @@ set -euo pipefail
 C='\033[0;36m'; N='\033[0m'
 say() { printf "${C}[c3-morpheus]${N} %s\n" "$*"; }
 
-REPO=diegonmarcos/cloud-u-linux
+REPO=diegonmarcos/cloudy-u-linux
 TAG=c3-morpheus-latest
 BIN=c3-morpheus
 DEST="${XDG_DATA_HOME:-$HOME/.local/share}/c3-morpheus"

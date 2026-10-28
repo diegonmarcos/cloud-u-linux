@@ -45,7 +45,7 @@ const NTFY_REGISTRY_DEFAULT: &str =
 // Overridable with MORPHEUS_GH_REPOS (comma separated) rather than hardcoded
 // in two places: the list is data, and a new repo should not need a rebuild.
 const GH_REPOS_DEFAULT: &str =
-    "diegonmarcos/cloud-infra,diegonmarcos/cloud-u-android,diegonmarcos/cloud-u-linux";
+    "diegonmarcos/cloud-infra,diegonmarcos/cloudy-u-android,diegonmarcos/cloudy-u-linux";
 
 fn env_or(key: &str, fallback: &str) -> String {
     match env::var(key) {

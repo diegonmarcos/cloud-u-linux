@@ -55,7 +55,7 @@ let
   std = if patchelf then stdenv else stdenvNoCC;
   system = std.hostPlatform.system;
   arch = pins.${system} or (throw "${pname}: no published asset for ${system}");
-  repo = "https://github.com/diegonmarcos/cloud-u-linux/releases/download";
+  repo = "https://github.com/diegonmarcos/cloudy-u-linux/releases/download";
   get = bin: fetchurl {
     url = "${repo}/${pins.tag}/${arch.${bin}.asset}";
     inherit (arch.${bin}) hash;

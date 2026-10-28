@@ -64,7 +64,7 @@ case "$cmd" in
   nix-hash)  # refresh the hash src/nix/package.nix pins for the published tarball.
              # Streams straight into sha256sum: the artifact is ~366MB and this box
              # runs near-full, so nothing is written to disk or the nix store.
-    url="https://github.com/diegonmarcos/cloud-u-linux/releases/download/$TAG/$TARBALL"
+    url="https://github.com/diegonmarcos/cloudy-u-linux/releases/download/$TAG/$TARBALL"
     echo "hashing $url ..." >&2
     hex="$(curl -sfL "$url" | sha256sum | cut -d' ' -f1)"
     [ -n "$hex" ] || { echo "nix-hash: download failed" >&2; exit 1; }

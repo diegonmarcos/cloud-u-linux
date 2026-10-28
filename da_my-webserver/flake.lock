@@ -11,14 +11,14 @@
         "lastModified": 1788434083,
         "narHash": "sha256-/Htb79aeMjcLkuARKEGnNOp68KIraBI5p+0tVh3BACY=",
         "owner": "diegonmarcos",
-        "repo": "cloud-u-linux",
+        "repo": "cloudy-u-linux",
         "rev": "b28da365a89a92e0ba235444f40622cf8d36fd38",
         "type": "github"
       },
       "original": {
         "dir": "da__shared",
         "owner": "diegonmarcos",
-        "repo": "cloud-u-linux",
+        "repo": "cloudy-u-linux",
         "type": "github"
       }
     },

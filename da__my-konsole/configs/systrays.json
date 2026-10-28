@@ -262,7 +262,7 @@
         },
         {
           "label": "GHA: recent runs (cloud)",
-          "command": "konsole --hold -e bash -lc 'gh run list -R diegonmarcos/cloud-t-infra -L 15; read'"
+          "command": "konsole --hold -e bash -lc 'gh run list -R diegonmarcos/cloudy-t-infra -L 15; read'"
         },
         {
           "label": "GHA: watch latest run",

@@ -11,7 +11,7 @@
     "remote": true,
     "_remote_note": "Built on GHA and published to the rolling release, fetched by build.sh. Never compiled locally — same freeze-guard reason da_watchdog states.",
     "release_tag": "c3-morpheus-latest",
-    "repo": "diegonmarcos/cloud-u-linux",
+    "repo": "diegonmarcos/cloudy-u-linux",
     "subdir": "da_c3-morpheus"
   },
   "reuses": {

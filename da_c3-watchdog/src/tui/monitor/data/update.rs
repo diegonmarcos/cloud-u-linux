@@ -148,7 +148,7 @@ pub(crate) fn steps(way: Way) -> Vec<Step> {
                 why: "wait for CI — the binaries are never compiled on this machine",
                 argv: vec![
                     "gh".into(), "run".into(), "watch".into(),
-                    "--repo".into(), "diegonmarcos/cloud-u-linux".into(),
+                    "--repo".into(), "diegonmarcos/cloudy-u-linux".into(),
                     "--exit-status".into(),
                 ],
                 cwd: Some(format!("{h}/git/cloud-u-linux")),

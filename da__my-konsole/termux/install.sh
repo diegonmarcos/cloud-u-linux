@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # ── data (only vars here — never hardcode below) ───────────────────────────
-REPO="diegonmarcos/cloud-u-linux"
+REPO="diegonmarcos/cloudy-u-linux"
 RELEASE_TAG="my-konsole-latest"
 ASSET_NAME="my-konsole-engine-aarch64"
 BIN_NAME="my-konsole-engine"

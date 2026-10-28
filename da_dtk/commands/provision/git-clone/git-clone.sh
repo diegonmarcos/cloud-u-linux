@@ -2,7 +2,7 @@
 # Git clone module — clone/pull all repos
 set -eu
 
-REPOS="cloud:https://github.com/diegonmarcos/cloud-t-infra.git
+REPOS="cloud:https://github.com/diegonmarcos/cloudy-t-infra.git
 cloud-data:https://github.com/diegonmarcos/cloud-data.git
 unix:https://github.com/diegonmarcos/cloud-infra-desktop.git
 front:https://github.com/diegonmarcos/front.git

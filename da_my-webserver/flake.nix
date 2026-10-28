@@ -21,7 +21,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    cloud-apps.url = "github:diegonmarcos/cloud-u-linux?dir=da__shared";
+    cloud-apps.url = "github:diegonmarcos/cloudy-u-linux?dir=da__shared";
     cloud-apps.inputs.nixpkgs.follows = "nixpkgs";
   };
 

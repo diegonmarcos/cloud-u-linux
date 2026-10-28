@@ -32,7 +32,7 @@ let
   src = pkgs.fetchurl {
     # The release lives on the monorepo, not a per-app repo: build.sh ships it to
     # the rolling tag "${name}-latest" on cloud-u-linux itself.
-    url = "https://github.com/diegonmarcos/cloud-u-linux/releases/download/${name}-latest/${tarballName}";
+    url = "https://github.com/diegonmarcos/cloudy-u-linux/releases/download/${name}-latest/${tarballName}";
     sha256 = import ./tarball-hash.nix;
   };
 in
@@ -110,7 +110,7 @@ pkgs.stdenv.mkDerivation {
 
   meta = {
     description = "Rust (winit+wgpu) front-end + off-screen-rendered Chromium (CEF) backend — genuine Chrome TLS fingerprint, zero Google chrome UI";
-    homepage = "https://github.com/diegonmarcos/cloud-u-linux";
+    homepage = "https://github.com/diegonmarcos/cloudy-u-linux";
     platforms = [ "x86_64-linux" ];
     mainProgram = name;
   };

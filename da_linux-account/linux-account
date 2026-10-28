@@ -1013,7 +1013,7 @@ cmd_signin() {
 }
 
 repo_list() {  # name<TAB>url — the bundle's git.repos plus the three every box needs
-    { printf 'cloud-me-pvt-configs\tdiegonmarcos/cloud-me-pvt-configs\ncloud-me-pvt-vault\tdiegonmarcos/cloud-me-pvt-vault\ncloud-u-linux\tdiegonmarcos/cloud-u-linux\n'
+    { printf 'cloud-me-pvt-configs\tdiegonmarcos/cloud-me-pvt-configs\ncloud-me-pvt-vault\tdiegonmarcos/cloud-me-pvt-vault\ncloud-u-linux\tdiegonmarcos/cloudy-u-linux\n'
       B="$(bundle_path 2>/dev/null)" && [ -n "$B" ] && bq '.git.repos[]? | (if type == "object" then (.url // .repo // .name // "") else . end) | select(. != "")' | while read -r r; do
           r="${r#https://github.com/}"; r="${r#git@github.com:}"; r="${r%.git}"; printf '%s\t%s\n' "${r##*/}" "$r"; done
     } | awk -F'\t' '!seen[$1]++'

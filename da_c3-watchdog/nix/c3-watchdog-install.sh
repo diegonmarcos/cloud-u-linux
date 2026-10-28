@@ -33,7 +33,7 @@ if [ "${1:-}" = "--nix" ]; then
 This machine has nix. Do not run this script — add the flake to the
 configuration that already describes the machine, and switch:
 
-  inputs.c3-watchdog.url = "github:diegonmarcos/cloud-u-linux?dir=da_c3-watchdog";
+  inputs.c3-watchdog.url = "github:diegonmarcos/cloudy-u-linux?dir=da_c3-watchdog";
 
   outputs = { self, nixpkgs, home-manager, c3-watchdog }: ...   # add to the signature
 

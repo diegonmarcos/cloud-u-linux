@@ -26,7 +26,7 @@ RUN set -eux; \
       *) echo "no static build published for $TARGETARCH" >&2; exit 1 ;; \
     esac; \
     curl -fsSL -o /c3-watchdog-d \
-      "https://github.com/diegonmarcos/cloud-u-linux/releases/download/${RELEASE}/${asset}"; \
+      "https://github.com/diegonmarcos/cloudy-u-linux/releases/download/${RELEASE}/${asset}"; \
     chmod +x /c3-watchdog-d; \
     /c3-watchdog-d --help >/dev/null 2>&1 || true
 

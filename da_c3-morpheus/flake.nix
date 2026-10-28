@@ -35,7 +35,7 @@
 
           meta = with pkgs.lib; {
             description = "Cloud workflow orchestrator and probe registry";
-            homepage = "https://github.com/diegonmarcos/cloud-u-linux";
+            homepage = "https://github.com/diegonmarcos/cloudy-u-linux";
             license = licenses.mit;
             platforms = platforms.linux;
             mainProgram = "c3-morpheus";

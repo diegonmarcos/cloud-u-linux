@@ -27,7 +27,7 @@ let
   pins = builtins.fromJSON (builtins.readFile ./hashes.json);
   system = stdenvNoCC.hostPlatform.system;
   arch = pins.${system} or (throw "c3-watchdog: no published asset for ${system}");
-  url = a: "https://github.com/diegonmarcos/cloud-u-linux/releases/download/${pins.tag}/${a}";
+  url = a: "https://github.com/diegonmarcos/cloudy-u-linux/releases/download/${pins.tag}/${a}";
   get = bin: fetchurl { url = url arch.${bin}.asset; inherit (arch.${bin}) hash; };
 in
 stdenvNoCC.mkDerivation {
@@ -46,7 +46,7 @@ stdenvNoCC.mkDerivation {
 
   meta = with lib; {
     description = "Machine sampler and TUI panel — the published static build, not compiled here";
-    homepage = "https://github.com/diegonmarcos/cloud-u-linux";
+    homepage = "https://github.com/diegonmarcos/cloudy-u-linux";
     license = licenses.mit;
     platforms = [ "x86_64-linux" "aarch64-linux" ];
     mainProgram = "c3-watchdog-tui";

@@ -10,7 +10,7 @@
     "remote": true,
     "_remote_note": "Rust compile is heavy — built on GHA, published to the rolling GitHub Release, fetched by the desktop nix module. Never compiled locally (freeze-guard).",
     "release_tag": "c3-watchdog-latest",
-    "repo": "diegonmarcos/cloud-u-linux",
+    "repo": "diegonmarcos/cloudy-u-linux",
     "subdir": "da_c3-watchdog"
   },
   "runtime": {

@@ -23,7 +23,7 @@
     # relative import: `import ../da__shared/…` reaches outside this flake's
     # directory and works right up until this project is carved into its own
     # repository, then silently does not.
-    cloud-apps.url = "github:diegonmarcos/cloud-u-linux?dir=da__shared";
+    cloud-apps.url = "github:diegonmarcos/cloudy-u-linux?dir=da__shared";
     cloud-apps.inputs.nixpkgs.follows = "nixpkgs";
   };
 
@@ -68,7 +68,7 @@
 
           meta = with pkgs.lib; {
             description = "Machine sampler and TUI panel — one JSON snapshot, three renderers";
-            homepage = "https://github.com/diegonmarcos/cloud-u-linux";
+            homepage = "https://github.com/diegonmarcos/cloudy-u-linux";
             license = licenses.mit;
             platforms = platforms.linux;
             mainProgram = "c3-watchdog-tui";
@@ -93,7 +93,7 @@
         # The desktop build. Same source, same version, one feature more.
         packages.c3-watchdog-tray = mkWatchdog { tray = true; };
 
-        # `nix run github:diegonmarcos/cloud-u-linux?dir=da_c3-watchdog` opens the
+        # `nix run github:diegonmarcos/cloudy-u-linux?dir=da_c3-watchdog` opens the
         # panel. The panel rather than the daemon, because a person running
         # this by hand wants to LOOK at the machine; the daemon is what a
         # service unit starts.
@@ -123,7 +123,7 @@
       # deploys because nothing joined them. Importing this module is the join:
       # the ExecStart and the file on PATH are one store path by construction.
       #
-      #   inputs.c3-watchdog.url = "github:diegonmarcos/cloud-u-linux?dir=da_c3-watchdog";
+      #   inputs.c3-watchdog.url = "github:diegonmarcos/cloudy-u-linux?dir=da_c3-watchdog";
       #   imports = [ inputs.c3-watchdog.homeManagerModules.default ];
       #   services.my-watchdog = { enable = true; tray = true; };
       # ONE module, both trees. It works out whether it is being evaluated by
@@ -131,7 +131,7 @@
       # systemd.services or systemd.user.services accordingly — see the header
       # of nix/module.nix for why that is one `if` and not two products.
       #
-      #   inputs.c3-watchdog.url = "github:diegonmarcos/cloud-u-linux?dir=da_c3-watchdog";
+      #   inputs.c3-watchdog.url = "github:diegonmarcos/cloudy-u-linux?dir=da_c3-watchdog";
       #   imports = [ inputs.c3-watchdog.nixosModules.default ];        # or homeManagerModules
       #   services.my-watchdog.enable = true;
       #
