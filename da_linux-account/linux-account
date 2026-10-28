@@ -17,7 +17,7 @@
 #             with the install id + secret of ProfileSync; erase = DELETE.
 #   WIREGUARD / AI   links, as in the app: `wg` and `ai` verbs.
 #
-# The bundle is cloud-me-pvt-vault/C_A1-configs/profile-secrets.json (schema 1):
+# The bundle is cloud-me-pvt-vault/Shared/configs/profile-secrets.json (schema 1):
 # mesh, mail, ai, git, about, autocomplete, electronics, settings. Same gate
 # as VaultConnect (known_schema_versions [1]), same refusal of a sops file as
 # ImportConfigsFragment, same two passes as ConfigAutoImport.apply: PLAN every
@@ -58,13 +58,13 @@ CONNECT_START="/pub/profile/connect/start"
 CONNECT_FETCH="/pub/profile/connect/fetch"
 PROFILE_SYNC_URL="${LINUX_ACCOUNT_SYNC_URL:-$API_BASE/c3-infra-api/fleet/profile}"
 VAULT_REPO="diegonmarcos/cloud-me-pvt-vault"
-BUNDLE_IN_VAULT="C_A1-configs/profile-secrets.json"
+BUNDLE_IN_VAULT="Shared/configs/profile-secrets.json"
 
 # Where the vault keeps each device's WireGuard material (c0-wireguard/README):
 # <dir>/privatekey + <dir>-public/<profile>. electronics.fleet ids → dirs.
-WG_ROOT="A_A0-Providers/C_TOOLS-INFRA/c0-wireguard"
+WG_ROOT="Shared/Providers/C_TOOLS-INFRA/c0-wireguard"
 wg_dir_of() { case "$1" in galaxy) echo termux ;; surface) echo surface ;; samsung-a37) echo samsung-a37 ;; *) echo "$1" ;; esac; }
-VAULT_GH_TOKEN="A_A0-Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque/token"
+VAULT_GH_TOKEN="Shared/Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque/token"
 # <dev>-public/<file> → $HOME path + mode, as bb_flakes_termux's wireguard.nix laid them out:
 # config* are profiles (.conf), privatekey/publickey are the device's keypair, anything else is not ours.
 wg_target() {  # dev file → "path\tmode" or nothing
@@ -74,7 +74,7 @@ wg_target() {  # dev file → "path\tmode" or nothing
         publickey)  printf '.config/wireguard/publickey\t644\n' ;;
     esac
 }
-VAULT_SSH_KEY="A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_rsa"
+VAULT_SSH_KEY="Shared/Providers/C_TOOLS-INFRA/c2-system/ssh/id_rsa"
 # The vault path may hold a stub rather than the key (65 bytes on the phone's
 # checkout, 2026-10-05); only a file that is a key is declared from the vault,
 # otherwise the bundle's copy is written, as on a box with no checkout.
@@ -89,7 +89,7 @@ token_ok() { [ -s "$1" ] && ! grep -qE 'REMOVED|REDACTED|^\*\*\*' "$1"; }
 # Real entries are DECLARED through the store's secret layer (kind file):
 # keyfiles at their ~/path, env-file + value entries spliced by linux-store
 # into ONE tokens.env from a names-only template (src/tokens.env.tpl).
-CFG_DIR_REL="cloud-me-pvt-configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"
+CFG_DIR_REL="cloud-me-pvt-configs/Desktop-GUI/a0-diego-admin/deb-user-configs"
 TOKENS_ENV=".config/linux-account/secrets/tokens.env"
 cfg_dir() { echo "$(git_base)/$CFG_DIR_REL"; }
 tokens_file() { local f; f="$(cfg_dir)/tokens.json"; [ -f "$f" ] && echo "$f"; }
@@ -377,7 +377,7 @@ rec() { st_set "sha:$1" "$(sha256sum "$2" | cut -d' ' -f1)"; }   # remember what
 write_fragment() {  # the linux-store include fragment: paths only, never values
     local gb dev wgd dir frag p f n v tgt tpl vals id vp as kind mode st reason
     gb="$(git_base)"; dev="$(DEV)"; wgd="$(wg_dir_of "$dev")"
-    dir="$gb/cloud-me-pvt-configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"
+    dir="$gb/cloud-me-pvt-configs/Desktop-GUI/a0-diego-admin/deb-user-configs"
     [ -d "$dir" ] || die "no deb-user-configs at $dir"
     frag="$dir/account.json"
     v='{}'
@@ -1115,7 +1115,7 @@ linux-account — cloud-superapp's Account tab for the Linux userlands
   tui               the Account tab in the terminal
   html              ~/.linux-store/ui/account.html, beside the Store page (linux-store serve)
 
-State: ~/.config/linux-account/ (0700). Bundle: cloud-me-pvt-vault/C_A1-configs/profile-secrets.json (schema 1).
+State: ~/.config/linux-account/ (0700). Bundle: cloud-me-pvt-vault/Shared/configs/profile-secrets.json (schema 1).
 Secrets that are files in the vault are DECLARED (deb-user-configs/account.json → linux-store); the rest is written 0600 under state.
 Tokens: deb-user-configs/tokens.json (ALL of them, by provider, paths only) → keyfiles at their ~/path, the rest in ~/.config/linux-account/secrets/tokens.env — both through linux-store.
 EOF

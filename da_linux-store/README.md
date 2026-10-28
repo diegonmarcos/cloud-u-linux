@@ -38,7 +38,7 @@ The declaration is config, so it lives with the rest of the user's config in
 
 ```
 <git base>/cloud-me-pvt-configs/configs.json                         binds configs-user id → directory
-<git base>/cloud-me-pvt-configs/A_CONFIGS-USER/a0-diego-admin/
+<git base>/cloud-me-pvt-configs/Desktop-GUI/a0-diego-admin/
     deb-user-configs/linux-store.json                            ← this user's declaration
 ```
 
@@ -123,7 +123,7 @@ linux-store serve [port]             html, then my-webserver on $HOME → http:/
 
 Two tiers, drawn apart on purpose:
 
-- **OS · Terraforms** — the machine. What `cloud-me-pvt-configs/B_CONFIGS-MACHINES/<machine>` owns
+- **OS · Terraforms** — the machine. What `cloud-me-pvt-configs/<Desktop-GUI|Terminal|Linux-Server>/<machine>` owns
   (`nix-os-flakes`, `deb-os-configs`, `cloud-terraforms`), plus kernel and userland. The store reads it, never writes it.
 - **Home-Manager · Desktop** — the user. What this store realises: Binaries (`bin`), Scripts · Libs (`lib`),
   Configs (`etc`, `activate`), Secrets (names and modes only), each row with its **app** and whether it is
@@ -184,7 +184,7 @@ linux-store serve [port]             html, then my-webserver on $HOME → http:/
 
 Two tiers, drawn apart on purpose:
 
-- **OS · Terraforms** — the machine. What `cloud-me-pvt-configs/B_CONFIGS-MACHINES/<machine>` owns
+- **OS · Terraforms** — the machine. What `cloud-me-pvt-configs/<Desktop-GUI|Terminal|Linux-Server>/<machine>` owns
   (`nix-os-flakes`, `deb-os-configs`, `cloud-terraforms`), plus kernel and userland. The store reads it, never writes it.
 - **Home-Manager · Desktop** — the user. What this store realises: Binaries (`bin`), Scripts · Libs (`lib`),
   Configs (`etc`, `activate`), Secrets (names and modes only), each row with its **app** and whether it is
@@ -206,7 +206,7 @@ rows on the page; without it the app is derived from the source's repo directory
 
 
 Like the flakes, the declaration directory has its own `build.sh`:
-`cloud-me-pvt-configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs/build.sh switch`
+`cloud-me-pvt-configs/Desktop-GUI/a0-diego-admin/deb-user-configs/build.sh switch`
 renders `dist/` and switches, exactly where `bb_flakes_termux/build.sh switch` used to.
 
 ## Setup: bootstrap

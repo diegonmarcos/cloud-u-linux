@@ -21,16 +21,16 @@ la() { sh "$ENGINE" "$@" >"$T/out" 2>&1; }
 section() { printf '\n── %s\n' "$1"; }
 
 # ── fixture ────────────────────────────────────────────────────────────────
-V="$GIT_BASE/cloud-me-pvt-vault"; WG="$V/A_A0-Providers/C_TOOLS-INFRA/c0-wireguard"
-mkdir -p "$V/C_A1-configs" "$V/A_A0-Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque" "$V/A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh" "$WG/termux" "$WG/termux-public"
-printf 'ghp_FAKE_VAULT_TOKEN\n' > "$V/A_A0-Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque/token"
-printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEVAULTKEY\n-----END OPENSSH PRIVATE KEY-----\n' > "$V/A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_rsa"
-printf 'ssh-ed25519 AAAAFAKE me@example\n' > "$V/A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_rsa.pub"
+V="$GIT_BASE/cloud-me-pvt-vault"; WG="$V/Shared/Providers/C_TOOLS-INFRA/c0-wireguard"
+mkdir -p "$V/Shared/configs" "$V/Shared/Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque" "$V/Shared/Providers/C_TOOLS-INFRA/c2-system/ssh" "$WG/termux" "$WG/termux-public"
+printf 'ghp_FAKE_VAULT_TOKEN\n' > "$V/Shared/Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque/token"
+printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEVAULTKEY\n-----END OPENSSH PRIVATE KEY-----\n' > "$V/Shared/Providers/C_TOOLS-INFRA/c2-system/ssh/id_rsa"
+printf 'ssh-ed25519 AAAAFAKE me@example\n' > "$V/Shared/Providers/C_TOOLS-INFRA/c2-system/ssh/id_rsa.pub"
 printf 'FAKEWGPRIVATEKEY=\n' > "$WG/termux/privatekey"
 printf '[Interface]\nPrivateKey = <PROVIDED_BY_DEVICE>\nAddress = 10.0.0.9/24\n[Peer]\nPublicKey = FAKEPUB=\nEndpoint = 1.2.3.4:51820\n' > "$WG/termux-public/config-v4-full"
 printf '[Interface]\nPrivateKey = FAKEINLINE=\nAddress = 10.0.0.9/24\n' > "$WG/termux-public/config"
 printf 'FAKEPUBKEY=\n' > "$WG/termux-public/publickey"; printf 'notes\n' > "$WG/termux-public/README.md"
-cat > "$V/C_A1-configs/profile-secrets.json" <<'EOF'
+cat > "$V/Shared/configs/profile-secrets.json" <<'EOF'
 { "schema_version": 1, "_generated": {"emitter": "test"},
   "about": {"profile": {"name": "Ada Lovelace", "email": "ada@example.com", "company": "LEAFY", "location": "Berlin/DE", "website": "example.com", "titles_v2": ["Engineer", "Analyst"]}},
   "git": {"github_token": "ghp_FAKE_VAULT_TOKEN", "ssh_private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEVAULTKEY\n-----END OPENSSH PRIVATE KEY-----", "ssh_public_key": "ssh-ed25519 AAAAFAKE me@example", "repos": ["diegonmarcos/cloud-me-pvt-vault", "diegonmarcos/nope"]},
@@ -48,11 +48,11 @@ EOF
 # a sops-looking file, to be refused
 printf '{"schema_version": 1, "git": {"github_token": "ENC[AES256_GCM,data:xx]"}, "sops": {"age": []}}\n' > "$T/encrypted.json"
 # fake cloud-me-pvt-configs with a minimal linux-store declaration
-D="$GIT_BASE/cloud-me-pvt-configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"; mkdir -p "$D/src"
-echo '{"configs_users":[{"id":"diego-admin","path":"A_CONFIGS-USER/a0-diego-admin"}]}' > "$GIT_BASE/cloud-me-pvt-configs/configs.json"
+D="$GIT_BASE/cloud-me-pvt-configs/Desktop-GUI/a0-diego-admin/deb-user-configs"; mkdir -p "$D/src"
+echo '{"configs_users":[{"id":"diego-admin","path":"Desktop-GUI/a0-diego-admin"}]}' > "$GIT_BASE/cloud-me-pvt-configs/configs.json"
 echo 'x' > "$D/src/marker"
 cat > "$D/linux-store.json" <<'EOF'
-{"settings": {"roots": {"me": "cloud-me-pvt-configs/A_CONFIGS-USER/a0-diego-admin/deb-user-configs"}},
+{"settings": {"roots": {"me": "cloud-me-pvt-configs/Desktop-GUI/a0-diego-admin/deb-user-configs"}},
  "common": {"etc": {".marker": {"path": "me:src/marker"}}}}
 EOF
 # fake mesh.json for the fleet ssh hosts
@@ -63,23 +63,23 @@ mkdir -p "$GIT_BASE/cloud-t-infra/1_cloud-configs/src/inputs"
 echo '{"users": {"diego": {"identities": [{"email": "ada@example.com", "label": "Ada", "primary": true}, {"email": "ada@work.example", "label": "work"}]}}}' > "$GIT_BASE/cloud-t-infra/1_cloud-configs/src/inputs/superapp-users.json"
 
 # tokens.json fixture: a real .env, a single-value file, a keyfile, a ***REMOVED*** stub, a one-line link stub, a declared-pending entry
-mkdir -p "$V/A_A0-Providers/B_SERVICES-CLOUD/b13-anthropic" "$V/A_A0-Providers/B_SERVICES-CLOUD/b7-c3-api/api-key_opaque" "$V/A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/credentials" "$V/A_A0-Providers/D_TOOLS-DEVICES/d1-ssh-surface-pro/ssh_asymmetric"
-printf 'GITHUB_CLIENT_ID=fake-client-id\n# a comment\nGITHUB_CLIENT_SECRET=FAKE_GH_SECRET_VALUE\n' > "$V/A_A0-Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque/cloud-api.env"
-printf 'sk-ant-VAULT-FAKE' > "$V/A_A0-Providers/B_SERVICES-CLOUD/b13-anthropic/api-key_opaque"
-printf '***REMOVED***\n' > "$V/A_A0-Providers/B_SERVICES-CLOUD/b7-c3-api/api-key_opaque/api_key.env"
-printf 'CLIENT_ID=cli\nCLIENT_SECRET=FAKE_AUTHELIA_SECRET\n' > "$V/A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/credentials/cli.env"
-printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEED25519KEY\n-----END OPENSSH PRIVATE KEY-----\n' > "$V/A_A0-Providers/D_TOOLS-DEVICES/d1-ssh-surface-pro/ssh_asymmetric/id_ed25519"
-printf '../../../D_TOOLS-DEVICES/d1-ssh-surface-pro/ssh_asymmetric/id_ed25519\n' > "$V/A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_ed25519"
+mkdir -p "$V/Shared/Providers/B_SERVICES-CLOUD/b13-anthropic" "$V/Shared/Providers/B_SERVICES-CLOUD/b7-c3-api/api-key_opaque" "$V/Shared/Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/credentials" "$V/Shared/Providers/D_TOOLS-DEVICES/d1-ssh-surface-pro/ssh_asymmetric"
+printf 'GITHUB_CLIENT_ID=fake-client-id\n# a comment\nGITHUB_CLIENT_SECRET=FAKE_GH_SECRET_VALUE\n' > "$V/Shared/Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque/cloud-api.env"
+printf 'sk-ant-VAULT-FAKE' > "$V/Shared/Providers/B_SERVICES-CLOUD/b13-anthropic/api-key_opaque"
+printf '***REMOVED***\n' > "$V/Shared/Providers/B_SERVICES-CLOUD/b7-c3-api/api-key_opaque/api_key.env"
+printf 'CLIENT_ID=cli\nCLIENT_SECRET=FAKE_AUTHELIA_SECRET\n' > "$V/Shared/Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/credentials/cli.env"
+printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEED25519KEY\n-----END OPENSSH PRIVATE KEY-----\n' > "$V/Shared/Providers/D_TOOLS-DEVICES/d1-ssh-surface-pro/ssh_asymmetric/id_ed25519"
+printf '../../../D_TOOLS-DEVICES/d1-ssh-surface-pro/ssh_asymmetric/id_ed25519\n' > "$V/Shared/Providers/C_TOOLS-INFRA/c2-system/ssh/id_ed25519"
 cat > "$D/tokens.json" <<'EOF'
 { "schema": 1, "env_file": "~/.config/linux-account/secrets/tokens.env",
   "providers": {
-    "github": {"_doc": "x", "cloud-api": {"vault": "A_A0-Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque/cloud-api.env", "as": "GITHUB_CLOUD_API", "kind": "env-file"}},
-    "anthropic": {"api-key": {"vault": "A_A0-Providers/B_SERVICES-CLOUD/b13-anthropic/api-key_opaque", "as": "ANTHROPIC_API_KEY", "kind": "value"}},
-    "c3-api": {"api-key": {"vault": "A_A0-Providers/B_SERVICES-CLOUD/b7-c3-api/api-key_opaque/api_key.env", "as": "C3_API", "kind": "env-file"}},
-    "cloudflare": {"wrangler": {"vault": "A_A0-Providers/B_SERVICES-CLOUD/b5-cloudflare-wrangler/api-key_opaque/cloudflare.env", "as": "CLOUDFLARE_WRANGLER", "kind": "env-file", "pending": true, "reason": "link stub to b4"}},
-    "authelia": {"cli": {"vault": "A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/credentials/cli.env", "as": "~/.config/linux-account/secrets/authelia/credentials/cli.env", "kind": "keyfile"}},
-    "wireguard": {"privatekey": {"vault": "A_A0-Providers/C_TOOLS-INFRA/c0-wireguard/{device}/privatekey", "as": "~/.config/wireguard/privatekey", "kind": "keyfile"}},
-    "ssh": {"id_ed25519": {"vault": "A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_ed25519", "as": "~/.ssh/id_ed25519", "kind": "keyfile"}}
+    "github": {"_doc": "x", "cloud-api": {"vault": "Shared/Providers/B_SERVICES-CLOUD/b0-github/api-key_opaque/cloud-api.env", "as": "GITHUB_CLOUD_API", "kind": "env-file"}},
+    "anthropic": {"api-key": {"vault": "Shared/Providers/B_SERVICES-CLOUD/b13-anthropic/api-key_opaque", "as": "ANTHROPIC_API_KEY", "kind": "value"}},
+    "c3-api": {"api-key": {"vault": "Shared/Providers/B_SERVICES-CLOUD/b7-c3-api/api-key_opaque/api_key.env", "as": "C3_API", "kind": "env-file"}},
+    "cloudflare": {"wrangler": {"vault": "Shared/Providers/B_SERVICES-CLOUD/b5-cloudflare-wrangler/api-key_opaque/cloudflare.env", "as": "CLOUDFLARE_WRANGLER", "kind": "env-file", "pending": true, "reason": "link stub to b4"}},
+    "authelia": {"cli": {"vault": "Shared/Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/credentials/cli.env", "as": "~/.config/linux-account/secrets/authelia/credentials/cli.env", "kind": "keyfile"}},
+    "wireguard": {"privatekey": {"vault": "Shared/Providers/C_TOOLS-INFRA/c0-wireguard/{device}/privatekey", "as": "~/.config/wireguard/privatekey", "kind": "keyfile"}},
+    "ssh": {"id_ed25519": {"vault": "Shared/Providers/C_TOOLS-INFRA/c2-system/ssh/id_ed25519", "as": "~/.ssh/id_ed25519", "kind": "keyfile"}}
   } }
 EOF
 
@@ -87,7 +87,7 @@ EOF
 section "connect (sign in)"
 la fleet; check "not connected: fleet refuses with guidance" '[ $? -ne 0 ] && grep -q "not connected" "$T/out"'
 la connect --file "$T/encrypted.json"; check "encrypted file is refused, nothing adopted" '[ $? -ne 0 ] && grep -q "refused" "$T/out" && [ -z "$(jq -r ".bundle // empty" "$CFG/state.json" 2>/dev/null)" ]'
-jq '.schema_version = 9' "$V/C_A1-configs/profile-secrets.json" > "$T/v9.json"
+jq '.schema_version = 9' "$V/Shared/configs/profile-secrets.json" > "$T/v9.json"
 la connect --file "$T/v9.json"; check "unknown schema_version is refused" '[ $? -ne 0 ] && grep -q "schema_version 9" "$T/out"'
 la connect; check "vault checkout adopted" '[ $? -eq 0 ] && grep -q "connected: vault checkout (schema 1)" "$T/out"'
 check "state dir is 700" '[ "$(stat -c %a "$CFG")" = 700 ]'
@@ -106,14 +106,14 @@ check "plan: wg template with PROVIDED_BY_DEVICE gets the private key, inline on
 check "plan: unknown section reported, settings pending" 'grep -q "mystery *skip" "$T/out" && grep -q "settings *pending" "$T/out"'
 check "plan wrote nothing" '[ ! -f "$HOME/.ssh/id_rsa" ] && [ ! -f "$D/account.json" ]'
 check "plan: tokens.json read — real entries store, stub and declared-pending entries pending with their reason" \
-    'grep -q "tokens  *store  *GITHUB_CLOUD_API  *env-file" "$T/out" && grep -q "tokens  *store  *ANTHROPIC_API_KEY  *value" "$T/out" && grep -q "tokens  *store  *~/.ssh/id_ed25519  *secret file" "$T/out" && grep -q "tokens  *store  *~/.config/wireguard/privatekey  *secret file vault:A_A0-Providers/C_TOOLS-INFRA/c0-wireguard/termux/privatekey" "$T/out" && grep -q "tokens  *pending  *c3-api/api-key  *redaction stub" "$T/out" && grep -q "tokens  *pending  *cloudflare/wrangler  *link stub to b4" "$T/out"'
+    'grep -q "tokens  *store  *GITHUB_CLOUD_API  *env-file" "$T/out" && grep -q "tokens  *store  *ANTHROPIC_API_KEY  *value" "$T/out" && grep -q "tokens  *store  *~/.ssh/id_ed25519  *secret file" "$T/out" && grep -q "tokens  *store  *~/.config/wireguard/privatekey  *secret file vault:Shared/Providers/C_TOOLS-INFRA/c0-wireguard/termux/privatekey" "$T/out" && grep -q "tokens  *pending  *c3-api/api-key  *redaction stub" "$T/out" && grep -q "tokens  *pending  *cloudflare/wrangler  *link stub to b4" "$T/out"'
 check "plan: no token value printed" '! grep -q -e FAKE_GH_SECRET_VALUE -e sk-ant-VAULT -e FAKEED25519KEY -e FAKE_AUTHELIA "$T/out"'
 
 section "apply (get everything)"
 la apply; rc=$?
 check "apply succeeds and switches" '[ $rc -eq 0 ] && grep -q "is live" "$T/out"'
 cat "$T/out" | sed "s/^/       > /" | head -40
-check "fragment written: paths only, no values" '[ -f "$D/account.json" ] && ! grep -q -e ghp_ -e FAKEVAULTKEY -e FAKEWGPRIVATEKEY "$D/account.json" && jq -e ".common.secret[\".ssh/id_rsa\"].file == \"vault:A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_rsa\"" "$D/account.json" >/dev/null'
+check "fragment written: paths only, no values" '[ -f "$D/account.json" ] && ! grep -q -e ghp_ -e FAKEVAULTKEY -e FAKEWGPRIVATEKEY "$D/account.json" && jq -e ".common.secret[\".ssh/id_rsa\"].file == \"vault:Shared/Providers/C_TOOLS-INFRA/c2-system/ssh/id_rsa\"" "$D/account.json" >/dev/null'
 check "linux-store.json now includes the fragment" 'jq -e ".settings.include | index(\"me:account.json\")" "$D/linux-store.json" >/dev/null'
 check "ssh key realised by linux-store, 600" '[ "$(stat -c %a "$HOME/.ssh/id_rsa")" = 600 ] && grep -q FAKEVAULTKEY "$HOME/.ssh/id_rsa" && [ "$(stat -c %a "$HOME/.ssh/id_rsa.pub")" = 644 ]'
 check "gh token rendered from the vault file" 'grep -qx "    oauth_token: ghp_FAKE_VAULT_TOKEN" "$HOME/.config/gh/hosts.yml"'
@@ -128,7 +128,7 @@ check "tokens: the stub is never written, the pending entry neither" '! grep -q 
 check "tokens: keyfiles land at their ~/path (link stub followed), 600" \
     '[ "$(stat -c %a "$HOME/.ssh/id_ed25519")" = 600 ] && grep -q FAKEED25519KEY "$HOME/.ssh/id_ed25519" && [ "$(stat -c %a "$CFG/secrets/authelia/credentials/cli.env")" = 600 ] && grep -q FAKE_AUTHELIA_SECRET "$CFG/secrets/authelia/credentials/cli.env" && [ -d "$CFG/secrets/authelia/tokens" ]'
 check "tokens: fragment declares them (paths only), template holds names only" \
-    'jq -e ".common.secret[\".config/linux-account/secrets/tokens.env\"].values.GITHUB_CLOUD_API.export == true and .common.secret[\".ssh/id_ed25519\"].file == \"vault:A_A0-Providers/C_TOOLS-INFRA/c2-system/ssh/id_ed25519\" and (.common.secret | has(\".config/linux-account/secrets/authelia/credentials/cli.env\"))" "$D/account.json" >/dev/null && grep -q "@ANTHROPIC_API_KEY@" "$D/src/tokens.env.tpl" && ! grep -q C3_API "$D/src/tokens.env.tpl"'
+    'jq -e ".common.secret[\".config/linux-account/secrets/tokens.env\"].values.GITHUB_CLOUD_API.export == true and .common.secret[\".ssh/id_ed25519\"].file == \"vault:Shared/Providers/C_TOOLS-INFRA/c2-system/ssh/id_ed25519\" and (.common.secret | has(\".config/linux-account/secrets/authelia/credentials/cli.env\"))" "$D/account.json" >/dev/null && grep -q "@ANTHROPIC_API_KEY@" "$D/src/tokens.env.tpl" && ! grep -q C3_API "$D/src/tokens.env.tpl"'
 check "tokens: tokens.env is sourceable by sh and exports the names" '( . "$TENV" && [ "$ANTHROPIC_API_KEY" = sk-ant-VAULT-FAKE ] && [ -n "$GITHUB_CLIENT_SECRET" ] )'
 check "mail: identity account picked, env 600" '[ "$(jq -r .mail_account "$CFG/state.json")" = ada ] && grep -q "^export MAIL_PASS=.fake-mail-pass." "$CFG/secrets/mail.env" && [ "$(stat -c %a "$CFG/secrets/mail.env")" = 600 ]'
 check "ai: tokens env with ANTHROPIC_API_KEY" 'grep -q "^export CLAUDE_API_KEY=" "$CFG/secrets/ai.env" && grep -q "^export ANTHROPIC_API_KEY=.sk-ant-FAKE." "$CFG/secrets/ai.env"'
@@ -209,7 +209,7 @@ export LINUX_ACCOUNT_RISH_ENV="$T/rish.env"
 la phone import --host "$PORT"; check "without rish.env: refused with a clear message, nothing posted" '[ $? -ne 0 ] && grep -q "no fleet token" "$T/out" && [ ! -f "$T/stub/post.body" ]'
 printf 'export CLOUD_FLEET_TOKEN=FAKE-FLEET-TOKEN\nOTHER=1\n' > "$T/rish.env"
 # the real bundle is ~1.8 MB, past AppDebugServer's default 256 KiB body ceiling: send one that size
-head -c 1800000 /dev/zero | tr '\0' x > "$T/pad.txt"; jq --rawfile pad "$T/pad.txt" '.pad = $pad' "$V/C_A1-configs/profile-secrets.json" > "$T/fat.json"
+head -c 1800000 /dev/zero | tr '\0' x > "$T/pad.txt"; jq --rawfile pad "$T/pad.txt" '.pad = $pad' "$V/Shared/configs/profile-secrets.json" > "$T/fat.json"
 LINUX_ACCOUNT_BUNDLE="$T/fat.json" sh "$ENGINE" phone import --host "$PORT" --host 9 > "$T/out" 2>&1; rc=$?
 check "phone import: one live host lands, the dead one is skipped, exit 0" '[ $rc -eq 0 ] && grep -q "127.0.0.1:$PORT *200 *verdict=bundle *mesh 2/2 *git 3/4" "$T/out" && grep -q "127.0.0.1:9 *skipped — /api/system/ping does not answer" "$T/out"'
 check "...the bundle bytes arrive unchanged (1.8 MB body)" 'cmp -s "$T/fat.json" "$T/stub/post.body" && [ "$(wc -c < "$T/stub/post.body")" -gt 1800000 ]'

@@ -19,7 +19,7 @@ linux-account tui
 
 ## The bundle
 
-`cloud-me-pvt-vault/C_A1-configs/profile-secrets.json` — the ONE consolidated
+`cloud-me-pvt-vault/Shared/configs/profile-secrets.json` — the ONE consolidated
 profile (schema 1): `mesh`, `mail`, `ai`, `git`, `about`, `autocomplete`,
 `electronics`, `settings`. The same file the phone imports.
 
