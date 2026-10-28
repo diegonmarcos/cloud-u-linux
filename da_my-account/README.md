@@ -37,7 +37,7 @@ Manifest = TAB-separated: `kind  variants  source  target  flake_src`.
 |---|---|
 | `file` / `dir` | deployed to `$HOME/<target>`; `variants` = `desktop`, `termux` or both |
 | `inline` | held only: home-manager inlines or nix-wraps it, so there is no direct file target yet |
-| `secret` | private file in the private repo `cloud-me`; only its path is here (`me:<path>`) |
+| `secret` | private file in the private repo `cloud-me-pvt`; only its path is here (`me:<path>`) |
 | `sops` | reference to a sops-encrypted path of the flakes; never copied |
 | `canon` | held copy whose canonical home and deployer is elsewhere |
 
@@ -50,22 +50,22 @@ source under `<app>/termux/`) or `lin:<path in cloud-u-linux>`.
 Nothing private is stored here: no tokens, keys, ssh/gpg material, passwords, private
 hostnames or IPs (mesh bootstrap, wg-dns, goose and gemini MCP endpoints, the fish init
 with the auth host, the tokens template were left out and are `secret` entries), no
-sops-encrypted files. A `secret` entry names `me:my-account/<app>/<file>` in `cloud-me`.
+sops-encrypted files. A `secret` entry names `me:my-account/<app>/<file>` in `cloud-me-pvt`.
 At `--apply` the value is resolved, first match wins:
 
-1. local clone of `cloud-me`: `$MY_ACCOUNT_ME_DIR`, else `$GIT_BASE`, `~/git`,
-   `~/git-repos`, `~` + `/cloud-me`;
+1. local clone of `cloud-me-pvt`: `$MY_ACCOUNT_ME_DIR`, else `$GIT_BASE`, `~/git`,
+   `~/git-repos`, `~` + `/cloud-me-pvt`;
 2. `cloud-me-api` (read-only; contract in `infra-api_cloud-me-api` of cloud-u-containers):
-   `GET <base>/repos/cloud-me/file?path=<path>` returns the file as `text/plain`, with
+   `GET <base>/repos/cloud-me-pvt/file?path=<path>` returns the file as `text/plain`, with
    `Authorization: Bearer $MY_ACCOUNT_ME_TOKEN` (the fleet bearer; a GitHub token is not
    accepted). `<base>` = `$MY_ACCOUNT_ME_API` alone when set, else mesh first
    (`http://cloud-me-api.mesh.diegonmarcos.com:8124/me`), then c3-pvt
    (`https://c3-pvt.diegonmarcos.com/cloud-me-api/me`). The token goes to curl on stdin,
-   never argv. The service must declare the `cloud-me` repo and serve `my-account/` paths
+   never argv. The service must declare the `cloud-me-pvt` repo and serve `my-account/` paths
    (owner step, see ticket); until then only the local clone resolves.
 
-The dry-run only names the source that would be used (`cloud-me clone`, `cloud-me api`
-or `UNRESOLVED`). Values are written 0600 and never printed. The paths exist in `cloud-me` as
+The dry-run only names the source that would be used (`cloud-me-pvt clone`, `cloud-me-pvt api`
+or `UNRESOLVED`). Values are written 0600 and never printed. The paths exist in `cloud-me-pvt` as
 placeholders (`# owner: fill in`); the owner fills in the values.
 
 ## claude/ (canonical copy: my-ai)
@@ -81,5 +81,5 @@ entries must have none), every held file is declared, no secret-like file, drift
 `lin:` sources (always) and `cmc:` sources (when a `cloud-me-pvt-configs` checkout is found
 via `MY_ACCOUNT_CMC` or a sibling dir; otherwise SKIP with a notice, FAIL with
 `MY_ACCOUNT_STRICT=1`), a sandboxed deploy round trip, and the secret resolution
-(fake local `cloud-me`, mocked API, values never printed). CI (`test-my-account.yml`)
+(fake local `cloud-me-pvt`, mocked API, values never printed). CI (`test-my-account.yml`)
 runs it without the `cmc:` checkout.

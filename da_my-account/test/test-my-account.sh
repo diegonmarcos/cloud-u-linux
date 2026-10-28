@@ -95,19 +95,19 @@ grep -q 'local edit' "$H/.vimrc" && ok || no "differing file overwritten without
 rm -f "$H/.config/starship.toml"; ln -s /nix/store/x-starship.toml "$H/.config/starship.toml"
 MY_ACCOUNT_HOME="$H" sh "$D/my-account" --profile desktop 2>&1 | grep -q 'skip  starship' && ok || no "nix-managed symlink not skipped"
 
-echo "-- secrets: local cloud-me clone first, mocked API second, values never printed"
-ME="$T/cloud-me"; mkdir -p "$ME/my-account/goose" "$T/bin"
+echo "-- secrets: local cloud-me-pvt clone first, mocked API second, values never printed"
+ME="$T/cloud-me-pvt"; mkdir -p "$ME/my-account/goose" "$T/bin"
 printf 'LOCAL-SECRET-VALUE-111\n' > "$ME/my-account/goose/config.yaml"
 cat > "$T/bin/curl" <<'SH'
 #!/bin/sh
-# mock cloud-me-api (infra-api_cloud-me-api): GET <base>/repos/cloud-me/file?path=<p> -> 200 text/plain;
+# mock cloud-me-api (infra-api_cloud-me-api): GET <base>/repos/cloud-me-pvt/file?path=<p> -> 200 text/plain;
 # the bearer must arrive via -K - (stdin), never argv. The mesh host is down; only the c3-pvt base answers.
 cfg="$(cat)"; out=""; url=""
 while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift ;; -K) ;; -*) ;; *) url="$1" ;; esac; shift; done
 case "$cfg" in *"Bearer TESTTOKEN"*) ;; *) exit 22 ;; esac
 case "$cfg" in *"Bearer TESTTOKEN"*"Accept: text/plain"*) ;; *) exit 22 ;; esac
 case "$url" in
-  https://mock.invalid/api/repos/cloud-me/file?path=*|https://c3-pvt.diegonmarcos.com/cloud-me-api/me/repos/cloud-me/file?path=*)
+  https://mock.invalid/api/repos/cloud-me-pvt/file?path=*|https://c3-pvt.diegonmarcos.com/cloud-me-api/me/repos/cloud-me-pvt/file?path=*)
     printf 'API-SECRET-VALUE-222 %s\n' "${url#*?path=}" > "$out" ;;
   *) exit 22 ;;
 esac
@@ -116,14 +116,14 @@ chmod +x "$T/bin/curl"
 sec() { PATH="$T/bin:$PATH" MY_ACCOUNT_HOME="$H2" MY_ACCOUNT_ME_DIR="${MEDIR:-/nonexistent}" MY_ACCOUNT_ME_API=https://mock.invalid/api \
         MY_ACCOUNT_ME_TOKEN="${TOK-TESTTOKEN}" sh "$D/my-account" --profile desktop --app goose "$@" 2>&1; }
 H2="$T/home2"; mkdir -p "$H2"
-MEDIR="$ME" sec | grep -q 'source: cloud-me clone' && ok || no "dry-run does not name the local clone"
+MEDIR="$ME" sec | grep -q 'source: cloud-me-pvt clone' && ok || no "dry-run does not name the local clone"
 MEDIR="$ME" sec | grep -q 'LOCAL-SECRET' && no "dry-run printed a secret value" || ok
 [ -e "$H2/.config/goose/config.yaml" ] && no "dry-run wrote a secret" || ok
 MEDIR="$ME" sec --apply | grep -q 'SECRET-VALUE' && no "apply printed a secret value" || ok
 grep -q LOCAL-SECRET-VALUE-111 "$H2/.config/goose/config.yaml" && ok || no "local clone not used"
 [ "$(stat -c %a "$H2/.config/goose/config.yaml")" = 600 ] && ok || no "secret not 0600"
 rm -f "$H2/.config/goose/config.yaml"
-MEDIR="" sec | grep -q 'source: cloud-me api' && ok || no "dry-run does not name the api"
+MEDIR="" sec | grep -q 'source: cloud-me-pvt api' && ok || no "dry-run does not name the api"
 MEDIR="" sec --apply | grep -q 'SECRET-VALUE' && no "api apply printed a secret value" || ok
 grep -q 'API-SECRET-VALUE-222 my-account/goose/config.yaml' "$H2/.config/goose/config.yaml" && ok || no "api fallback not used"
 rm -f "$H2/.config/goose/config.yaml"

@@ -11,10 +11,10 @@
 #        inline    held only (home-manager inlines it into a generated file / wraps it)
 #        sops      reference to a sops-encrypted path; the value is never copied
 #        canon     held copy; another deployer owns it (claude -> my-ai)
-#        secret    private file from the private repo cloud-me, flake_src = me:<path in cloud-me>.
+#        secret    private file from the private repo cloud-me-pvt, flake_src = me:<path in cloud-me-pvt>.
 #                  The public repo holds the path only. Resolved at --apply, first match wins:
-#                    1. local clone: $MY_ACCOUNT_ME_DIR, else $GIT_BASE|~/git|~/git-repos|~ + /cloud-me
-#                    2. cloud-me-api (read-only): GET <base>/repos/cloud-me/file?path=<path>
+#                    1. local clone: $MY_ACCOUNT_ME_DIR, else $GIT_BASE|~/git|~/git-repos|~ + /cloud-me-pvt
+#                    2. cloud-me-api (read-only): GET <base>/repos/cloud-me-pvt/file?path=<path>
 #                       with `Authorization: Bearer $MY_ACCOUNT_ME_TOKEN` (the fleet bearer).
 #                       <base> = $MY_ACCOUNT_ME_API alone when set, else mesh first
 #                       (http://cloud-me-api.mesh.diegonmarcos.com:8124/me) then c3-pvt
@@ -37,9 +37,9 @@ done
 TAB="$(printf '\t')"; n_new=0; n_same=0; n_diff=0; n_skip=0; n_held=0
 
 ME_API_MESH="http://cloud-me-api.mesh.diegonmarcos.com:8124/me"; ME_API_PVT="https://c3-pvt.diegonmarcos.com/cloud-me-api/me"
-ME_REPO=cloud-me
+ME_REPO=cloud-me-pvt
 me_dir() {
-  for d in "${MY_ACCOUNT_ME_DIR:-}" "${GIT_BASE:-}/cloud-me" "$H/git/cloud-me" "$H/git-repos/cloud-me" "$H/cloud-me" "$ROOT/../../cloud-me"; do
+  for d in "${MY_ACCOUNT_ME_DIR:-}" "${GIT_BASE:-}/cloud-me-pvt" "$H/git/cloud-me-pvt" "$H/git-repos/cloud-me-pvt" "$H/cloud-me-pvt" "$ROOT/../../cloud-me-pvt"; do
     [ -n "$d" ] && [ -d "$d" ] && { (cd "$d" && pwd); return 0; }
   done; return 1
 }
@@ -76,7 +76,7 @@ for m in "$ROOT"/*/manifest; do
     case "$kind" in
       secret)
         ref="${_flake#me:}"; w="$(me_where "$ref")" || w=""
-        case "$w" in local:*) lbl="cloud-me clone" ;; api) lbl="cloud-me api" ;; *) lbl="UNRESOLVED" ;; esac
+        case "$w" in local:*) lbl="cloud-me-pvt clone" ;; api) lbl="cloud-me-pvt api" ;; *) lbl="UNRESOLVED" ;; esac
         if [ "$target" = - ] || [ "$w" = "" ]; then
           n_held=$((n_held + 1)); printf '  secret %s -> %s [source: %s; me:%s]\n' "$app" "$target" "$lbl" "$ref"; continue
         fi
