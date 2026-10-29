@@ -134,7 +134,7 @@ check "settings.project.json denies the github MCP and does not allow it" \
 check "settings.project.json disables claude.ai connectors" \
   "$(jq -r '.disableClaudeAiConnectors' "$SOT/settings.project.json")" true
 check "settings.project.json wires each c3 guard hook exactly once" \
-  "$(jq -r '[.hooks.PreToolUse[].hooks[].command] | (length == (unique | length)) and length == 6' "$SOT/settings.project.json")" true
+  "$(jq -r '[.hooks.PreToolUse[].hooks[].command] | (length == (unique | length)) and length == 7' "$SOT/settings.project.json")" true
 check "the SoT agents are the six lean/fleet agents" \
   "$(ls "$SOT/agents" | grep -v README | tr '\n' ' ')" "build.md explore.md general-purpose.md infra.md ops.md review.md "
 check "the c3-infra guard (rules, agents pinned, lean agents, hook tests) is green" \
@@ -487,5 +487,60 @@ if [ -d "$ENG" ]; then
   check "cloud-infra deploy-dotfiles.sh is a thin wrapper onto the dotfiles engine" \
     "$(grep -c 'engines/dotfiles' "${CLOUD_INFRA_DIR:-$REPO/../cloud-t-infra}/9_others/src/deploy-dotfiles.sh" 2>/dev/null || echo 1)" 1
 fi
+
+# ── MCP token budget: a default session loads <= 20k MCP tokens ──────────────
+# Owner rule. mcp-policy.json .tiers declares default (every session) vs opt-in
+# (only when a repo lists the server in .claude/mcp-optin.json). The guard sums
+# the declared tools/list size (mcp-sizes.json, bytes/4, refreshed by
+# measure-mcp-sizes.sh) of the default servers plus the fixed allowance for
+# platform-injected servers (claude-code-remote), and fails above the budget.
+POL="$SOT/mcp-policy.json"; SIZES="$SOT/mcp-sizes.json"
+if [ -f "$SIZES" ] && jq -e '.tiers' "$POL" >/dev/null 2>&1; then
+  total=$(jq -r --slurpfile z "$SIZES" '[.tiers.default[] as $n | ($z[0].servers[$n].tokens // 1000000)] + [.tiers.platform_allowance | to_entries[] | select(.key|startswith("_")|not) | .value] | add' "$POL")
+  budget=$(jq -r '.tiers.budget_tokens' "$POL")
+  echo "     default MCP budget: $(jq -r --slurpfile z "$SIZES" '[.tiers.default[] as $n | "\($n)=\($z[0].servers[$n].tokens // "UNSIZED")"] + [.tiers.platform_allowance | to_entries[] | select(.key|startswith("_")|not) | "\(.key)=\(.value)"] | join(" ")' "$POL") total=$total of $budget"
+  check "default-tier MCP tokens + platform allowance <= budget" "$([ "$total" -le "$budget" ] && echo yes || echo no)" yes
+  check "budget is the owner's 20000" "$budget" 20000
+  check "every default server is grouped, or has at most one tool" \
+    "$(jq -r --slurpfile z "$SIZES" '[.tiers.default[] as $n | select((.tiers.grouped | index($n)) == null and (($z[0].servers[$n].tools // 99) > 1)) | $n] | join(",")' "$POL")" ""
+  check "default and opt-in tiers do not overlap" \
+    "$(jq -r '[.tiers.default[] as $n | select(.tiers["opt-in"] | index($n))] | length' "$POL")" 0
+  TIERED=$(jq -r '.tiers.default + .tiers["opt-in"] | .[]' "$POL")
+  DIST_ALL="$REPO/../cloud-t-infra/1_cloud-configs/dist/mcp.json"
+  if [ -f "$DIST_ALL" ]; then
+    check "every derived MCP server is assigned a tier" \
+      "$(jq -r --argjson t "$(printf '%s\n' $TIERED | jq -R . | jq -s .)" '[.mcpServers | keys[] | select(endswith("-mesh") | not) | select(. as $n | $t | index($n) | not)] | join(",")' "$DIST_ALL")" ""
+  fi
+  PROJ="$REPO/../cloud-t-infra/1_cloud-configs/dist/mcp.project.json"
+  if [ -f "$PROJ" ]; then
+    check "generated project .mcp.json holds only default-tier servers" \
+      "$(jq -r --slurpfile p "$POL" '[.mcpServers | keys[] | select(. as $n | $p[0].tiers.default | index($n) | not)] | join(",")' "$PROJ")" ""
+    check "generated project .mcp.json holds every default-tier server" \
+      "$(jq -r --slurpfile p "$POL" '. as $o | [$p[0].tiers.default[] | select($o.mcpServers[.] | not)] | join(",")' "$PROJ")" ""
+  fi
+  # Deployed repos: a server beyond the default tier must be declared opt-in.
+  nonconf=""
+  for f in "$GITBASE"/*/.mcp.json; do
+    [ -f "$f" ] || continue
+    extra=$(jq -r --slurpfile p "$POL" --slurpfile o "$(dirname "$f")/.claude/mcp-optin.json" \
+      '[.mcpServers | keys[] | select(. as $n | ($p[0].tiers.default | index($n) | not) and (($o[0].servers // []) | index($n) | not))] | join(",")' "$f" 2>/dev/null \
+      || jq -r --slurpfile p "$POL" '[.mcpServers | keys[] | select(. as $n | $p[0].tiers.default | index($n) | not)] | join(",")' "$f" 2>/dev/null) || extra="UNREADABLE"
+    [ -n "$extra" ] && nonconf="$nonconf ${f#"$GITBASE"/}[$extra]"
+  done
+  check "no repo .mcp.json carries a non-default server it has not declared opt-in" "$(printf '%s' "$nonconf" | wc -w | tr -d ' ')" 0
+  [ -n "$nonconf" ] && for b in $nonconf; do echo "     over-tier: $b"; done
+else
+  check "MCP tiers and mcp-sizes.json are declared" no yes
+fi
+
+# ── built-in tools nobody uses are denied (tool schemas cost tokens) ─────────
+DENY_TOOLS="Artifact ArtifactComments ArtifactData DesignSync Workflow CronCreate CronDelete CronList ScheduleWakeup EnterPlanMode ExitPlanMode EnterWorktree ExitWorktree TaskCreate TaskGet TaskList TaskUpdate NotebookEdit ReportFindings ShowOnboardingRolePicker SearchSkills SuggestSkills ListSkills SearchPlugins SuggestPluginInstall ListPlugins SearchMcpRegistry SuggestConnectors ListConnectors"
+KEEP_TOOLS="Bash Read Edit Write Glob Grep WebFetch WebSearch Skill AskUserQuestion Agent SendMessage ListAgents TaskStop Monitor ReadNotifications PushNotification SendUserFile ToolSearch"
+for sf in settings.project.json settings.base.json; do
+  check "$sf denies every unused built-in tool" \
+    "$(jq -r --arg d "$DENY_TOOLS" '[($d|split(" "))[] as $t | select((.permissions.deny // []) | index($t) | not) | $t] | join(",")' "$SOT/$sf")" ""
+  check "$sf denies no kept built-in tool" \
+    "$(jq -r --arg k "$KEEP_TOOLS" '[(.permissions.deny // [])[] | select(. as $d | ($k|split(" ")) | index($d))] | join(",")' "$SOT/$sf")" ""
+done
 
 exit "$fail"

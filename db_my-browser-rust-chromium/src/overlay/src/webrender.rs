@@ -196,7 +196,11 @@ wrap_render_handler! {
                     return;
                 }
 
-                match shared_handle.import_texture(&self.handler._device) {
+                // SAFETY: CEF keeps this frame valid for the callback; CEF and wgpu
+                // share the GPU/driver (upstream cef-rs fe2971b made this unsafe + queue).
+                match unsafe {
+                    shared_handle.import_texture(&self.handler._device, &self.handler._queue)
+                } {
                     Ok(texture) => texture,
                     Err(e) => {
                         eprintln!("Failed to import shared texture: {:?}", e);

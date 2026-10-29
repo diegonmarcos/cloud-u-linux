@@ -9,7 +9,8 @@
           { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/no-local-gradle.sh" },
           { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/main-only-push.sh" },
           { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/no-branch-create.sh" },
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/no-secrets-commit.sh" }
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/no-secrets-commit.sh" },
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/no-mass-delete.sh" }
         ]
       }
     ]

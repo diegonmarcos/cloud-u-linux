@@ -1,0 +1,42 @@
+{
+  "_doc": "Declared MCP tools/list size per server: tokens = ceil(bytes/4) of the tools array, tools = count, grouped = exposed as a few dispatcher tools. Written by measure-mcp-sizes.sh --write when the servers are reachable; read by test-claude-sot.sh (budget guard). A stale entry makes the guard wrong, so re-measure when a toolset changes.",
+  "measured": "2026-10-23",
+  "servers": {
+    "cloud-cgc-pub-mcp": {
+      "tools": 16,
+      "tokens": 2815
+    },
+    "cloud-cgc-pvt-mcp": {
+      "tools": 16,
+      "tokens": 2848
+    },
+    "cloud-drive-mcp": {
+      "tools": 1,
+      "tokens": 319
+    },
+    "cloud-infra-mcp": {
+      "tools": 7,
+      "tokens": 2878
+    },
+    "cloud-mail-mcp": {
+      "tools": 1,
+      "tokens": 331
+    },
+    "cloud-mattermost-mcp": {
+      "tools": 1,
+      "tokens": 227
+    },
+    "cloud-services-mcp": {
+      "tools": 130,
+      "tokens": 13617
+    },
+    "cloud-superapp-mcp": {
+      "tools": 2,
+      "tokens": 352
+    },
+    "google-personal-mcp": {
+      "tools": 1,
+      "tokens": 857
+    }
+  }
+}

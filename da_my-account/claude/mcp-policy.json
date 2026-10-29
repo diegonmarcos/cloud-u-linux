@@ -4,6 +4,17 @@
     "Authorization": "Bearer ${AUTHELIA_OIDC_TOKEN_CLAUDE-ADMIN}"
   },
   "auth_host": "c3-pvt.diegonmarcos.com",
+  "tiers": {
+    "_doc": "Owner rule: a default Claude Code session loads MCP tools <= budget_tokens. default = registered in every repo's .mcp.json; opt-in = only when a repo lists the name in .claude/mcp-optin.json (deploy-dotfiles merges it from the derived dist/mcp.optin.json catalog). A default server must be grouped (few dispatcher tools): an ungrouped server with more than one tool is not allowed in default. Sizes live in mcp-sizes.json (measure-mcp-sizes.sh); test-claude-sot.sh enforces the sum.",
+    "budget_tokens": 20000,
+    "default": ["cloud-infra-mcp", "cloud-superapp-mcp"],
+    "grouped": ["cloud-infra-mcp", "cloud-superapp-mcp"],
+    "opt-in": ["cloud-cgc-pub-mcp", "cloud-cgc-pvt-mcp", "cloud-drive-mcp", "cloud-mail-mcp", "cloud-mattermost-mcp", "cloud-services-mcp", "cloud-vault-mcp", "google-personal-mcp", "google-workspace-mcp"],
+    "platform_allowance": {
+      "_doc": "Platform-injected servers that no repo file can remove. ESTIMATE: claude-code-remote exposes about 40 tools; at the fleet average of roughly 150 tokens per tool that is 6000. Replace with a measured number from a fresh session's /context.",
+      "claude-code-remote": 6000
+    }
+  },
   "direct_http": {
     "cloud-cgc-pvt-mcp": {
       "type": "http",
