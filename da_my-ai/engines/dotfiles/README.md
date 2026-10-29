@@ -5,7 +5,7 @@ in the binary and run by `my-ai engine run dotfiles -- <dotfiles-src-dir> <dist-
 
 cloud-infra's `9_others/src/deploy-dotfiles.sh` is only a thin wrapper that calls this script
 (or the `my-ai` binary), so `9_others/build.sh` and CI keep working unchanged. The script refreshes
-`0_apps/src/claude/` from `data/claude` (agents, c3-infra plugin, mcp-auth-headers.sh,
+`_dotfiles/apps/src/claude/` from `data/claude` (agents, c3-infra plugin, mcp-auth-headers.sh,
 settings.project.json) before deploying; see `data/claude/README.md` delivery path 3.
 
 Environment: `CLAUDE_SOT_DIR` relocates the SoT; `INJECT_HEADER` points at cloud-infra's

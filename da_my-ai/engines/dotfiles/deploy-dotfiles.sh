@@ -2,7 +2,8 @@
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║ dotfiles deploy — src/dotfiles/<tool>/ → dist/ → <repo>/<target> ║
 # ║                                                                  ║
-# ║ Usage: deploy.sh <dotfiles-src-dir> <dist-dir> <repo-root>       ║
+# ║ Usage: deploy.sh [<dotfiles-src-dir> <dist-dir> <repo-root>]     ║
+# ║ Default: _dotfiles/apps/src _dotfiles/apps/dist/dotfiles .       ║
 # ╚══════════════════════════════════════════════════════════════════╝
 #
 # CANONICAL COPY: cloud-u-linux da_my-ai/engines/dotfiles (my-ai engine
@@ -33,6 +34,17 @@
 
 set -e
 
+# Defaults follow the _dotfiles convention (#1290): a repo's declarative
+# dotfiles live in ONE top-level _dotfiles/ folder, so with no arguments the
+# engine renders _dotfiles/apps/src -> _dotfiles/apps/dist/dotfiles -> ".".
+# A repo still on the old 0_apps/ layout is picked up as a fallback.
+if [ $# -eq 0 ]; then
+    if [ -d _dotfiles/apps/src ] || [ ! -d 0_apps/src ]; then
+        set -- _dotfiles/apps/src _dotfiles/apps/dist/dotfiles .
+    else
+        set -- 0_apps/src 0_apps/dist/dotfiles .
+    fi
+fi
 DF_SRC="$1"
 DF_DIST="$2"
 REPO_ROOT="$3"

@@ -100,7 +100,7 @@ else
 fi
 
 # ── cloud-infra's repo-scoped copy is GENERATED, and has been regenerated ────
-# 0_apps/src/claude/ is what deploy-dotfiles.sh copies into every repo's
+# _dotfiles/apps/src/claude/ is what deploy-dotfiles.sh copies into every repo's
 # .claude/. It used to be a second hand-kept copy of agents/ plus its own
 # settings.json whose _doc read "edit there, then re-copy here" — and the two
 # agents/README.md had already diverged, each describing itself as the same
@@ -110,7 +110,9 @@ fi
 # Byte-identical, not key-sampled like the seventeen-mirror check below: this
 # is the ONE copy that is machine-generated, so anything less than equality
 # means a hand edit landed in the generated tree and will be silently reverted.
-INFRA_CLAUDE="$REPO/../cloud-t-infra/0_apps/src/claude"
+INFRA_CLAUDE="$REPO/../cloud-t-infra/_dotfiles/apps/src/claude"
+# Pre-_dotfiles layout (repos not yet migrated, #1290).
+[ -d "$INFRA_CLAUDE" ] || INFRA_CLAUDE="$REPO/../cloud-t-infra/0_apps/src/claude"
 if [ -d "$INFRA_CLAUDE" ]; then
   check "cloud-infra's generated agents/ matches the SoT" \
     "$(diff -rq "$SOT/agents" "$INFRA_CLAUDE/agents" >/dev/null 2>&1 && echo yes || echo no)" yes
@@ -123,7 +125,7 @@ if [ -d "$INFRA_CLAUDE" ]; then
   check "cloud-infra's generated hooks/c3 is the plugin hooks minus hooks.json" \
     "$(diff -rq -x hooks.json "$SOT/cloud-marketplace/c3-infra/hooks" "$INFRA_CLAUDE/hooks/c3" >/dev/null 2>&1 && echo yes || echo no)" yes
 else
-  echo "skip — cloud-infra 0_apps/src/claude not found at $INFRA_CLAUDE"
+  echo "skip — cloud-infra _dotfiles/apps/src/claude not found at $INFRA_CLAUDE"
 fi
 
 # ── c3-infra: registered, github MCP denied, hooks wired once, agents lean ───
@@ -189,7 +191,7 @@ check "the c3-infra guard (rules, agents pinned, lean agents, hook tests) is gre
 # clones resolve to themselves at depth two, so all five drop out.
 GITBASE="$(cd "$REPO/.." && pwd)"
 mirrors=$(find "$GITBASE" -maxdepth 4 \
-  \( -path '*/.claude/settings.json' -o -path '*/0_apps/src/claude/settings.json' \) \
+  \( -path '*/.claude/settings.json' -o -path '*/0_apps/src/claude/settings.json' -o -path '*/_dotfiles/apps/src/claude/settings.json' \) \
   -not -path '*/.git/*' -not -path '*z_archive*' -not -path '*/I_cloud/*' 2>/dev/null |
   while read -r m; do
     top=$(git -C "$(dirname "$m")" rev-parse --show-toplevel 2>/dev/null) || continue
@@ -215,11 +217,14 @@ check "every repo-scoped mirror agrees with the SoT ($(printf '%s' "$mirrors" | 
 # settings.project.json became the file deployed unchanged, equality is the
 # right test. The nested paths are the ones repos.json:fleet_files refreshes
 # (clone.sh --sync); an absent path is skipped, a differing one is drift.
-COPIES=".claude/settings.json 0_apps/src/claude/settings.json 0_apps/dist/dotfiles/claude/settings.json
+COPIES=".claude/settings.json _dotfiles/apps/src/claude/settings.json _dotfiles/apps/dist/dotfiles/claude/settings.json
+0_apps/src/claude/settings.json 0_apps/dist/dotfiles/claude/settings.json
 4___ASSETS___/4.2.Config/claude/settings.json
 ac_cloud-vault/.claude/settings.json
 da_dtk/.claude/settings.json da_dtk/0_apps/src/claude/settings.json da_dtk/0_apps/dist/dotfiles/claude/settings.json
-others/0_apps/src/claude/settings.json others/0_apps/dist/dotfiles/claude/settings.json"
+da_dtk/_dotfiles/apps/src/claude/settings.json da_dtk/_dotfiles/apps/dist/dotfiles/claude/settings.json
+others/0_apps/src/claude/settings.json others/0_apps/dist/dotfiles/claude/settings.json
+others/_dotfiles/apps/src/claude/settings.json others/_dotfiles/apps/dist/dotfiles/claude/settings.json"
 vchecked=0; vdrift=""
 for repo in "$GITBASE"/*/; do
   repo=${repo%/}

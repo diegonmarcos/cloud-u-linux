@@ -35,7 +35,7 @@ delivery paths a file takes:
    `mcp-auth-headers.sh`, the `c3-infra` skill and hooks. Deployed by the my-ai
    **`dotfiles` engine** (`da_my-ai/engines/dotfiles/deploy-dotfiles.sh`; run it
    with `my-ai engine run dotfiles -- <dotfiles-src> <dist> <repo-root>`). It
-   refreshes cloud-infra's `0_apps/src/claude/` from here and then deploys it to
+   refreshes cloud-infra's `_dotfiles/apps/src/claude/` from here and then deploys it to
    `<repo>/.claude/` in every repo. cloud-infra's
    `9_others/src/deploy-dotfiles.sh` is now only a thin wrapper that calls the
    engine, so `build.sh dotfiles` and CI are unchanged. This is the path
@@ -125,7 +125,7 @@ would work, but it only accepts a finished bearer, so in practice it means expor
 `claude-admin` (full admin, into 2036) into an environment every session can read.
 Minting takes an id and a secret instead and produces a short-lived token per session.
 
-`cloud-infra/0_apps/src/claude/` carries a copy for the dotfiles build. That copy is a
+`cloud-infra/_dotfiles/apps/src/claude/` carries a copy for the dotfiles build. That copy is a
 consumer, not a second owner — the two drifted once already (it still called the server
 `cloud-infra-mcp` after the rename to `c3-infra-mcp`), which is the failure mode the
 provenance-header check at the bottom of `test-claude-sot.sh` exists to catch. It is now
