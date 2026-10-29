@@ -190,11 +190,18 @@ check "the c3-infra guard (rules, agents pinned, lean agents, hook tests) is gre
 # first two resolve to $HOME (a repo of its own, one level too high) and the
 # clones resolve to themselves at depth two, so all five drop out.
 GITBASE="$(cd "$REPO/.." && pwd)"
+# Old-name clones (a folder whose name is some repo's renamed_from in the
+# registry, e.g. cloud-infra -> cloudy-t-infra) are stale duplicates of a repo
+# that is checked on its current name; scanning them only reports fiction.
+REGISTRY="$GITBASE/cloudy-t-infra/0_hub/cloudy-___/repos.json"
+OLDNAMES=$(jq -r '.repos[].renamed_from[]?' "$REGISTRY" 2>/dev/null || true)
+is_old_name() { [ -n "$OLDNAMES" ] && printf '%s\n' "$OLDNAMES" | grep -qxF -- "$1"; }
 mirrors=$(find "$GITBASE" -maxdepth 4 \
   \( -path '*/.claude/settings.json' -o -path '*/0_apps/src/claude/settings.json' -o -path '*/_dotfiles/apps/src/claude/settings.json' \) \
   -not -path '*/.git/*' -not -path '*z_archive*' -not -path '*/I_cloud/*' 2>/dev/null |
   while read -r m; do
     top=$(git -C "$(dirname "$m")" rev-parse --show-toplevel 2>/dev/null) || continue
+    is_old_name "$(basename "$top")" && continue
     if [ "$(dirname "$top")" = "$GITBASE" ]; then printf '%s\n' "$m"; fi
   done | sort)
 drifted=""
@@ -229,6 +236,7 @@ vchecked=0; vdrift=""
 for repo in "$GITBASE"/*/; do
   repo=${repo%/}
   [ "$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" = "$repo" ] || continue
+  is_old_name "$(basename "$repo")" && continue
   for rel in $COPIES; do
     [ -f "$repo/$rel" ] || continue
     vchecked=$((vchecked + 1))
