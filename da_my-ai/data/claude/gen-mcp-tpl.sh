@@ -42,7 +42,7 @@
 set -euo pipefail
 
 SOT="$(cd "$(dirname "$0")" && pwd)"
-DIST="${CLOUD_INFRA_DIR:-${GIT_BASE:-$HOME/cloud-shared-store/git}/cloud-t-infra}/1_cloud-configs/dist/mcp.json"
+DIST="${CLOUD_INFRA_DIR:-${GIT_BASE:-$HOME/cloud-shared-store/git}/cloudy-t-infra}/1_cloud-configs/dist/mcp.json"
 POLICY="$SOT/mcp-policy.json"
 # Where a platform's `output` path is anchored. Same variable settings.base.json
 # exports, so a machine with a non-default checkout layout relocates every
