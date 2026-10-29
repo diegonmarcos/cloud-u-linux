@@ -5,6 +5,7 @@
   "label": "cloudy-u-linux",
   "code": "1.1.6.1",
   "kind": "repo",
+  "variant": "repo",
   "description": "Linux desktop applications (split from cloud-unix d*/da*/db* trees)",
   "visibility": "public",
   "url": "https://github.com/diegonmarcos/cloudy-u-linux",
