@@ -27,8 +27,8 @@ t no-secrets-commit 2 "git -C $T commit -m wip"
 t no-secrets-commit 2 'git commit -m "token=ghp_abcdefghijklmnopqrstuvwxyz0123456789"'
 git -C "$T" rm -qf --cached a.txt; echo hello > "$T/b.txt"; git -C "$T" add b.txt
 t no-secrets-commit 0 "git -C $T commit -m wip"; t no-secrets-commit 0 'git commit -m "fix the thing"'; t no-secrets-commit 0 'git log'
-# #1291 dated folder names are allowed, a real-looking sk- key is still blocked (regex path, no gitleaks)
-git -C "$T" rm -qf --cached b.txt; echo "dir/SK-20260323-04_Some-Public-Folder-Name-With-Long-Title/readme.md" > "$T/c.txt"; git -C "$T" add c.txt
+# #1291 dated task folder names are allowed, a real-looking sk- key is still blocked (regex path, no gitleaks)
+git -C "$T" rm -qf --cached b.txt; echo "a/TASK-20260323-04_morse-code-visual-ui-long-name/b TASK-net-20260508-01_collapse-public-to-443-xx task-2026-02-15-hybrid-mcp-architecture-long" > "$T/c.txt"; git -C "$T" add c.txt
 t no-secrets-commit 0 "git -C $T commit -m wip"
 git -C "$T" rm -qf --cached c.txt; echo "key=s""k-$(printf %s abcdefghijklmnopqrstuvwxyz0123456789AB)" > "$T/d.txt"; git -C "$T" add d.txt
 t no-secrets-commit 2 "git -C $T commit -m wip"
