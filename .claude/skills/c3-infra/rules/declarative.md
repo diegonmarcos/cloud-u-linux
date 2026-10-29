@@ -7,3 +7,4 @@
 - Never commit or edit submodule paths; edit the standalone clone. Why: submodule pointers get clobbered. Guard: none.
 - Mail sends use the external outbound route only. Why: the mail host IP has no sending reputation. Guard: mail health checks.
 - Cloudflare and Hickory DNS are wildcard-only, never per-host records. Why: Caddy is the routing SoT. Guard: fleet-addressing guard.
+- Dotfiles convention `_dotfiles/`: a repo's declarative dotfiles (git config/hooks/ignore/attributes/modules, claude, vscode, obsidian, github, root files) live in ONE top-level `_dotfiles/` folder (`_dotfiles/git/{src,dist}`, `_dotfiles/apps/{src,dist}`) with ONE idempotent entrypoint `_dotfiles/deploy.sh` (`--check` = CI drift gate). The my-ai dotfiles engine defaults to `_dotfiles/apps/src _dotfiles/apps/dist/dotfiles .`. Why: one place per repo instead of the 0_* family (#1290). Guard: deploy.sh --check, dotfiles-fleet test.
