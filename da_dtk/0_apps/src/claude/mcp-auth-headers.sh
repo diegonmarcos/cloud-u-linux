@@ -34,14 +34,67 @@ if [ -n "${AUTHELIA_BEARER_TOKEN:-}" ]; then
     exit 0
 fi
 
-# Source 2+: a vault checkout on disk. Tried in order; first readable wins.
+# Source 2: MINT one from client credentials.
+#
+# This is what makes a container work without handing it a long-lived token at
+# all. Source 1 says "prefer a narrow client" and then offers no way to be
+# narrow: the only thing it accepts is a finished bearer, so the path of least
+# resistance is exporting claude-admin — full admin, valid into 2036 — into an
+# environment every session in it can read.
+#
+# client_credentials closes that gap. The environment carries an id and a
+# secret, this exchanges them for a short-lived token per session, and what
+# sits at rest is scoped to that client instead of to everything, forever.
+#
+# Same grant, endpoint and scope as 1_cicd/src/ops/cloud-health-mail-full.sh,
+# which already mints this way — deliberately not a second dialect of one
+# exchange.
+#
+# A failure here is not fatal: it falls through to the vault sources below and
+# ultimately to {}. A container has nothing to fall through TO, which is
+# exactly why this must not be the step that aborts the script.
+if [ -n "${AUTHELIA_TOKEN_URL:-}" ] \
+   && [ -n "${AUTHELIA_OIDC_CLIENT_ID:-}" ] \
+   && [ -n "${AUTHELIA_OIDC_CLIENT_SECRET:-}" ]; then
+    # -u, not a POST body: keeps the secret out of the process list.
+    _resp=$(curl -s --max-time 10 -X POST "$AUTHELIA_TOKEN_URL" \
+        -u "$AUTHELIA_OIDC_CLIENT_ID:$AUTHELIA_OIDC_CLIENT_SECRET" \
+        -d 'grant_type=client_credentials&scope=authelia.bearer.authz' 2>/dev/null) || _resp=""
+    _minted=$(printf '%s' "$_resp" | node -e '
+        let s = "";
+        process.stdin.on("data", d => s += d).on("end", () => {
+          try { process.stdout.write(JSON.parse(s).access_token || ""); }
+          catch { process.stdout.write(""); }
+        });
+      ' 2>/dev/null) || _minted=""
+    if [ -n "$_minted" ]; then
+        node -e 'process.stdout.write(JSON.stringify({Authorization:"Bearer "+process.argv[1]}))' "$_minted" 2>/dev/null \
+            || printf '%s\n' '{}'
+        exit 0
+    fi
+    # SAY WHY. "mint failed" with no cause is the same silence this file was
+    # written to end — the server's own error_description names it (bad client,
+    # unsupported grant, wrong scope) and costs one line to surface. The OAuth
+    # error body carries no secret: the credentials went out in the Authorization
+    # header, and what comes back is a code and a sentence.
+    echo "mcp-auth-headers: client_credentials mint failed for $AUTHELIA_OIDC_CLIENT_ID — trying the vault sources." >&2
+    if [ -n "$_resp" ]; then
+        printf 'mcp-auth-headers:   server said: %.300s\n' "$_resp" >&2
+    else
+        echo "mcp-auth-headers:   no response from $AUTHELIA_TOKEN_URL (network or timeout)" >&2
+    fi
+fi
+
+# Source 3+: a vault checkout on disk. Tried in order; first readable wins.
 #
 # This script lives at <repo>/.claude/mcp-auth-headers.sh, so the repo root is
 # two levels up from $0 — derived rather than assumed, because the helper is
 # invoked with an absolute path from .mcp.json and the cwd is not guaranteed.
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(dirname -- "$SELF_DIR")
-REL="A0_keys/providers/authelia/signed-bearer_jwt/tokens/claude-admin.json"
+REL="Shared/Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/tokens/claude-admin.json"
+# Pre-2026-10-28 vault layout (A_A0-Providers at the root); dual-read for one cycle until every checkout is pulled.
+REL_LEGACY="A_A0-Providers/B_SERVICES-CLOUD/b12-authelia/signed-bearer_jwt/tokens/claude-admin.json"
 
 # The order matters:
 #   a) $AUTHELIA_OIDC_TOKENS_DIR — explicit, wins over any guess. Exported by
@@ -50,11 +103,17 @@ REL="A0_keys/providers/authelia/signed-bearer_jwt/tokens/claude-admin.json"
 #      IV_vault). In any cloud checkout with it initialised, that is where the
 #      token actually is. Missing this is why cloning vault "into the repo" left
 #      the helper emitting {} — it only ever looked at ~/git/cloud-vault.
-#   c) ~/git/cloud-vault — the standalone layout, when the repos are siblings.
+#   c) ~/cloud-shared-store/git/cloud-me-pvt-vault — the standalone layout
+#      (a checkout still named cloud-me_vault, the pre-rename name, is read too):
+#      every repo lives in that ONE place, as siblings (no ~/git anywhere).
 for _candidate in \
     "${AUTHELIA_OIDC_TOKENS_DIR:+$AUTHELIA_OIDC_TOKENS_DIR/claude-admin.json}" \
     "$REPO_ROOT/IV_vault/$REL" \
-    "$HOME/git/cloud-vault/$REL"
+    "$HOME/cloud-shared-store/git/cloud-me-pvt-vault/$REL" \
+    "$HOME/cloud-shared-store/git/cloud-me_vault/$REL" \
+    "$HOME/cloud-shared-store/git/cloud-me-pvt-vault/$REL" \
+    "$HOME/cloud-shared-store/git/cloud-me_vault/$REL_LEGACY" \
+    "$HOME/cloud-shared-store/git/cloud-me-pvt-vault/$REL_LEGACY"
 do
     [ -n "$_candidate" ] || continue
     if [ -r "$_candidate" ]; then TOKEN_FILE="$_candidate"; break; fi
@@ -71,7 +130,7 @@ if [ -z "${TOKEN_FILE:-}" ] || [ ! -r "$TOKEN_FILE" ]; then
         echo "  tried \$AUTHELIA_BEARER_TOKEN         : ${AUTHELIA_BEARER_TOKEN:+set}${AUTHELIA_BEARER_TOKEN:-unset}"
         echo "  tried \$AUTHELIA_OIDC_TOKENS_DIR      : ${AUTHELIA_OIDC_TOKENS_DIR:-unset}"
         echo "  tried \$REPO_ROOT/IV_vault             : $REPO_ROOT/IV_vault/$REL"
-        echo "  tried ~/git/cloud-vault                     : $HOME/git/cloud-vault/$REL"
+        echo "  tried the shared store's cloud-me-pvt-vault      : $HOME/cloud-shared-store/git/cloud-me-pvt-vault/$REL"
         echo "  On a host with no vault checkout (cloud container, CI, web),"
         echo "  set AUTHELIA_BEARER_TOKEN in the environment. Prefer a narrow"
         echo "  client (monitoring-read) over claude-admin — an environment"

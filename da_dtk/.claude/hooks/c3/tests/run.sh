@@ -28,4 +28,21 @@ t no-secrets-commit 2 'git commit -m "token=ghp_abcdefghijklmnopqrstuvwxyz012345
 git -C "$T" rm -qf --cached a.txt; echo hello > "$T/b.txt"; git -C "$T" add b.txt
 t no-secrets-commit 0 "git -C $T commit -m wip"; t no-secrets-commit 0 'git commit -m "fix the thing"'; t no-secrets-commit 0 'git log'
 rm -rf "$T"
+# mass delete
+W="$(mktemp -d)"; git -C "$W" init -q -b main; git -C "$W" config user.email t@t; git -C "$W" config user.name t
+for i in $(seq 1 20); do echo $i > "$W/f$i.txt"; done; git -C "$W" add -A
+t no-mass-delete 0 "git -C $W commit -m initial"
+git -C "$W" commit -qm initial
+git -C "$W" mv f1.txt moved1.txt; git -C "$W" mv f2.txt moved2.txt
+t no-mass-delete 0 "git -C $W commit -m moves"
+git -C "$W" commit -qm moves
+git -C "$W" rm -q --cached -r . >/dev/null
+t no-mass-delete 2 "git -C $W commit -m wipe"
+t no-mass-delete 0 "git -C $W commit -m 'wipe [mass-delete-ok]'"
+git -C "$W" commit -qm wipe; git -C "$W" commit -q --allow-empty -m "x"
+t no-mass-delete 2 "git -C $W push origin main"
+git -C "$W" reset -q --soft HEAD~1; git -C "$W" commit -q --amend -m 'wipe [mass-delete-ok]'
+t no-mass-delete 0 "git -C $W push origin main"
+t no-mass-delete 0 'git status'
+rm -rf "$W"
 echo "hook tests: $n cases, $fail failed"; [ "$fail" = 0 ]
