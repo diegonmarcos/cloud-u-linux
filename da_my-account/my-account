@@ -97,7 +97,9 @@ for m in "$ROOT"/*/manifest; do
       inline|canon|sops) n_held=$((n_held + 1)); printf '  held  %-9s %s/%s\n' "$kind" "$app" "$source"; continue ;;
     esac
     src="$ROOT/$app/$source"; dst="$H/$target"
-    if [ -L "$dst" ] && case "$(readlink -f "$dst")" in /nix/store/*) true ;; *) false ;; esac; then
+    # home-manager links point INTO /nix/store; test the link's own target too, since
+    # readlink -f yields nothing when the store path is gone (GC'd, or no /nix on this host).
+    if [ -L "$dst" ] && case "$(readlink "$dst") $(readlink -f "$dst" 2>/dev/null)" in /nix/store/*|*" /nix/store/"*) true ;; *) false ;; esac; then
       n_skip=$((n_skip + 1)); printf '  skip  %s -> %s (managed by home-manager)\n' "$app" "$target"; continue
     fi
     if [ ! -e "$dst" ]; then
