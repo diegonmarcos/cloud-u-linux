@@ -194,7 +194,10 @@ GITBASE="$(cd "$REPO/.." && pwd)"
 # registry, e.g. cloud-infra -> cloudy-t-infra) are stale duplicates of a repo
 # that is checked on its current name; scanning them only reports fiction.
 REGISTRY="$GITBASE/cloudy-t-infra/0_hub/cloudy-___/repos.json"
-OLDNAMES=$(jq -r '.repos[].renamed_from[]?' "$REGISTRY" 2>/dev/null || true)
+# Old names come from the FULL registry (git-repos-master), not the cloudy-only subset, so stale
+# old-name clones of any family (e.g. front -> Projects-___) are skipped.
+FULL_REGISTRY="$GITBASE/git-repos-master/repos.json"
+OLDNAMES=$( { jq -r '.repos[].renamed_from[]?' "$FULL_REGISTRY" 2>/dev/null; jq -r '.repos[].renamed_from[]?' "$REGISTRY" 2>/dev/null; } | sort -u || true)
 is_old_name() { [ -n "$OLDNAMES" ] && printf '%s\n' "$OLDNAMES" | grep -qxF -- "$1"; }
 mirrors=$(find "$GITBASE" -maxdepth 4 \
   \( -path '*/.claude/settings.json' -o -path '*/0_apps/src/claude/settings.json' -o -path '*/_dotfiles/apps/src/claude/settings.json' \) \
