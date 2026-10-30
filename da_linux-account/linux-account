@@ -89,7 +89,7 @@ token_ok() { [ -s "$1" ] && ! grep -qE 'REMOVED|REDACTED|^\*\*\*' "$1"; }
 # Real entries are DECLARED through the store's secret layer (kind file):
 # keyfiles at their ~/path, env-file + value entries spliced by linux-store
 # into ONE tokens.env from a names-only template (src/tokens.env.tpl).
-CFG_DIR_REL="cloud-me-pvt-configs/Desktop-GUI/a0-diego-admin/deb-user-configs"
+CFG_DIR_REL="cloud-me-pvt-configs/Linux-Desktop/a0-diego-admin/deb-user-configs"
 TOKENS_ENV=".config/linux-account/secrets/tokens.env"
 cfg_dir() { echo "$(git_base)/$CFG_DIR_REL"; }
 tokens_file() { local f; f="$(cfg_dir)/tokens.json"; [ -f "$f" ] && echo "$f"; }
@@ -377,7 +377,7 @@ rec() { st_set "sha:$1" "$(sha256sum "$2" | cut -d' ' -f1)"; }   # remember what
 write_fragment() {  # the linux-store include fragment: paths only, never values
     local gb dev wgd dir frag p f n v tgt tpl vals id vp as kind mode st reason
     gb="$(git_base)"; dev="$(DEV)"; wgd="$(wg_dir_of "$dev")"
-    dir="$gb/cloud-me-pvt-configs/Desktop-GUI/a0-diego-admin/deb-user-configs"
+    dir="$gb/cloud-me-pvt-configs/Linux-Desktop/a0-diego-admin/deb-user-configs"
     [ -d "$dir" ] || die "no deb-user-configs at $dir"
     frag="$dir/account.json"
     v='{}'

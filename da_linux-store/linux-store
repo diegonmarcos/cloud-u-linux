@@ -1293,7 +1293,7 @@ cmd_tui() {
 
 # ── html: the Store as a page, served by my-webserver ──────────────────────
 # Two tiers, drawn apart on purpose: OS · Terraforms (the machine: what
-# cloud-me-pvt-configs/<Desktop-GUI|Terminal|Linux-Server>/<machine> owns — NixOS flakes, OS
+# cloud-me-pvt-configs/<Linux-Desktop|Linux-Terminal|Linux-Containers>/<machine> owns — NixOS flakes, OS
 # configs, terraform) versus Home-Manager · Desktop (the user: what this store
 # realises — binaries, scripts/libs, configs, secrets), grouped by app.
 UI="${LINUX_STORE_UI:-$ROOT/ui}"
@@ -1338,8 +1338,8 @@ cmd_html() {
     p="$(detect_profile)" || exit 1
     live="$(readlink "$CUR" 2>/dev/null || true)"; gb="$(git_base 2>/dev/null || true)"
     m="$(machine_of "$p")"
-    # Machines live under their target folder (Desktop-GUI, Terminal, Linux-Server) since the configs/vault twin layout.
-    mdir="$(ls -d "$gb"/cloud-me-pvt-configs/{Desktop-GUI,Terminal,Linux-Server}/*-"$m" 2>/dev/null | head -1)"
+    # Machines live under their target folder (Linux-Desktop, Linux-Terminal, Linux-Containers) since the configs/vault twin layout.
+    mdir="$(ls -d "$gb"/cloud-me-pvt-configs/{Linux-Desktop,Linux-Terminal,Linux-Containers}/*-"$m" 2>/dev/null | head -1)"
     mkdir -p "$UI"; out="$UI/index.html"
     {
         html_head "linux-store · $p" store

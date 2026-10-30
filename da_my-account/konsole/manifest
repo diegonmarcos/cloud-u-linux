@@ -1,4 +1,4 @@
 # kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
-inline	desktop	konsolestaterc	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/konsole/konsolestaterc
-inline	desktop	Breeze.colorscheme	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/konsole/Breeze.colorscheme
-inline	desktop	Profile 1.profile	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/konsole/Profile 1.profile
+inline	desktop	konsolestaterc	-	cmc:Linux-Desktop/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/konsole/konsolestaterc
+inline	desktop	Breeze.colorscheme	-	cmc:Linux-Desktop/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/konsole/Breeze.colorscheme
+inline	desktop	Profile 1.profile	-	cmc:Linux-Desktop/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/konsole/Profile 1.profile

@@ -1,5 +1,5 @@
 # kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
-inline	desktop	package.json	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/node/package.json
-inline	termux	termux/package.json	-	cmc:Desktop-GUI/_shared/nix-os-flakes/bb_flakes_termux/src/modules/dotfiles/node/package.json
-inline	termux	esm-loader-register.mjs	-	cmc:Desktop-GUI/_shared/nix-os-flakes/bb_flakes_termux/src/modules/dotfiles/node/esm-loader-register.mjs
-inline	termux	esm-loader-resolve.mjs	-	cmc:Desktop-GUI/_shared/nix-os-flakes/bb_flakes_termux/src/modules/dotfiles/node/esm-loader-resolve.mjs
+inline	desktop	package.json	-	cmc:Linux-Desktop/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/dotfiles/node/package.json
+inline	termux	termux/package.json	-	cmc:Linux-Desktop/_shared/nix-os-flakes/bb_flakes_termux/src/modules/dotfiles/node/package.json
+inline	termux	esm-loader-register.mjs	-	cmc:Linux-Desktop/_shared/nix-os-flakes/bb_flakes_termux/src/modules/dotfiles/node/esm-loader-register.mjs
+inline	termux	esm-loader-resolve.mjs	-	cmc:Linux-Desktop/_shared/nix-os-flakes/bb_flakes_termux/src/modules/dotfiles/node/esm-loader-resolve.mjs

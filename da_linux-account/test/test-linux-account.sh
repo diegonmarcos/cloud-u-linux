@@ -48,11 +48,11 @@ EOF
 # a sops-looking file, to be refused
 printf '{"schema_version": 1, "git": {"github_token": "ENC[AES256_GCM,data:xx]"}, "sops": {"age": []}}\n' > "$T/encrypted.json"
 # fake cloud-me-pvt-configs with a minimal linux-store declaration
-D="$GIT_BASE/cloud-me-pvt-configs/Desktop-GUI/a0-diego-admin/deb-user-configs"; mkdir -p "$D/src"
-echo '{"configs_users":[{"id":"diego-admin","path":"Desktop-GUI/a0-diego-admin"}]}' > "$GIT_BASE/cloud-me-pvt-configs/configs.json"
+D="$GIT_BASE/cloud-me-pvt-configs/Linux-Desktop/a0-diego-admin/deb-user-configs"; mkdir -p "$D/src"
+echo '{"configs_users":[{"id":"diego-admin","path":"Linux-Desktop/a0-diego-admin"}]}' > "$GIT_BASE/cloud-me-pvt-configs/configs.json"
 echo 'x' > "$D/src/marker"
 cat > "$D/linux-store.json" <<'EOF'
-{"settings": {"roots": {"me": "cloud-me-pvt-configs/Desktop-GUI/a0-diego-admin/deb-user-configs"}},
+{"settings": {"roots": {"me": "cloud-me-pvt-configs/Linux-Desktop/a0-diego-admin/deb-user-configs"}},
  "common": {"etc": {".marker": {"path": "me:src/marker"}}}}
 EOF
 # fake mesh.json for the fleet ssh hosts

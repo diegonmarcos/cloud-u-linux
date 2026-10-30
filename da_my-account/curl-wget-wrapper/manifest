@@ -1,2 +1,2 @@
 # kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
-inline	desktop	curl-wget-wrapper.sh	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/curl-wget-wrapper.sh
+inline	desktop	curl-wget-wrapper.sh	-	cmc:Linux-Desktop/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/curl-wget-wrapper.sh

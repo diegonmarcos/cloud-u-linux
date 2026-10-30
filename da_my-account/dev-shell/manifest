@@ -1,3 +1,3 @@
 # kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
-file	desktop	dev-shell.json	.config/cloud-data/dev-shell.json	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/dev-shell.json
-inline	desktop	dev-shell.sh	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/dev-shell.sh
+file	desktop	dev-shell.json	.config/cloud-data/dev-shell.json	cmc:Linux-Desktop/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/dev-shell.json
+inline	desktop	dev-shell.sh	-	cmc:Linux-Desktop/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/dev-shell.sh

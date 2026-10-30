@@ -1,4 +1,4 @@
 # kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
-file	desktop	flakes-switch-progress-logs.json	.config/cloud-data/flakes-switch-progress-logs.json	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/flakes-switch-progress-logs/config.json
-inline	desktop	flakes-switch-progress-logs.sh	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/flakes-switch-progress-logs/flakes-switch-progress-logs.sh
-inline	desktop	progress.mjs	-	cmc:Desktop-GUI/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/flakes-switch-progress-logs/progress.mjs
+file	desktop	flakes-switch-progress-logs.json	.config/cloud-data/flakes-switch-progress-logs.json	cmc:Linux-Desktop/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/flakes-switch-progress-logs/config.json
+inline	desktop	flakes-switch-progress-logs.sh	-	cmc:Linux-Desktop/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/flakes-switch-progress-logs/flakes-switch-progress-logs.sh
+inline	desktop	progress.mjs	-	cmc:Linux-Desktop/a1-diego-user/nix-hm-flakes/ba_flakes_desktop/src/modules/programs/flakes-switch-progress-logs/progress.mjs

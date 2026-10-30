@@ -1,2 +1,2 @@
 # kind	variants	source	target(under $HOME)	flake_src(cmc:<path in cloud-me-pvt-configs>)
-file	desktop	vimrc	.vimrc	cmc:Desktop-GUI/a0-diego-admin/deb-user-configs/src/vimrc
+file	desktop	vimrc	.vimrc	cmc:Linux-Desktop/a0-diego-admin/deb-user-configs/src/vimrc
