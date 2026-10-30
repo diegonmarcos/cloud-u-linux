@@ -196,7 +196,7 @@ GITBASE="$(cd "$REPO/.." && pwd)"
 REGISTRY="$GITBASE/cloudy-t-infra/0_hub/cloudy-___/repos.json"
 # Old names come from the FULL registry (git-repos-master), not the cloudy-only subset, so stale
 # old-name clones of any family (e.g. front -> Projects-___) are skipped.
-FULL_REGISTRY="$GITBASE/git-repos-master/repos.json"
+FULL_REGISTRY="$GITBASE/git-repos-master/0_registry/repos.json"
 OLDNAMES=$( { jq -r '.repos[].renamed_from[]?' "$FULL_REGISTRY" 2>/dev/null; jq -r '.repos[].renamed_from[]?' "$REGISTRY" 2>/dev/null; } | sort -u || true)
 # canonical NAME: registry current name for a repo name or any of its renamed_from.
 canon() { local c; c=$(jq -r --arg n "$1" '[.repos[]|select(.name==$n or (.renamed_from//[]|index($n)))|.name][0]//empty' "$FULL_REGISTRY" 2>/dev/null); printf '%s' "${c:-$1}"; }
