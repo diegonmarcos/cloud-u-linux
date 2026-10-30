@@ -198,7 +198,21 @@ REGISTRY="$GITBASE/cloudy-t-infra/0_hub/cloudy-___/repos.json"
 # old-name clones of any family (e.g. front -> Projects-___) are skipped.
 FULL_REGISTRY="$GITBASE/git-repos-master/repos.json"
 OLDNAMES=$( { jq -r '.repos[].renamed_from[]?' "$FULL_REGISTRY" 2>/dev/null; jq -r '.repos[].renamed_from[]?' "$REGISTRY" 2>/dev/null; } | sort -u || true)
-is_old_name() { [ -n "$OLDNAMES" ] && printf '%s\n' "$OLDNAMES" | grep -qxF -- "$1"; }
+# canonical NAME: registry current name for a repo name or any of its renamed_from.
+canon() { local c; c=$(jq -r --arg n "$1" '[.repos[]|select(.name==$n or (.renamed_from//[]|index($n)))|.name][0]//empty' "$FULL_REGISTRY" 2>/dev/null); printf '%s' "${c:-$1}"; }
+# Canonical repo of every direct-child clone (origin URL basename, else folder name).
+CLONECANON=$(for d in "$GITBASE"/*/; do d=${d%/}
+  [ "$(git -C "$d" rev-parse --show-toplevel 2>/dev/null)" = "$d" ] || continue
+  u=$(git -C "$d" remote get-url origin 2>/dev/null); u=${u##*/}; u=${u%.git}
+  printf '%s\t%s\n' "$(basename "$d")" "$(canon "${u:-$(basename "$d")}")"
+done)
+# Skip an old-name folder ONLY when another clone has the same canonical repo; a
+# sole clone under an old name (cloud-u-android) is the one copy and is checked.
+is_old_name() {
+  [ -n "$OLDNAMES" ] && printf '%s\n' "$OLDNAMES" | grep -qxF -- "$1" || return 1
+  local c; c=$(printf '%s\n' "$CLONECANON" | awk -F'\t' -v b="$1" '$1==b{print $2}')
+  [ -n "$c" ] && printf '%s\n' "$CLONECANON" | awk -F'\t' -v b="$1" -v c="$c" '$1!=b && $2==c{f=1} END{exit !f}'
+}
 mirrors=$(find "$GITBASE" -maxdepth 4 \
   \( -path '*/.claude/settings.json' -o -path '*/0_apps/src/claude/settings.json' -o -path '*/_dotfiles/apps/src/claude/settings.json' \) \
   -not -path '*/.git/*' -not -path '*z_archive*' -not -path '*/I_cloud/*' 2>/dev/null |
